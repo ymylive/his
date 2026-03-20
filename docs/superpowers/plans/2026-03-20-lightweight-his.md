@@ -27,6 +27,38 @@
 - 最后 2 次实验课要面向代码检查和现场答辩准备材料
 - 若教师要求增强版或团队中包含补修/重修学生，需加入数据分析与预测功能
 
+## 题签框架摘要
+
+### 管理员视角
+
+- 患者信息管理：添加、修改、查询患者，覆盖患者编号、姓名、性别、年龄、联系方式、是否住院
+- 医生与科室管理：添加医生、查询医生、维护科室信息，覆盖工号、姓名、职称、科室、出诊安排
+- 医疗记录管理：覆盖挂号记录与住院记录，支持新增、修改、删除、按患者查询、按时间范围查询
+- 病房与床位管理：查看病房信息、查看床位状态、分配床位、出院释放床位
+- 药房与药品管理：添加药品、入库、出库/发药、查询库存、库存不足提醒
+
+### 患者视角
+
+- 基本信息：登记、修改、查询患者基本信息，补充证件信息、过敏史或备注字段
+- 挂号：选择医生挂号、查看挂号信息、取消挂号
+- 看诊：查看医生诊断结果、医生建议，并记录是否需要检查、住院或开药
+- 检查：添加检查项目、查看检查结果
+- 住院：办理住院登记、办理出院
+- 取药：查询发药记录、查看药品使用方法
+- 历史记录：查询个人看诊、检查、住院、发药记录
+
+### 医生视角
+
+- 查询患者信息与历史：查看患者基本信息、挂号记录、历史就诊记录和过敏史/备注
+- 诊疗记录：添加、修改和查看诊断记录、医生建议
+- 处方与发药：开具处方、查询药品库存、执行发药操作
+- 检查记录：查看患者检查记录、记录新的检查项目与检查结果
+
+### 合并原则
+
+- 题签中的管理员、患者、医生三类框架已并入本计划的任务拆分和菜单设计
+- 由于当前项目已明确去除缴费相关功能，题签中涉及“费用”的表述仅保留为记录字段参考，不扩展为收费、账单或结算模块
+
 ## 文件结构规划
 
 ### 计划创建目录
@@ -183,10 +215,12 @@ git commit -m "chore: bootstrap lightweight his project"
 - Create: `include/domain/VisitRecord.h`
 - Create: `include/domain/ExaminationRecord.h`
 - Create: `include/domain/Prescription.h`
+- Create: `include/domain/DispenseRecord.h`
 - Create: `include/domain/Medicine.h`
 - Create: `src/domain/Registration.c`
 - Create: `src/domain/VisitRecord.c`
 - Create: `src/domain/ExaminationRecord.c`
+- Create: `src/domain/DispenseRecord.c`
 - Test: `tests/test_domain.c`
 
 - [ ] **Step 1: 为状态流转最复杂的 `Registration` 写测试**
@@ -197,7 +231,7 @@ Registration_mark_diagnosed(&reg);
 assert(reg.status == REG_STATUS_DIAGNOSED);
 ```
 
-- [ ] **Step 2: 实现患者、医生、科室、挂号、看诊记录、检查记录、处方、药品等结构体与枚举**
+- [ ] **Step 2: 实现患者、医生、科室、挂号、看诊记录、检查记录、处方、发药记录、药品等结构体与枚举**
 - [ ] **Step 3: 加入金额、数量、库存等边界校验**
 - [ ] **Step 4: 为每类核心实体设计链表节点挂接方式**
 - [ ] **Step 5: 构建并运行 `ctest --test-dir build --output-on-failure`**
@@ -227,6 +261,7 @@ assert(reg.status == REG_STATUS_DIAGNOSED);
 - Create: `include/repository/RegistrationRepository.h`
 - Create: `include/repository/VisitRecordRepository.h`
 - Create: `include/repository/ExaminationRecordRepository.h`
+- Create: `include/repository/DispenseRecordRepository.h`
 - Create: `include/repository/MedicineRepository.h`
 - Create: `src/repository/DepartmentRepository.c`
 - Create: `src/repository/DoctorRepository.c`
@@ -234,6 +269,7 @@ assert(reg.status == REG_STATUS_DIAGNOSED);
 - Create: `src/repository/RegistrationRepository.c`
 - Create: `src/repository/VisitRecordRepository.c`
 - Create: `src/repository/ExaminationRecordRepository.c`
+- Create: `src/repository/DispenseRecordRepository.c`
 - Create: `src/repository/MedicineRepository.c`
 - Test: `tests/test_doctor_repository.c`
 - Test: `tests/test_patient_repository.c`
@@ -257,8 +293,8 @@ assert(reg.status == REG_STATUS_DIAGNOSED);
 - Test: `tests/test_patient_service.c`
 
 - [ ] **Step 1: 写“患者新增、修改、删除、查询”的失败测试**
-- [ ] **Step 2: 实现患者编号、姓名、性别、年龄、联系方式、是否住院等字段校验**
-- [ ] **Step 3: 实现按编号、姓名、手机号查询患者**
+- [ ] **Step 2: 实现患者编号、姓名、性别、年龄、联系方式、证件信息、过敏史/备注、是否住院等字段校验**
+- [ ] **Step 3: 实现按编号、姓名、手机号、证件号查询患者**
 - [ ] **Step 4: 处理重复手机号或重复身份证号规则（如题目未要求身份证，可先仅校验手机号）**
 - [ ] **Step 5: 运行 `ctest --test-dir build --output-on-failure`**
 - [ ] **Step 6: 提交**
@@ -291,8 +327,8 @@ assert(reg.status == REG_STATUS_DIAGNOSED);
 - Test: `tests/test_registration_service.c`
 
 - [ ] **Step 1: 写挂号、退号、接诊前状态校验测试**
-- [ ] **Step 2: 实现挂号单创建与状态初始值**
-- [ ] **Step 3: 限制已接诊记录不可退号**
+- [ ] **Step 2: 实现选择医生挂号、挂号时间记录与挂号单创建**
+- [ ] **Step 3: 实现查看挂号信息与取消挂号，并限制已接诊记录不可退号**
 - [ ] **Step 4: 运行 `ctest --test-dir build --output-on-failure`**
 - [ ] **Step 5: 提交**
 
@@ -308,9 +344,9 @@ assert(reg.status == REG_STATUS_DIAGNOSED);
 - Test: `tests/test_medical_record_service.c`
 
 - [ ] **Step 1: 写挂号记录、看诊记录、检查记录、住院记录四类记录的增删改查测试**
-- [ ] **Step 2: 实现按患者查询历史记录和按时间范围查询记录**
-- [ ] **Step 3: 将接诊保存映射到看诊记录，将住院登记映射到住院记录**
-- [ ] **Step 4: 补充检查记录新增、修改、删除能力**
+- [ ] **Step 2: 实现诊断结果、医生建议，以及是否需要检查、住院或开药等标记字段**
+- [ ] **Step 3: 实现按患者查询历史记录和按时间范围查询记录，并将接诊保存映射到看诊记录、住院登记映射到住院记录**
+- [ ] **Step 4: 补充检查项目新增、检查结果回写、检查记录修改与删除能力**
 - [ ] **Step 5: 运行 `ctest --test-dir build --output-on-failure`**
 - [ ] **Step 6: 提交**
 
@@ -324,8 +360,8 @@ assert(reg.status == REG_STATUS_DIAGNOSED);
 
 - [ ] **Step 1: 写“添加药品、药品入库、药品出库/发药、查询库存、库存不足提醒”的失败测试**
 - [ ] **Step 2: 实现药品编号、药品名、单价、库存、所属科室等字段校验**
-- [ ] **Step 3: 实现药品入库、出库与发药扣减逻辑**
-- [ ] **Step 4: 实现库存查询与低库存提醒**
+- [ ] **Step 3: 实现药品入库、出库、发药扣减与发药记录写入逻辑**
+- [ ] **Step 4: 实现库存查询、低库存提醒、发药记录查询与药品使用方法查看**
 - [ ] **Step 5: 运行 `ctest --test-dir build --output-on-failure`**
 - [ ] **Step 6: 提交**
 
@@ -389,9 +425,9 @@ assert(reg.status == REG_STATUS_DIAGNOSED);
 - Test: `tests/test_menu_controller.c`
 
 - [ ] **Step 1: 写菜单路由与非法输入回退测试**
-- [ ] **Step 2: 为管理员、挂号员、医生、住院登记员、病区管理员、药房人员提供独立菜单**
+- [ ] **Step 2: 为管理员、挂号员、医生、患者、住院登记员、病区管理员、药房人员提供独立菜单**
 - [ ] **Step 3: 每次操作后统一输出编号、状态和下一步提示**
-- [ ] **Step 4: 为住院菜单增加病区床位查询、入院登记、出院办理入口**
+- [ ] **Step 4: 为患者菜单增加挂号查询、个人看诊/检查/住院/发药历史与药品使用方法入口，并为住院菜单增加病区床位查询、入院登记、出院办理入口**
 - [ ] **Step 5: 运行 `ctest --test-dir build --output-on-failure`**
 - [ ] **Step 6: 提交**
 
@@ -407,7 +443,7 @@ assert(reg.status == REG_STATUS_DIAGNOSED);
 - [ ] **Step 1: 写日报、接诊统计、库存预警、床位占用率测试**
 - [ ] **Step 2: 写关键操作日志记录测试**
 - [ ] **Step 3: 实现按日期/科室/医生/病区的统计查询**
-- [ ] **Step 4: 补齐医护视角、管理视角、患者视角三类报表入口**
+- [ ] **Step 4: 补齐医护视角、管理视角、患者视角三类报表入口，并支持个人看诊、检查、住院、发药历史查询**
 - [ ] **Step 5: 运行 `ctest --test-dir build --output-on-failure`**
 - [ ] **Step 6: 提交**
 
@@ -438,6 +474,7 @@ assert(reg.status == REG_STATUS_DIAGNOSED);
 - Create: `data/visit_records.txt`
 - Create: `data/exam_records.txt`
 - Create: `data/prescriptions.txt`
+- Create: `data/dispense_records.txt`
 - Create: `data/medicines.txt`
 - Create: `data/wards.txt`
 - Create: `data/beds.txt`
@@ -482,10 +519,11 @@ All tests pass
 3. 挂号员新增患者并挂号
 4. 医生接诊、写看诊记录并补充检查记录
 5. 药房发药并展示库存变化与库存预警
-6. 住院登记员办理入院并分配床位
-7. 维护住院记录并办理出院释放床位
-8. 查询患者历史医疗记录和时间范围记录
-9. 管理员查看日报、床位统计与日志
+6. 患者查看诊断建议、检查结果和发药记录
+7. 住院登记员办理入院并分配床位
+8. 维护住院记录并办理出院释放床位
+9. 查询患者历史医疗记录和时间范围记录
+10. 管理员查看日报、床位统计与日志
 
 - [ ] **Step 3: 准备代码检查版源码，补齐必要代码注释并确认链表实现可展示**
 - [ ] **Step 4: 固化总结报告，至少包含测试方案、成员分工、完成情况**
