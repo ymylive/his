@@ -358,11 +358,11 @@ assert(reg.status == REG_STATUS_DIAGNOSED);
 - Modify: `include/repository/MedicineRepository.h`
 - Test: `tests/test_pharmacy_service.c`
 
-- [ ] **Step 1: 写“添加药品、药品入库、药品出库/发药、查询库存、库存不足提醒”的失败测试**
-- [ ] **Step 2: 实现药品编号、药品名、单价、库存、所属科室等字段校验**
-- [ ] **Step 3: 实现药品入库、出库、发药扣减与发药记录写入逻辑**
-- [ ] **Step 4: 实现库存查询、低库存提醒、发药记录查询与药品使用方法查看**
-- [ ] **Step 5: 运行 `ctest --test-dir build --output-on-failure`**
+- [x] **Step 1: 写“添加药品、药品入库、药品出库/发药、查询库存、库存不足提醒”的失败测试**
+- [x] **Step 2: 实现药品编号、药品名、单价、库存、所属科室等字段校验**
+- [x] **Step 3: 实现药品入库、出库、发药扣减与发药记录写入逻辑**
+- [x] **Step 4: 实现库存查询、低库存提醒、发药记录查询与药品使用方法查看**
+- [x] **Step 5: 运行 `ctest --test-dir build --output-on-failure`**
 - [ ] **Step 6: 提交**
 
 ## Chunk 4: 基础住院业务闭环
@@ -388,11 +388,11 @@ assert(reg.status == REG_STATUS_DIAGNOSED);
 - Create: `src/repository/InpatientOrderRepository.c`
 - Test: `tests/test_inpatient_domain.c`
 
-- [ ] **Step 1: 为床位状态与住院状态流转写失败测试**
-- [ ] **Step 2: 实现病区、床位、入院、住院记录结构体与状态函数**
-- [ ] **Step 3: 实现病房、床位、入院、住院记录的 txt 读写仓储**
-- [ ] **Step 4: 增加“占用床位不可再次分配、未出院不可重复入院”校验**
-- [ ] **Step 5: 运行 `ctest --test-dir build --output-on-failure`**
+- [x] **Step 1: 为床位状态与住院状态流转写失败测试**
+- [x] **Step 2: 实现病区、床位、入院、住院记录结构体与状态函数**
+- [x] **Step 3: 实现病房、床位、入院、住院记录的 txt 读写仓储**
+- [x] **Step 4: 增加“占用床位不可再次分配、未出院不可重复入院”校验**
+- [x] **Step 5: 运行 `ctest --test-dir build --output-on-failure`**
 - [ ] **Step 6: 提交**
 
 ### Task 12: 入院与床位服务

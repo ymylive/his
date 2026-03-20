@@ -58,6 +58,26 @@
 - 挂号服务 `RegistrationService`
 - 单元测试 `test_patient_service`、`test_doctor_service`、`test_registration_service`
 
+当前已经完成第五阶段药房服务增量：
+
+- 药房服务 `PharmacyService`
+- 支持药品添加、入库、发药、库存查询、低库存提醒
+- 发药过程联动 `DispenseRecordRepository` 写入发药记录
+- 单元测试 `test_pharmacy_service`
+
+当前已经完成第六阶段住院基础增量：
+
+- 住院领域模型 `Ward / Bed / Admission / InpatientOrder`
+- 住院仓储 `WardRepository / BedRepository / AdmissionRepository / InpatientOrderRepository`
+- 支持床位状态流转、活动住院冲突校验、住院医嘱持久化
+- 单元测试 `test_inpatient_domain`
+
+当前本地统一验证结果：
+
+- `cmake --build build`
+- `ctest --test-dir build --output-on-failure`
+- 最新结果 `12/12` 测试通过
+
 ## 构建与测试
 
 在项目根目录执行：
@@ -109,6 +129,6 @@ ctest --test-dir build --output-on-failure
 
 下一阶段继续按计划推进：
 
-- 落地医疗记录、药房、住院相关服务层
-- 落地住院、病房、床位领域与服务层
+- 落地医疗记录服务层
+- 落地入院与床位服务层
 - 补齐测试数据、集成验证与答辩材料

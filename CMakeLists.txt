@@ -13,23 +13,32 @@ add_library(his_common
     src/common/InputHelper.c
     src/common/LinkedList.c
     src/common/Result.c
+    src/domain/Admission.c
+    src/domain/Bed.c
     src/domain/DispenseRecord.c
     src/domain/ExaminationRecord.c
+    src/domain/InpatientOrder.c
     src/domain/Registration.c
     src/domain/VisitRecord.c
+    src/domain/Ward.c
+    src/repository/AdmissionRepository.c
+    src/repository/BedRepository.c
     src/repository/DepartmentRepository.c
     src/repository/DispenseRecordRepository.c
     src/repository/DoctorRepository.c
     src/repository/ExaminationRecordRepository.c
+    src/repository/InpatientOrderRepository.c
     src/repository/MedicineRepository.c
     src/repository/RepositoryUtils.c
     src/repository/PatientRepository.c
     src/repository/RegistrationRepository.c
     src/repository/TextFileRepository.c
     src/repository/VisitRecordRepository.c
+    src/repository/WardRepository.c
     src/service/DepartmentService.c
     src/service/DoctorService.c
     src/service/PatientService.c
+    src/service/PharmacyService.c
     src/service/RegistrationService.c
 )
 
@@ -121,3 +130,19 @@ add_executable(test_patient_service
 target_link_libraries(test_patient_service PRIVATE his_common)
 
 add_test(NAME test_patient_service COMMAND test_patient_service)
+
+add_executable(test_pharmacy_service
+    tests/test_pharmacy_service.c
+)
+
+target_link_libraries(test_pharmacy_service PRIVATE his_common)
+
+add_test(NAME test_pharmacy_service COMMAND test_pharmacy_service)
+
+add_executable(test_inpatient_domain
+    tests/test_inpatient_domain.c
+)
+
+target_link_libraries(test_inpatient_domain PRIVATE his_common)
+
+add_test(NAME test_inpatient_domain COMMAND test_inpatient_domain)
