@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <string.h>
 
+#include "ui/MenuApplication.h"
 #include "ui/MenuController.h"
 
 static int read_line(char *buffer, size_t capacity) {
@@ -24,8 +25,27 @@ static int read_line(char *buffer, size_t capacity) {
 
 int main(void) {
     char menu_text[2048];
-    char feedback[256];
     char input[128];
+    MenuApplication application;
+    MenuApplicationPaths paths = {
+        "data/patients.txt",
+        "data/departments.txt",
+        "data/doctors.txt",
+        "data/registrations.txt",
+        "data/visits.txt",
+        "data/examinations.txt",
+        "data/wards.txt",
+        "data/beds.txt",
+        "data/admissions.txt",
+        "data/medicines.txt",
+        "data/dispense_records.txt"
+    };
+    Result init_result = MenuApplication_init(&application, &paths);
+
+    if (init_result.success == 0) {
+        fprintf(stderr, "系统初始化失败: %s\n", init_result.message);
+        return 1;
+    }
 
     puts("轻量级 HIS 控制台已启动。");
 
@@ -82,17 +102,10 @@ int main(void) {
                 break;
             }
 
-            result = MenuController_format_action_feedback(
-                action,
-                feedback,
-                sizeof(feedback)
-            );
+            result = MenuApplication_execute_action(&application, action, stdin, stdout);
             if (result.success == 0) {
-                fputs("操作提示生成失败。\n", stderr);
-                return 1;
+                printf("操作未完成: %s\n", result.message);
             }
-
-            puts(feedback);
         }
     }
 }

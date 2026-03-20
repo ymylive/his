@@ -43,6 +43,7 @@ add_library(his_common
     src/service/PatientService.c
     src/service/PharmacyService.c
     src/service/RegistrationService.c
+    src/ui/MenuApplication.c
     src/ui/MenuController.c
 )
 
@@ -182,3 +183,11 @@ add_executable(test_menu_controller
 target_link_libraries(test_menu_controller PRIVATE his_common)
 
 add_test(NAME test_menu_controller COMMAND test_menu_controller)
+
+add_executable(test_menu_application
+    tests/test_menu_application.c
+)
+
+target_link_libraries(test_menu_application PRIVATE his_common)
+
+add_test(NAME test_menu_application COMMAND test_menu_application)
