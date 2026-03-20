@@ -17,8 +17,16 @@ add_library(his_common
     src/domain/ExaminationRecord.c
     src/domain/Registration.c
     src/domain/VisitRecord.c
+    src/repository/DepartmentRepository.c
+    src/repository/DispenseRecordRepository.c
+    src/repository/DoctorRepository.c
+    src/repository/ExaminationRecordRepository.c
+    src/repository/MedicineRepository.c
     src/repository/RepositoryUtils.c
+    src/repository/PatientRepository.c
+    src/repository/RegistrationRepository.c
     src/repository/TextFileRepository.c
+    src/repository/VisitRecordRepository.c
 )
 
 target_include_directories(his_common PUBLIC include)
@@ -60,3 +68,27 @@ add_executable(test_repository_utils
 target_link_libraries(test_repository_utils PRIVATE his_common)
 
 add_test(NAME test_repository_utils COMMAND test_repository_utils)
+
+add_executable(test_patient_repository
+    tests/test_patient_repository.c
+)
+
+target_link_libraries(test_patient_repository PRIVATE his_common)
+
+add_test(NAME test_patient_repository COMMAND test_patient_repository)
+
+add_executable(test_doctor_repository
+    tests/test_doctor_repository.c
+)
+
+target_link_libraries(test_doctor_repository PRIVATE his_common)
+
+add_test(NAME test_doctor_repository COMMAND test_doctor_repository)
+
+add_executable(test_registration_repository
+    tests/test_registration_repository.c
+)
+
+target_link_libraries(test_registration_repository PRIVATE his_common)
+
+add_test(NAME test_registration_repository COMMAND test_registration_repository)

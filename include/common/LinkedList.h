@@ -17,6 +17,7 @@ typedef struct LinkedList {
     size_t count;
 } LinkedList;
 
+/* LinkedList stores payload pointers as-is; caller owns payload allocation/freeing. */
 void LinkedList_init(LinkedList *list);
 int LinkedList_append(LinkedList *list, void *data);
 void *LinkedList_find_first(

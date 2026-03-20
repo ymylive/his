@@ -275,11 +275,11 @@ assert(reg.status == REG_STATUS_DIAGNOSED);
 - Test: `tests/test_patient_repository.c`
 - Test: `tests/test_registration_repository.c`
 
-- [ ] **Step 1: 用临时 txt 文件写读写回归测试**
-- [ ] **Step 2: 实现查单条、查列表、追加保存、整表回写**
-- [ ] **Step 3: 补齐医生、科室、看诊记录、检查记录对应仓储接口**
+- [x] **Step 1: 用临时 txt 文件写读写回归测试**
+- [x] **Step 2: 实现查单条、查列表、追加保存、整表回写**
+- [x] **Step 3: 补齐医生、科室、看诊记录、检查记录对应仓储接口**
 - [ ] **Step 4: 加入主键重复检测**
-- [ ] **Step 5: 运行 `ctest --test-dir build --output-on-failure`**
+- [x] **Step 5: 运行 `ctest --test-dir build --output-on-failure`**
 - [ ] **Step 6: 提交**
 
 ## Chunk 3: 门诊核心业务闭环

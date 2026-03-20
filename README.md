@@ -44,6 +44,13 @@
 - 通用 `txt` 仓储基座 `RepositoryUtils / TextFileRepository`
 - 单元测试 `test_domain`、`test_repository_utils`
 
+当前已经完成第三阶段仓储落地增量：
+
+- 患者仓储 `PatientRepository`
+- 医生/科室/药品仓储 `DoctorRepository / DepartmentRepository / MedicineRepository`
+- 挂号与记录仓储 `RegistrationRepository / VisitRecordRepository / ExaminationRecordRepository / DispenseRecordRepository`
+- 单元测试 `test_patient_repository`、`test_doctor_repository`、`test_registration_repository`
+
 ## 构建与测试
 
 在项目根目录执行：
@@ -95,7 +102,6 @@ ctest --test-dir build --output-on-failure
 
 下一阶段继续按计划推进：
 
-- 建立领域模型与 `txt` 仓储层
-- 落地患者、医生、挂号、医疗记录、药房模块
-- 落地住院、病房、床位模块
+- 落地患者、医生、挂号、医疗记录、药房服务层
+- 落地住院、病房、床位领域与服务层
 - 补齐测试数据、集成验证与答辩材料
