@@ -292,11 +292,11 @@ assert(reg.status == REG_STATUS_DIAGNOSED);
 - Modify: `include/repository/PatientRepository.h`
 - Test: `tests/test_patient_service.c`
 
-- [ ] **Step 1: 写“患者新增、修改、删除、查询”的失败测试**
-- [ ] **Step 2: 实现患者编号、姓名、性别、年龄、联系方式、证件信息、过敏史/备注、是否住院等字段校验**
-- [ ] **Step 3: 实现按编号、姓名、手机号、证件号查询患者**
-- [ ] **Step 4: 处理重复手机号或重复身份证号规则（如题目未要求身份证，可先仅校验手机号）**
-- [ ] **Step 5: 运行 `ctest --test-dir build --output-on-failure`**
+- [x] **Step 1: 写“患者新增、修改、删除、查询”的失败测试**
+- [x] **Step 2: 实现患者编号、姓名、性别、年龄、联系方式、证件信息、过敏史/备注、是否住院等字段校验**
+- [x] **Step 3: 实现按编号、姓名、手机号、证件号查询患者**
+- [x] **Step 4: 处理重复手机号或重复身份证号规则（如题目未要求身份证，可先仅校验手机号）**
+- [x] **Step 5: 运行 `ctest --test-dir build --output-on-failure`**
 - [ ] **Step 6: 提交**
 
 ### Task 7: 医生与科室管理服务
@@ -311,10 +311,10 @@ assert(reg.status == REG_STATUS_DIAGNOSED);
 - Test: `tests/test_doctor_service.c`
 - Test: `tests/test_department_service.c`
 
-- [ ] **Step 1: 写“添加医生、查询医生、按科室查看医生、维护科室信息”的失败测试**
-- [ ] **Step 2: 实现医生工号、姓名、职称、科室、出诊安排等字段校验**
-- [ ] **Step 3: 实现科室新增、修改、查询和医生按科室过滤**
-- [ ] **Step 4: 运行 `ctest --test-dir build --output-on-failure`**
+- [x] **Step 1: 写“添加医生、查询医生、按科室查看医生、维护科室信息”的失败测试**
+- [x] **Step 2: 实现医生工号、姓名、职称、科室、出诊安排等字段校验**
+- [x] **Step 3: 实现科室新增、修改、查询和医生按科室过滤**
+- [x] **Step 4: 运行 `ctest --test-dir build --output-on-failure`**
 - [ ] **Step 5: 提交**
 
 ### Task 8: 挂号服务
@@ -326,10 +326,10 @@ assert(reg.status == REG_STATUS_DIAGNOSED);
 - Modify: `include/repository/RegistrationRepository.h`
 - Test: `tests/test_registration_service.c`
 
-- [ ] **Step 1: 写挂号、退号、接诊前状态校验测试**
-- [ ] **Step 2: 实现选择医生挂号、挂号时间记录与挂号单创建**
-- [ ] **Step 3: 实现查看挂号信息与取消挂号，并限制已接诊记录不可退号**
-- [ ] **Step 4: 运行 `ctest --test-dir build --output-on-failure`**
+- [x] **Step 1: 写挂号、退号、接诊前状态校验测试**
+- [x] **Step 2: 实现选择医生挂号、挂号时间记录与挂号单创建**
+- [x] **Step 3: 实现查看挂号信息与取消挂号，并限制已接诊记录不可退号**
+- [x] **Step 4: 运行 `ctest --test-dir build --output-on-failure`**
 - [ ] **Step 5: 提交**
 
 ### Task 9: 医疗记录管理服务

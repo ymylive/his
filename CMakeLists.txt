@@ -27,6 +27,10 @@ add_library(his_common
     src/repository/RegistrationRepository.c
     src/repository/TextFileRepository.c
     src/repository/VisitRecordRepository.c
+    src/service/DepartmentService.c
+    src/service/DoctorService.c
+    src/service/PatientService.c
+    src/service/RegistrationService.c
 )
 
 target_include_directories(his_common PUBLIC include)
@@ -92,3 +96,28 @@ add_executable(test_registration_repository
 target_link_libraries(test_registration_repository PRIVATE his_common)
 
 add_test(NAME test_registration_repository COMMAND test_registration_repository)
+
+add_executable(test_doctor_service
+    tests/test_department_service.c
+    tests/test_doctor_service.c
+)
+
+target_link_libraries(test_doctor_service PRIVATE his_common)
+
+add_test(NAME test_doctor_service COMMAND test_doctor_service)
+
+add_executable(test_registration_service
+    tests/test_registration_service.c
+)
+
+target_link_libraries(test_registration_service PRIVATE his_common)
+
+add_test(NAME test_registration_service COMMAND test_registration_service)
+
+add_executable(test_patient_service
+    tests/test_patient_service.c
+)
+
+target_link_libraries(test_patient_service PRIVATE his_common)
+
+add_test(NAME test_patient_service COMMAND test_patient_service)

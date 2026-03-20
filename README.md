@@ -51,6 +51,13 @@
 - 挂号与记录仓储 `RegistrationRepository / VisitRecordRepository / ExaminationRecordRepository / DispenseRecordRepository`
 - 单元测试 `test_patient_repository`、`test_doctor_repository`、`test_registration_repository`
 
+当前已经完成第四阶段门诊服务增量：
+
+- 患者服务 `PatientService`
+- 科室与医生服务 `DepartmentService / DoctorService`
+- 挂号服务 `RegistrationService`
+- 单元测试 `test_patient_service`、`test_doctor_service`、`test_registration_service`
+
 ## 构建与测试
 
 在项目根目录执行：
@@ -102,6 +109,6 @@ ctest --test-dir build --output-on-failure
 
 下一阶段继续按计划推进：
 
-- 落地患者、医生、挂号、医疗记录、药房服务层
+- 落地医疗记录、药房、住院相关服务层
 - 落地住院、病房、床位领域与服务层
 - 补齐测试数据、集成验证与答辩材料
