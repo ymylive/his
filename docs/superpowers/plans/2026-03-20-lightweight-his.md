@@ -407,11 +407,11 @@ assert(reg.status == REG_STATUS_DIAGNOSED);
 - Test: `tests/test_inpatient_service.c`
 - Test: `tests/test_bed_service.c`
 
-- [ ] **Step 1: 写“空闲床位才能分配、同一患者不可重复入院”的失败测试**
-- [ ] **Step 2: 实现查看病房信息、查看床位状态、分配床位、住院状态查询**
-- [ ] **Step 3: 实现出院释放床位与转床逻辑**
-- [ ] **Step 4: 在床位信息中维护当前入住患者**
-- [ ] **Step 5: 运行 `ctest --test-dir build --output-on-failure`**
+- [x] **Step 1: 写“空闲床位才能分配、同一患者不可重复入院”的失败测试**
+- [x] **Step 2: 实现查看病房信息、查看床位状态、分配床位、住院状态查询**
+- [x] **Step 3: 实现出院释放床位与转床逻辑**
+- [x] **Step 4: 在床位信息中维护当前入住患者**
+- [x] **Step 5: 运行 `ctest --test-dir build --output-on-failure`**
 - [ ] **Step 6: 提交**
 
 ## Chunk 5: UI、报表与日志

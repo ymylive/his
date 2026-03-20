@@ -72,11 +72,19 @@
 - 支持床位状态流转、活动住院冲突校验、住院医嘱持久化
 - 单元测试 `test_inpatient_domain`
 
+当前已经完成第七阶段住院服务增量：
+
+- 病房与床位查询服务 `BedService`
+- 入院与出院事务服务 `InpatientService`
+- 支持病房查询、按病房查看床位、按床位查询当前入住患者
+- 支持办理住院、重复入院拦截、出院释放床位与清除住院标记
+- 单元测试 `test_bed_service`、`test_inpatient_service`
+
 当前本地统一验证结果：
 
 - `cmake --build build`
 - `ctest --test-dir build --output-on-failure`
-- 最新结果 `12/12` 测试通过
+- 最新结果 `14/14` 测试通过
 
 ## 构建与测试
 
@@ -130,5 +138,5 @@ ctest --test-dir build --output-on-failure
 下一阶段继续按计划推进：
 
 - 落地医疗记录服务层
-- 落地入院与床位服务层
+- 补齐住院转床与更强的一致性补偿逻辑
 - 补齐测试数据、集成验证与答辩材料
