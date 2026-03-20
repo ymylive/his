@@ -37,6 +37,10 @@ Result RegistrationRepository_find_by_patient_id(
     const RegistrationRepositoryFilter *filter,
     LinkedList *out_registrations
 );
+Result RegistrationRepository_load_all(
+    const RegistrationRepository *repository,
+    LinkedList *out_registrations
+);
 Result RegistrationRepository_save_all(
     const RegistrationRepository *repository,
     const LinkedList *registrations

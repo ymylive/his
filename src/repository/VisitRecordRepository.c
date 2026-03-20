@@ -20,6 +20,10 @@ typedef struct VisitRecordCollectByRegistrationContext {
     LinkedList *out_records;
 } VisitRecordCollectByRegistrationContext;
 
+typedef struct VisitRecordLoadContext {
+    LinkedList *out_records;
+} VisitRecordLoadContext;
+
 static int VisitRecordRepository_is_empty_text(const char *text) {
     return text == 0 || text[0] == '\0';
 }
@@ -355,6 +359,34 @@ static Result VisitRecordRepository_collect_by_registration_line_handler(
     return Result_make_success("visit collected");
 }
 
+static Result VisitRecordRepository_load_line_handler(const char *line, void *context) {
+    VisitRecordLoadContext *load_context = (VisitRecordLoadContext *)context;
+    VisitRecord record;
+    VisitRecord *copy = 0;
+    Result result = VisitRecordRepository_parse_line(line, &record);
+
+    if (!result.success) {
+        return result;
+    }
+
+    if (load_context == 0 || load_context->out_records == 0) {
+        return Result_make_failure("visit load context missing");
+    }
+
+    copy = (VisitRecord *)malloc(sizeof(*copy));
+    if (copy == 0) {
+        return Result_make_failure("failed to allocate visit result");
+    }
+
+    *copy = record;
+    if (!LinkedList_append(load_context->out_records, copy)) {
+        free(copy);
+        return Result_make_failure("failed to append visit result");
+    }
+
+    return Result_make_success("visit loaded");
+}
+
 Result VisitRecordRepository_init(VisitRecordRepository *repository, const char *path) {
     if (repository == 0) {
         return Result_make_failure("visit repository missing");
@@ -498,6 +530,43 @@ Result VisitRecordRepository_find_by_registration_id(
 
     *out_records = matches;
     return Result_make_success("visit records loaded");
+}
+
+Result VisitRecordRepository_load_all(
+    const VisitRecordRepository *repository,
+    LinkedList *out_records
+) {
+    VisitRecordLoadContext context;
+    LinkedList loaded;
+    Result result;
+
+    if (out_records == 0) {
+        return Result_make_failure("visit output list missing");
+    }
+
+    if (LinkedList_count(out_records) != 0) {
+        return Result_make_failure("output visit list must be empty");
+    }
+
+    LinkedList_init(&loaded);
+    result = VisitRecordRepository_ensure_storage(repository);
+    if (!result.success) {
+        return result;
+    }
+
+    context.out_records = &loaded;
+    result = TextFileRepository_for_each_data_line(
+        &repository->storage,
+        VisitRecordRepository_load_line_handler,
+        &context
+    );
+    if (!result.success) {
+        VisitRecordRepository_clear_list(&loaded);
+        return result;
+    }
+
+    *out_records = loaded;
+    return Result_make_success("visits loaded");
 }
 
 Result VisitRecordRepository_save_all(

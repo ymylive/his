@@ -33,6 +33,10 @@ Result ExaminationRecordRepository_find_by_visit_id(
     const char *visit_id,
     LinkedList *out_records
 );
+Result ExaminationRecordRepository_load_all(
+    const ExaminationRecordRepository *repository,
+    LinkedList *out_records
+);
 Result ExaminationRecordRepository_save_all(
     const ExaminationRecordRepository *repository,
     const LinkedList *records

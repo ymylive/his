@@ -343,11 +343,13 @@ assert(reg.status == REG_STATUS_DIAGNOSED);
 - Create: `src/service/MedicalRecordService.c`
 - Test: `tests/test_medical_record_service.c`
 
-- [ ] **Step 1: 写挂号记录、看诊记录、检查记录、住院记录四类记录的增删改查测试**
-- [ ] **Step 2: 实现诊断结果、医生建议，以及是否需要检查、住院或开药等标记字段**
-- [ ] **Step 3: 实现按患者查询历史记录和按时间范围查询记录，并将接诊保存映射到看诊记录、住院登记映射到住院记录**
-- [ ] **Step 4: 补充检查项目新增、检查结果回写、检查记录修改与删除能力**
-- [ ] **Step 5: 运行 `ctest --test-dir build --output-on-failure`**
+- 说明：`MedicalRecordService` 负责 `VisitRecord / ExaminationRecord` 的写入与维护，`RegistrationService` 继续负责挂号创建/取消，`InpatientService` 继续负责住院生命周期；本任务内通过聚合查询覆盖四类记录的统一历史视图。
+
+- [x] **Step 1: 为看诊记录、检查记录 CRUD，以及挂号/住院记录聚合查询补齐测试**
+- [x] **Step 2: 实现诊断结果、医生建议，以及是否需要检查、住院或开药等标记字段**
+- [x] **Step 3: 实现按患者查询历史记录和按时间范围查询记录，并将接诊保存映射到看诊记录、住院登记映射到住院记录**
+- [x] **Step 4: 补充检查项目新增、检查结果回写、检查记录修改与删除能力**
+- [x] **Step 5: 运行 `ctest --test-dir build --output-on-failure`**
 - [ ] **Step 6: 提交**
 
 ### Task 10: 药房与药品管理服务

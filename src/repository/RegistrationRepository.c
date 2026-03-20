@@ -21,6 +21,10 @@ typedef struct RegistrationCollectByPatientContext {
     LinkedList *out_registrations;
 } RegistrationCollectByPatientContext;
 
+typedef struct RegistrationLoadContext {
+    LinkedList *out_registrations;
+} RegistrationLoadContext;
+
 static int RegistrationRepository_is_empty_text(const char *text) {
     return text == 0 || text[0] == '\0';
 }
@@ -437,6 +441,34 @@ static Result RegistrationRepository_collect_by_patient_line_handler(
     return Result_make_success("registration collected");
 }
 
+static Result RegistrationRepository_load_line_handler(const char *line, void *context) {
+    RegistrationLoadContext *load_context = (RegistrationLoadContext *)context;
+    Registration registration;
+    Registration *copy = 0;
+    Result result = RegistrationRepository_parse_line(line, &registration);
+
+    if (!result.success) {
+        return result;
+    }
+
+    if (load_context == 0 || load_context->out_registrations == 0) {
+        return Result_make_failure("registration load context missing");
+    }
+
+    copy = (Registration *)malloc(sizeof(*copy));
+    if (copy == 0) {
+        return Result_make_failure("failed to allocate registration result");
+    }
+
+    *copy = registration;
+    if (!LinkedList_append(load_context->out_registrations, copy)) {
+        free(copy);
+        return Result_make_failure("failed to append registration result");
+    }
+
+    return Result_make_success("registration loaded");
+}
+
 Result RegistrationRepository_init(RegistrationRepository *repository, const char *path) {
     if (repository == 0) {
         return Result_make_failure("registration repository missing");
@@ -593,6 +625,43 @@ Result RegistrationRepository_find_by_patient_id(
 
     *out_registrations = matches;
     return Result_make_success("patient registrations loaded");
+}
+
+Result RegistrationRepository_load_all(
+    const RegistrationRepository *repository,
+    LinkedList *out_registrations
+) {
+    RegistrationLoadContext context;
+    LinkedList loaded;
+    Result result;
+
+    if (out_registrations == 0) {
+        return Result_make_failure("registration output list missing");
+    }
+
+    if (LinkedList_count(out_registrations) != 0) {
+        return Result_make_failure("output registration list must be empty");
+    }
+
+    LinkedList_init(&loaded);
+    result = RegistrationRepository_ensure_storage(repository);
+    if (result.success == 0) {
+        return result;
+    }
+
+    context.out_registrations = &loaded;
+    result = TextFileRepository_for_each_data_line(
+        &repository->storage,
+        RegistrationRepository_load_line_handler,
+        &context
+    );
+    if (result.success == 0) {
+        RegistrationRepository_clear_list(&loaded);
+        return result;
+    }
+
+    *out_registrations = loaded;
+    return Result_make_success("registrations loaded");
 }
 
 Result RegistrationRepository_save_all(

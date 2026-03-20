@@ -20,6 +20,10 @@ typedef struct ExaminationRecordCollectByVisitContext {
     LinkedList *out_records;
 } ExaminationRecordCollectByVisitContext;
 
+typedef struct ExaminationRecordLoadContext {
+    LinkedList *out_records;
+} ExaminationRecordLoadContext;
+
 static int ExaminationRecordRepository_is_empty_text(const char *text) {
     return text == 0 || text[0] == '\0';
 }
@@ -388,6 +392,37 @@ static Result ExaminationRecordRepository_collect_by_visit_line_handler(
     return Result_make_success("exam collected");
 }
 
+static Result ExaminationRecordRepository_load_line_handler(
+    const char *line,
+    void *context
+) {
+    ExaminationRecordLoadContext *load_context = (ExaminationRecordLoadContext *)context;
+    ExaminationRecord record;
+    ExaminationRecord *copy = 0;
+    Result result = ExaminationRecordRepository_parse_line(line, &record);
+
+    if (!result.success) {
+        return result;
+    }
+
+    if (load_context == 0 || load_context->out_records == 0) {
+        return Result_make_failure("exam load context missing");
+    }
+
+    copy = (ExaminationRecord *)malloc(sizeof(*copy));
+    if (copy == 0) {
+        return Result_make_failure("failed to allocate exam result");
+    }
+
+    *copy = record;
+    if (!LinkedList_append(load_context->out_records, copy)) {
+        free(copy);
+        return Result_make_failure("failed to append exam result");
+    }
+
+    return Result_make_success("exam loaded");
+}
+
 Result ExaminationRecordRepository_init(
     ExaminationRecordRepository *repository,
     const char *path
@@ -535,6 +570,43 @@ Result ExaminationRecordRepository_find_by_visit_id(
     }
 
     *out_records = matches;
+    return Result_make_success("exam records loaded");
+}
+
+Result ExaminationRecordRepository_load_all(
+    const ExaminationRecordRepository *repository,
+    LinkedList *out_records
+) {
+    ExaminationRecordLoadContext context;
+    LinkedList loaded;
+    Result result;
+
+    if (out_records == 0) {
+        return Result_make_failure("exam output list missing");
+    }
+
+    if (LinkedList_count(out_records) != 0) {
+        return Result_make_failure("output exam list must be empty");
+    }
+
+    LinkedList_init(&loaded);
+    result = ExaminationRecordRepository_ensure_storage(repository);
+    if (!result.success) {
+        return result;
+    }
+
+    context.out_records = &loaded;
+    result = TextFileRepository_for_each_data_line(
+        &repository->storage,
+        ExaminationRecordRepository_load_line_handler,
+        &context
+    );
+    if (!result.success) {
+        ExaminationRecordRepository_clear_list(&loaded);
+        return result;
+    }
+
+    *out_records = loaded;
     return Result_make_success("exam records loaded");
 }
 

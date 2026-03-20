@@ -80,11 +80,21 @@
 - 支持办理住院、重复入院拦截、出院释放床位与清除住院标记
 - 单元测试 `test_bed_service`、`test_inpatient_service`
 
+当前已经完成第八阶段医疗记录服务增量：
+
+- 医疗记录服务 `MedicalRecordService`
+- 支持看诊记录新增、修改、删除，并在首次接诊时联动挂号状态更新
+- 支持检查记录新增、结果回写、修改、删除
+- 支持按患者查询挂号/看诊/检查/住院四类历史记录
+- 支持按时间范围查询挂号/看诊/检查/住院四类记录
+- 保持挂号生命周期由 `RegistrationService` 管理，住院生命周期由 `InpatientService` 管理
+- 单元测试 `test_medical_record_service`
+
 当前本地统一验证结果：
 
 - `cmake --build build`
 - `ctest --test-dir build --output-on-failure`
-- 最新结果 `14/14` 测试通过
+- 最新结果 `15/15` 测试通过
 
 ## 构建与测试
 
@@ -137,6 +147,6 @@ ctest --test-dir build --output-on-failure
 
 下一阶段继续按计划推进：
 
-- 落地医疗记录服务层
-- 补齐住院转床与更强的一致性补偿逻辑
+- 补齐控制台菜单与三类角色视图
+- 继续增强住院/病历跨文件保存的一致性补偿逻辑
 - 补齐测试数据、集成验证与答辩材料

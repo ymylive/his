@@ -28,6 +28,10 @@ Result VisitRecordRepository_find_by_registration_id(
     const char *registration_id,
     LinkedList *out_records
 );
+Result VisitRecordRepository_load_all(
+    const VisitRecordRepository *repository,
+    LinkedList *out_records
+);
 Result VisitRecordRepository_save_all(
     const VisitRecordRepository *repository,
     const LinkedList *records

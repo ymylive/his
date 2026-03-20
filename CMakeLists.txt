@@ -39,6 +39,7 @@ add_library(his_common
     src/service/BedService.c
     src/service/DoctorService.c
     src/service/InpatientService.c
+    src/service/MedicalRecordService.c
     src/service/PatientService.c
     src/service/PharmacyService.c
     src/service/RegistrationService.c
@@ -164,3 +165,11 @@ add_executable(test_inpatient_service
 target_link_libraries(test_inpatient_service PRIVATE his_common)
 
 add_test(NAME test_inpatient_service COMMAND test_inpatient_service)
+
+add_executable(test_medical_record_service
+    tests/test_medical_record_service.c
+)
+
+target_link_libraries(test_medical_record_service PRIVATE his_common)
+
+add_test(NAME test_medical_record_service COMMAND test_medical_record_service)
