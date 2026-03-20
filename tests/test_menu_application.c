@@ -215,6 +215,45 @@ static void seed_ward_and_bed(const MenuApplicationTestContext *context) {
     assert(BedRepository_append(&bed_repository, &bed).success == 1);
 }
 
+static Result execute_action_with_text_io(
+    MenuApplication *application,
+    MenuAction action,
+    const char *input_text,
+    char *output_buffer,
+    size_t output_capacity
+) {
+    FILE *input_file = 0;
+    FILE *output_file = 0;
+    size_t bytes_read = 0;
+    Result result;
+
+    assert(application != 0);
+    assert(output_buffer != 0);
+    assert(output_capacity > 0);
+
+    input_file = tmpfile();
+    output_file = tmpfile();
+    assert(input_file != 0);
+    assert(output_file != 0);
+
+    if (input_text != 0) {
+        fputs(input_text, input_file);
+    }
+
+    rewind(input_file);
+    result = MenuApplication_execute_action(application, action, input_file, output_file);
+    fflush(output_file);
+    rewind(output_file);
+
+    memset(output_buffer, 0, output_capacity);
+    bytes_read = fread(output_buffer, 1, output_capacity - 1, output_file);
+    output_buffer[bytes_read] = '\0';
+
+    fclose(input_file);
+    fclose(output_file);
+    return result;
+}
+
 static void test_clerk_flow_add_query_patient_and_registration(void) {
     MenuApplicationTestContext context;
     MenuApplication application;
@@ -563,10 +602,131 @@ static void test_pharmacy_flow_add_restock_dispense_and_low_stock(void) {
     assert(strstr(output, "MED4001") != 0);
 }
 
+static void test_execute_action_inpatient_bed_query_lists_beds(void) {
+    MenuApplicationTestContext context;
+    MenuApplication application;
+    char output[2048];
+    Result result;
+
+    setup_context(&context, "execute_inpatient_bed_query");
+    seed_ward_and_bed(&context);
+
+    result = MenuApplication_init(&application, &context.paths);
+    assert(result.success == 1);
+
+    result = execute_action_with_text_io(
+        &application,
+        MENU_ACTION_INPATIENT_QUERY_BED,
+        "WRD0001\n",
+        output,
+        sizeof(output)
+    );
+    assert(result.success == 1);
+    assert(strstr(output, "BED0001") != 0);
+    assert(strstr(output, "床位列表") != 0);
+}
+
+static void test_execute_action_doctor_visit_preserves_long_complaint(void) {
+    MenuApplicationTestContext context;
+    MenuApplication application;
+    VisitRecordRepository visit_repository;
+    VisitRecord visit;
+    char output[2048];
+    const char *chief_complaint =
+        "Long chief complaint text for execute action route coverage";
+    Result result;
+
+    setup_context(&context, "execute_doctor_visit");
+    seed_department_and_doctor(&context);
+
+    result = MenuApplication_init(&application, &context.paths);
+    assert(result.success == 1);
+    result = MenuApplication_add_patient(
+        &application,
+        &(Patient){
+            "PAT5001",
+            "Evan",
+            PATIENT_GENDER_MALE,
+            40,
+            "13800000055",
+            "110101199505050055",
+            "None",
+            "Healthy",
+            0,
+            "execute"
+        },
+        output,
+        sizeof(output)
+    );
+    assert(result.success == 1);
+    result = MenuApplication_create_registration(
+        &application,
+        "PAT5001",
+        "DOC0001",
+        "DEP0001",
+        "2026-03-20T13:00",
+        output,
+        sizeof(output)
+    );
+    assert(result.success == 1);
+
+    result = execute_action_with_text_io(
+        &application,
+        MENU_ACTION_DOCTOR_VISIT_RECORD,
+        "REG0001\n"
+        "Long chief complaint text for execute action route coverage\n"
+        "Diagnosis\n"
+        "Advice text\n"
+        "1\n"
+        "0\n"
+        "1\n"
+        "2026-03-20T13:30\n",
+        output,
+        sizeof(output)
+    );
+    assert(result.success == 1);
+
+    result = VisitRecordRepository_init(&visit_repository, context.visit_path);
+    assert(result.success == 1);
+    assert(
+        VisitRecordRepository_find_by_visit_id(&visit_repository, "VIS0001", &visit).success == 1
+    );
+    assert(strcmp(visit.chief_complaint, chief_complaint) == 0);
+}
+
+static void test_execute_action_rejects_invalid_medicine_price(void) {
+    MenuApplicationTestContext context;
+    MenuApplication application;
+    char output[2048];
+    Result result;
+
+    setup_context(&context, "execute_invalid_price");
+    result = MenuApplication_init(&application, &context.paths);
+    assert(result.success == 1);
+
+    result = execute_action_with_text_io(
+        &application,
+        MENU_ACTION_PHARMACY_ADD_MEDICINE,
+        "MED5001\n"
+        "InvalidPriceMedicine\n"
+        "abc\n"
+        "5\n"
+        "DEP0001\n"
+        "2\n",
+        output,
+        sizeof(output)
+    );
+    assert(result.success == 0);
+    assert(strstr(result.message, "invalid") != 0);
+}
+
 int main(void) {
     test_clerk_flow_add_query_patient_and_registration();
     test_doctor_flow_create_visit_and_query_history();
     test_inpatient_flow_list_admit_and_discharge();
     test_pharmacy_flow_add_restock_dispense_and_low_stock();
+    test_execute_action_inpatient_bed_query_lists_beds();
+    test_execute_action_doctor_visit_preserves_long_complaint();
+    test_execute_action_rejects_invalid_medicine_price();
     return 0;
 }

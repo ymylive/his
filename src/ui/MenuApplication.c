@@ -1091,6 +1091,7 @@ static Result MenuApplication_prompt_medicine_form(
     Medicine *out_medicine
 ) {
     char price_buffer[64];
+    char *end_pointer = 0;
     int stock = 0;
     int threshold = 0;
     Result result;
@@ -1122,7 +1123,17 @@ static Result MenuApplication_prompt_medicine_form(
     if (result.success == 0) {
         return result;
     }
-    out_medicine->price = strtod(price_buffer, 0);
+    out_medicine->price = strtod(price_buffer, &end_pointer);
+    if (end_pointer == price_buffer || end_pointer == 0) {
+        return Result_make_failure("medicine price invalid");
+    }
+    while (*end_pointer != '\0') {
+        if (!isspace((unsigned char)*end_pointer)) {
+            return Result_make_failure("medicine price invalid");
+        }
+
+        end_pointer++;
+    }
     result = MenuApplication_prompt_int(context, "库存: ", &stock);
     if (result.success == 0) {
         return result;
@@ -1156,6 +1167,7 @@ Result MenuApplication_execute_action(
     char first_id[HIS_DOMAIN_ID_CAPACITY];
     char second_id[HIS_DOMAIN_ID_CAPACITY];
     char third_id[HIS_DOMAIN_TEXT_CAPACITY];
+    char text_value[HIS_DOMAIN_TEXT_CAPACITY];
     char time_value[HIS_DOMAIN_TIME_CAPACITY];
     char long_text[HIS_DOMAIN_LARGE_TEXT_CAPACITY];
     Patient patient;
@@ -1175,6 +1187,7 @@ Result MenuApplication_execute_action(
     memset(first_id, 0, sizeof(first_id));
     memset(second_id, 0, sizeof(second_id));
     memset(third_id, 0, sizeof(third_id));
+    memset(text_value, 0, sizeof(text_value));
     memset(time_value, 0, sizeof(time_value));
     memset(long_text, 0, sizeof(long_text));
 
@@ -1365,8 +1378,8 @@ Result MenuApplication_execute_action(
             result = MenuApplication_prompt_line(
                 &context,
                 "主诉: ",
-                second_id,
-                sizeof(second_id)
+                text_value,
+                sizeof(text_value)
             );
             if (result.success == 0) {
                 return result;
@@ -1413,7 +1426,7 @@ Result MenuApplication_execute_action(
             result = MenuApplication_create_visit_record(
                 application,
                 first_id,
-                second_id,
+                text_value,
                 third_id,
                 long_text,
                 flag_one,
@@ -1429,6 +1442,35 @@ Result MenuApplication_execute_action(
             return result;
 
         case MENU_ACTION_INPATIENT_QUERY_BED:
+            result = MenuApplication_list_wards(
+                application,
+                output_buffer,
+                sizeof(output_buffer)
+            );
+            if (output_buffer[0] != '\0') {
+                fprintf(output, "%s\n", output_buffer);
+            }
+            memset(output_buffer, 0, sizeof(output_buffer));
+            result = MenuApplication_prompt_line(
+                &context,
+                "请输入病房编号以查看床位: ",
+                first_id,
+                sizeof(first_id)
+            );
+            if (result.success == 0) {
+                return result;
+            }
+            result = MenuApplication_list_beds_by_ward(
+                application,
+                first_id,
+                output_buffer,
+                sizeof(output_buffer)
+            );
+            if (output_buffer[0] != '\0') {
+                fprintf(output, "%s\n", output_buffer);
+            }
+            return result;
+
         case MENU_ACTION_WARD_LIST_WARDS:
             result = MenuApplication_list_wards(
                 application,

@@ -103,7 +103,8 @@ int main(void) {
             }
 
             result = MenuApplication_execute_action(&application, action, stdin, stdout);
-            if (result.success == 0) {
+            if (result.success == 0 &&
+                strcmp(result.message, "action not implemented yet") != 0) {
                 printf("操作未完成: %s\n", result.message);
             }
         }
