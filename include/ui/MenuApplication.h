@@ -48,6 +48,12 @@ Result MenuApplication_add_patient(
     char *buffer,
     size_t capacity
 );
+Result MenuApplication_update_patient(
+    MenuApplication *application,
+    const Patient *patient,
+    char *buffer,
+    size_t capacity
+);
 Result MenuApplication_query_patient(
     MenuApplication *application,
     const char *patient_id,
@@ -76,6 +82,18 @@ Result MenuApplication_cancel_registration(
     char *buffer,
     size_t capacity
 );
+Result MenuApplication_query_registrations_by_patient(
+    MenuApplication *application,
+    const char *patient_id,
+    char *buffer,
+    size_t capacity
+);
+Result MenuApplication_query_pending_registrations_by_doctor(
+    MenuApplication *application,
+    const char *doctor_id,
+    char *buffer,
+    size_t capacity
+);
 Result MenuApplication_create_visit_record(
     MenuApplication *application,
     const char *registration_id,
@@ -92,6 +110,23 @@ Result MenuApplication_create_visit_record(
 Result MenuApplication_query_patient_history(
     MenuApplication *application,
     const char *patient_id,
+    char *buffer,
+    size_t capacity
+);
+Result MenuApplication_create_examination_record(
+    MenuApplication *application,
+    const char *visit_id,
+    const char *exam_item,
+    const char *exam_type,
+    const char *requested_at,
+    char *buffer,
+    size_t capacity
+);
+Result MenuApplication_complete_examination_record(
+    MenuApplication *application,
+    const char *examination_id,
+    const char *result_text,
+    const char *completed_at,
     char *buffer,
     size_t capacity
 );

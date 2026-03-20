@@ -313,6 +313,31 @@ Result MenuApplication_add_patient(
     );
 }
 
+Result MenuApplication_update_patient(
+    MenuApplication *application,
+    const Patient *patient,
+    char *buffer,
+    size_t capacity
+) {
+    Result result = PatientService_update_patient(&application->patient_service, patient);
+
+    if (result.success == 0) {
+        return MenuApplication_write_failure(result.message, buffer, capacity);
+    }
+
+    return MenuApplication_write_text(
+        buffer,
+        capacity,
+        "患者已更新: %s | %s | 性别=%s | 年龄=%d | 联系方式=%s | 住院=%s",
+        patient->patient_id,
+        patient->name,
+        MenuApplication_gender_label(patient->gender),
+        patient->age,
+        patient->contact,
+        patient->is_inpatient ? "是" : "否"
+    );
+}
+
 Result MenuApplication_query_patient(
     MenuApplication *application,
     const char *patient_id,
@@ -439,6 +464,136 @@ Result MenuApplication_cancel_registration(
     );
 }
 
+Result MenuApplication_query_registrations_by_patient(
+    MenuApplication *application,
+    const char *patient_id,
+    char *buffer,
+    size_t capacity
+) {
+    RegistrationRepositoryFilter filter;
+    LinkedList registrations;
+    const LinkedListNode *current = 0;
+    size_t used = 0;
+    Result result;
+
+    LinkedList_init(&registrations);
+    RegistrationRepositoryFilter_init(&filter);
+    result = RegistrationService_find_by_patient_id(
+        &application->registration_service,
+        patient_id,
+        &filter,
+        &registrations
+    );
+    if (result.success == 0) {
+        return MenuApplication_write_failure(result.message, buffer, capacity);
+    }
+
+    result = MenuApplication_write_text(
+        buffer,
+        capacity,
+        "患者挂号记录: %s | count=%zu",
+        patient_id,
+        LinkedList_count(&registrations)
+    );
+    if (result.success == 0) {
+        RegistrationRepository_clear_list(&registrations);
+        return result;
+    }
+
+    used = strlen(buffer);
+    current = registrations.head;
+    while (current != 0) {
+        const Registration *registration = (const Registration *)current->data;
+
+        result = MenuApplication_append_text(
+            buffer,
+            capacity,
+            &used,
+            "\n%s | 患者=%s | 医生=%s | 科室=%s | 状态=%s",
+            registration->registration_id,
+            registration->patient_id,
+            registration->doctor_id,
+            registration->department_id,
+            MenuApplication_registration_status_label(registration->status)
+        );
+        if (result.success == 0) {
+            RegistrationRepository_clear_list(&registrations);
+            return result;
+        }
+
+        current = current->next;
+    }
+
+    RegistrationRepository_clear_list(&registrations);
+    return Result_make_success("patient registrations ready");
+}
+
+Result MenuApplication_query_pending_registrations_by_doctor(
+    MenuApplication *application,
+    const char *doctor_id,
+    char *buffer,
+    size_t capacity
+) {
+    RegistrationRepositoryFilter filter;
+    LinkedList registrations;
+    const LinkedListNode *current = 0;
+    size_t used = 0;
+    Result result;
+
+    LinkedList_init(&registrations);
+    RegistrationRepositoryFilter_init(&filter);
+    filter.use_status = 1;
+    filter.status = REG_STATUS_PENDING;
+
+    result = RegistrationService_find_by_doctor_id(
+        &application->registration_service,
+        doctor_id,
+        &filter,
+        &registrations
+    );
+    if (result.success == 0) {
+        return MenuApplication_write_failure(result.message, buffer, capacity);
+    }
+
+    result = MenuApplication_write_text(
+        buffer,
+        capacity,
+        "待诊列表: %s | count=%zu",
+        doctor_id,
+        LinkedList_count(&registrations)
+    );
+    if (result.success == 0) {
+        RegistrationRepository_clear_list(&registrations);
+        return result;
+    }
+
+    used = strlen(buffer);
+    current = registrations.head;
+    while (current != 0) {
+        const Registration *registration = (const Registration *)current->data;
+
+        result = MenuApplication_append_text(
+            buffer,
+            capacity,
+            &used,
+            "\n%s | 患者=%s | 科室=%s | 时间=%s",
+            registration->registration_id,
+            registration->patient_id,
+            registration->department_id,
+            registration->registered_at
+        );
+        if (result.success == 0) {
+            RegistrationRepository_clear_list(&registrations);
+            return result;
+        }
+
+        current = current->next;
+    }
+
+    RegistrationRepository_clear_list(&registrations);
+    return Result_make_success("doctor pending registrations ready");
+}
+
 Result MenuApplication_create_visit_record(
     MenuApplication *application,
     const char *registration_id,
@@ -510,6 +665,72 @@ Result MenuApplication_query_patient_history(
     );
     MedicalRecordHistory_clear(&history);
     return result;
+}
+
+Result MenuApplication_create_examination_record(
+    MenuApplication *application,
+    const char *visit_id,
+    const char *exam_item,
+    const char *exam_type,
+    const char *requested_at,
+    char *buffer,
+    size_t capacity
+) {
+    ExaminationRecord record;
+    Result result = MedicalRecordService_create_examination_record(
+        &application->medical_record_service,
+        visit_id,
+        exam_item,
+        exam_type,
+        requested_at,
+        &record
+    );
+
+    if (result.success == 0) {
+        return MenuApplication_write_failure(result.message, buffer, capacity);
+    }
+
+    return MenuApplication_write_text(
+        buffer,
+        capacity,
+        "检查记录已创建: %s | 就诊=%s | 项目=%s | 类型=%s",
+        record.examination_id,
+        record.visit_id,
+        record.exam_item,
+        record.exam_type
+    );
+}
+
+Result MenuApplication_complete_examination_record(
+    MenuApplication *application,
+    const char *examination_id,
+    const char *result_text,
+    const char *completed_at,
+    char *buffer,
+    size_t capacity
+) {
+    ExaminationRecord record;
+    Result result = MedicalRecordService_update_examination_record(
+        &application->medical_record_service,
+        examination_id,
+        EXAM_STATUS_COMPLETED,
+        result_text,
+        completed_at,
+        &record
+    );
+
+    if (result.success == 0) {
+        return MenuApplication_write_failure(result.message, buffer, capacity);
+    }
+
+    return MenuApplication_write_text(
+        buffer,
+        capacity,
+        "检查结果已回写: %s | 结果=%s | 完成时间=%s",
+        record.examination_id,
+        record.result,
+        record.completed_at
+    );
 }
 
 Result MenuApplication_list_wards(
@@ -1208,6 +1429,22 @@ Result MenuApplication_execute_action(
             }
             return result;
 
+        case MENU_ACTION_CLERK_UPDATE_PATIENT:
+            result = MenuApplication_prompt_patient_form(&context, &patient);
+            if (result.success == 0) {
+                return result;
+            }
+            result = MenuApplication_update_patient(
+                application,
+                &patient,
+                output_buffer,
+                sizeof(output_buffer)
+            );
+            if (output_buffer[0] != '\0') {
+                fprintf(output, "%s\n", output_buffer);
+            }
+            return result;
+
         case MENU_ACTION_CLERK_QUERY_PATIENT:
         case MENU_ACTION_PATIENT_BASIC_INFO:
             result = MenuApplication_prompt_line(
@@ -1341,6 +1578,48 @@ Result MenuApplication_execute_action(
             }
             return result;
 
+        case MENU_ACTION_PATIENT_QUERY_REGISTRATION:
+            result = MenuApplication_prompt_line(
+                &context,
+                "患者编号: ",
+                first_id,
+                sizeof(first_id)
+            );
+            if (result.success == 0) {
+                return result;
+            }
+            result = MenuApplication_query_registrations_by_patient(
+                application,
+                first_id,
+                output_buffer,
+                sizeof(output_buffer)
+            );
+            if (output_buffer[0] != '\0') {
+                fprintf(output, "%s\n", output_buffer);
+            }
+            return result;
+
+        case MENU_ACTION_DOCTOR_PENDING_LIST:
+            result = MenuApplication_prompt_line(
+                &context,
+                "医生工号: ",
+                first_id,
+                sizeof(first_id)
+            );
+            if (result.success == 0) {
+                return result;
+            }
+            result = MenuApplication_query_pending_registrations_by_doctor(
+                application,
+                first_id,
+                output_buffer,
+                sizeof(output_buffer)
+            );
+            if (output_buffer[0] != '\0') {
+                fprintf(output, "%s\n", output_buffer);
+            }
+            return result;
+
         case MENU_ACTION_DOCTOR_QUERY_PATIENT_HISTORY:
         case MENU_ACTION_PATIENT_QUERY_VISITS:
         case MENU_ACTION_PATIENT_QUERY_EXAMS:
@@ -1436,6 +1715,106 @@ Result MenuApplication_execute_action(
                 output_buffer,
                 sizeof(output_buffer)
             );
+            if (output_buffer[0] != '\0') {
+                fprintf(output, "%s\n", output_buffer);
+            }
+            return result;
+
+        case MENU_ACTION_DOCTOR_EXAM_RECORD:
+            result = MenuApplication_prompt_line(
+                &context,
+                "1. 新增检查  2. 回写结果\n请选择: ",
+                first_id,
+                sizeof(first_id)
+            );
+            if (result.success == 0) {
+                return result;
+            }
+            if (strcmp(first_id, "1") == 0) {
+                result = MenuApplication_prompt_line(
+                    &context,
+                    "就诊编号: ",
+                    second_id,
+                    sizeof(second_id)
+                );
+                if (result.success == 0) {
+                    return result;
+                }
+                result = MenuApplication_prompt_line(
+                    &context,
+                    "检查项目: ",
+                    text_value,
+                    sizeof(text_value)
+                );
+                if (result.success == 0) {
+                    return result;
+                }
+                result = MenuApplication_prompt_line(
+                    &context,
+                    "检查类型: ",
+                    third_id,
+                    sizeof(third_id)
+                );
+                if (result.success == 0) {
+                    return result;
+                }
+                result = MenuApplication_prompt_line(
+                    &context,
+                    "申请时间: ",
+                    time_value,
+                    sizeof(time_value)
+                );
+                if (result.success == 0) {
+                    return result;
+                }
+                result = MenuApplication_create_examination_record(
+                    application,
+                    second_id,
+                    text_value,
+                    third_id,
+                    time_value,
+                    output_buffer,
+                    sizeof(output_buffer)
+                );
+            } else if (strcmp(first_id, "2") == 0) {
+                result = MenuApplication_prompt_line(
+                    &context,
+                    "检查编号: ",
+                    second_id,
+                    sizeof(second_id)
+                );
+                if (result.success == 0) {
+                    return result;
+                }
+                result = MenuApplication_prompt_line(
+                    &context,
+                    "检查结果: ",
+                    long_text,
+                    sizeof(long_text)
+                );
+                if (result.success == 0) {
+                    return result;
+                }
+                result = MenuApplication_prompt_line(
+                    &context,
+                    "完成时间: ",
+                    time_value,
+                    sizeof(time_value)
+                );
+                if (result.success == 0) {
+                    return result;
+                }
+                result = MenuApplication_complete_examination_record(
+                    application,
+                    second_id,
+                    long_text,
+                    time_value,
+                    output_buffer,
+                    sizeof(output_buffer)
+                );
+            } else {
+                return Result_make_failure("invalid exam action");
+            }
             if (output_buffer[0] != '\0') {
                 fprintf(output, "%s\n", output_buffer);
             }

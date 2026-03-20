@@ -207,6 +207,59 @@ static Result RegistrationService_load_all_registrations(
     return Result_make_success("registrations loaded");
 }
 
+static int RegistrationService_matches_filter(
+    const Registration *registration,
+    const RegistrationRepositoryFilter *filter
+) {
+    if (registration == 0) {
+        return 0;
+    }
+
+    if (filter == 0) {
+        return 1;
+    }
+
+    if (filter->use_status && registration->status != filter->status) {
+        return 0;
+    }
+
+    if (RegistrationService_has_text(filter->registered_at_from) &&
+        strcmp(registration->registered_at, filter->registered_at_from) < 0) {
+        return 0;
+    }
+
+    if (RegistrationService_has_text(filter->registered_at_to) &&
+        strcmp(registration->registered_at, filter->registered_at_to) > 0) {
+        return 0;
+    }
+
+    return 1;
+}
+
+static Result RegistrationService_append_registration_copy(
+    LinkedList *out_registrations,
+    const Registration *registration
+) {
+    Registration *copy = 0;
+
+    if (out_registrations == 0 || registration == 0) {
+        return Result_make_failure("registration copy arguments invalid");
+    }
+
+    copy = (Registration *)malloc(sizeof(*copy));
+    if (copy == 0) {
+        return Result_make_failure("failed to allocate registration copy");
+    }
+
+    *copy = *registration;
+    if (!LinkedList_append(out_registrations, copy)) {
+        free(copy);
+        return Result_make_failure("failed to append registration copy");
+    }
+
+    return Result_make_success("registration copy appended");
+}
+
 static Result RegistrationService_validate_related_entities(
     RegistrationService *service,
     const char *patient_id,
@@ -568,4 +621,58 @@ Result RegistrationService_find_by_patient_id(
         filter,
         out_registrations
     );
+}
+
+Result RegistrationService_find_by_doctor_id(
+    RegistrationService *service,
+    const char *doctor_id,
+    const RegistrationRepositoryFilter *filter,
+    LinkedList *out_registrations
+) {
+    Doctor doctor;
+    LinkedList registrations;
+    const LinkedListNode *current = 0;
+    Result result;
+
+    if (service == 0 || !RegistrationService_has_text(doctor_id) || out_registrations == 0) {
+        return Result_make_failure("doctor registration query arguments invalid");
+    }
+
+    result = DoctorRepository_find_by_doctor_id(
+        service->doctor_repository,
+        doctor_id,
+        &doctor
+    );
+    if (!result.success) {
+        return Result_make_failure("doctor not found");
+    }
+
+    LinkedList_init(out_registrations);
+    result = RegistrationService_load_all_registrations(service, &registrations);
+    if (!result.success) {
+        return result;
+    }
+
+    current = registrations.head;
+    while (current != 0) {
+        const Registration *registration = (const Registration *)current->data;
+
+        if (strcmp(registration->doctor_id, doctor_id) == 0 &&
+            RegistrationService_matches_filter(registration, filter)) {
+            result = RegistrationService_append_registration_copy(
+                out_registrations,
+                registration
+            );
+            if (!result.success) {
+                RegistrationRepository_clear_list(&registrations);
+                RegistrationRepository_clear_list(out_registrations);
+                return result;
+            }
+        }
+
+        current = current->next;
+    }
+
+    RegistrationRepository_clear_list(&registrations);
+    return Result_make_success("doctor registrations loaded");
 }

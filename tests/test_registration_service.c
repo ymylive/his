@@ -376,10 +376,76 @@ static void test_cancel_rejects_diagnosed_registration(void) {
     assert(strcmp(loaded.cancelled_at, "") == 0);
 }
 
+static void test_query_by_doctor_with_status_and_time_filter(void) {
+    RegistrationServiceTestContext context;
+    RegistrationRepositoryFilter filter;
+    Registration first;
+    Registration second;
+    Registration third;
+    LinkedList registrations;
+    Result result;
+
+    setup_context(&context, "query_by_doctor");
+
+    first = make_registration(
+        "REG0001",
+        "PAT0001",
+        "DOC0001",
+        "DEP0001",
+        "2026-03-20T08:00",
+        REG_STATUS_PENDING,
+        "",
+        ""
+    );
+    second = make_registration(
+        "REG0002",
+        "PAT0002",
+        "DOC0001",
+        "DEP0001",
+        "2026-03-20T08:30",
+        REG_STATUS_PENDING,
+        "",
+        ""
+    );
+    third = make_registration(
+        "REG0003",
+        "PAT0001",
+        "DOC0001",
+        "DEP0001",
+        "2026-03-20T09:00",
+        REG_STATUS_DIAGNOSED,
+        "2026-03-20T09:20",
+        ""
+    );
+
+    assert(RegistrationRepository_append(&context.registration_repository, &first).success == 1);
+    assert(RegistrationRepository_append(&context.registration_repository, &second).success == 1);
+    assert(RegistrationRepository_append(&context.registration_repository, &third).success == 1);
+
+    RegistrationRepositoryFilter_init(&filter);
+    filter.use_status = 1;
+    filter.status = REG_STATUS_PENDING;
+    filter.registered_at_from = "2026-03-20T08:10";
+    filter.registered_at_to = "2026-03-20T08:40";
+
+    LinkedList_init(&registrations);
+    result = RegistrationService_find_by_doctor_id(
+        &context.service,
+        "DOC0001",
+        &filter,
+        &registrations
+    );
+    assert(result.success == 1);
+    assert(LinkedList_count(&registrations) == 1);
+    assert(strcmp(registration_at(&registrations, 0)->registration_id, "REG0002") == 0);
+    RegistrationRepository_clear_list(&registrations);
+}
+
 int main(void) {
     test_create_find_and_query_by_patient();
     test_create_rejects_invalid_related_entities();
     test_cancel_pending_registration();
     test_cancel_rejects_diagnosed_registration();
+    test_query_by_doctor_with_status_and_time_filter();
     return 0;
 }

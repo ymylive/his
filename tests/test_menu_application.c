@@ -16,6 +16,7 @@
 #include "repository/DepartmentRepository.h"
 #include "repository/DispenseRecordRepository.h"
 #include "repository/DoctorRepository.h"
+#include "repository/ExaminationRecordRepository.h"
 #include "repository/PatientRepository.h"
 #include "repository/RegistrationRepository.h"
 #include "repository/VisitRecordRepository.h"
@@ -720,6 +721,295 @@ static void test_execute_action_rejects_invalid_medicine_price(void) {
     assert(strstr(result.message, "invalid") != 0);
 }
 
+static void test_execute_action_updates_patient_record(void) {
+    MenuApplicationTestContext context;
+    MenuApplication application;
+    PatientRepository patient_repository;
+    Patient patient;
+    char output[2048];
+    Result result;
+
+    setup_context(&context, "execute_update_patient");
+    seed_patient(&context, "PAT6001", "Frank", 0);
+    result = MenuApplication_init(&application, &context.paths);
+    assert(result.success == 1);
+    result = PatientRepository_init(&patient_repository, context.patient_path);
+    assert(result.success == 1);
+
+    result = execute_action_with_text_io(
+        &application,
+        MENU_ACTION_CLERK_UPDATE_PATIENT,
+        "PAT6001\n"
+        "Frank Updated\n"
+        "1\n"
+        "41\n"
+        "13800000999\n"
+        "110101198505050055\n"
+        "Seafood\n"
+        "Hypertension\n"
+        "1\n"
+        "updated by route\n",
+        output,
+        sizeof(output)
+    );
+    assert(result.success == 1);
+    assert(strstr(output, "PAT6001") != 0);
+    assert(PatientRepository_find_by_id(&patient_repository, "PAT6001", &patient).success == 1);
+    assert(strcmp(patient.name, "Frank Updated") == 0);
+    assert(patient.age == 41);
+    assert(patient.is_inpatient == 1);
+}
+
+static void test_execute_action_patient_query_registration_lists_records(void) {
+    MenuApplicationTestContext context;
+    MenuApplication application;
+    char output[2048];
+    Result result;
+
+    setup_context(&context, "execute_patient_registration_query");
+    seed_department_and_doctor(&context);
+
+    result = MenuApplication_init(&application, &context.paths);
+    assert(result.success == 1);
+    result = MenuApplication_add_patient(
+        &application,
+        &(Patient){
+            "PAT6002",
+            "Grace",
+            PATIENT_GENDER_FEMALE,
+            29,
+            "13800000066",
+            "110101199606060066",
+            "None",
+            "Healthy",
+            0,
+            "patient route"
+        },
+        output,
+        sizeof(output)
+    );
+    assert(result.success == 1);
+    result = MenuApplication_create_registration(
+        &application,
+        "PAT6002",
+        "DOC0001",
+        "DEP0001",
+        "2026-03-20T14:00",
+        output,
+        sizeof(output)
+    );
+    assert(result.success == 1);
+
+    result = execute_action_with_text_io(
+        &application,
+        MENU_ACTION_PATIENT_QUERY_REGISTRATION,
+        "PAT6002\n",
+        output,
+        sizeof(output)
+    );
+    assert(result.success == 1);
+    assert(strstr(output, "REG0001") != 0);
+    assert(strstr(output, "PAT6002") != 0);
+}
+
+static void test_execute_action_doctor_exam_record_create_and_complete(void) {
+    MenuApplicationTestContext context;
+    MenuApplication application;
+    ExaminationRecordRepository examination_repository;
+    ExaminationRecord record;
+    char output[2048];
+    Result result;
+
+    setup_context(&context, "execute_doctor_exam");
+    seed_department_and_doctor(&context);
+
+    result = MenuApplication_init(&application, &context.paths);
+    assert(result.success == 1);
+    result = MenuApplication_add_patient(
+        &application,
+        &(Patient){
+            "PAT6003",
+            "Helen",
+            PATIENT_GENDER_FEMALE,
+            37,
+            "13800000077",
+            "110101198808080088",
+            "None",
+            "Fever",
+            0,
+            "exam route"
+        },
+        output,
+        sizeof(output)
+    );
+    assert(result.success == 1);
+    result = MenuApplication_create_registration(
+        &application,
+        "PAT6003",
+        "DOC0001",
+        "DEP0001",
+        "2026-03-20T15:00",
+        output,
+        sizeof(output)
+    );
+    assert(result.success == 1);
+    result = MenuApplication_create_visit_record(
+        &application,
+        "REG0001",
+        "Fever",
+        "Influenza",
+        "Need exam",
+        1,
+        0,
+        1,
+        "2026-03-20T15:30",
+        output,
+        sizeof(output)
+    );
+    assert(result.success == 1);
+    result = ExaminationRecordRepository_init(&examination_repository, context.examination_path);
+    assert(result.success == 1);
+
+    result = execute_action_with_text_io(
+        &application,
+        MENU_ACTION_DOCTOR_EXAM_RECORD,
+        "1\n"
+        "VIS0001\n"
+        "BloodTest\n"
+        "Lab\n"
+        "2026-03-20T16:00\n",
+        output,
+        sizeof(output)
+    );
+    assert(result.success == 1);
+    assert(strstr(output, "EXM0001") != 0);
+    assert(
+        ExaminationRecordRepository_find_by_examination_id(
+            &examination_repository,
+            "EXM0001",
+            &record
+        ).success == 1
+    );
+    assert(strcmp(record.exam_item, "BloodTest") == 0);
+    assert(record.status == EXAM_STATUS_PENDING);
+
+    result = execute_action_with_text_io(
+        &application,
+        MENU_ACTION_DOCTOR_EXAM_RECORD,
+        "2\n"
+        "EXM0001\n"
+        "All clear\n"
+        "2026-03-20T17:00\n",
+        output,
+        sizeof(output)
+    );
+    assert(result.success == 1);
+    assert(
+        ExaminationRecordRepository_find_by_examination_id(
+            &examination_repository,
+            "EXM0001",
+            &record
+        ).success == 1
+    );
+    assert(record.status == EXAM_STATUS_COMPLETED);
+    assert(strcmp(record.result, "All clear") == 0);
+}
+
+static void test_execute_action_doctor_pending_list_filters_diagnosed(void) {
+    MenuApplicationTestContext context;
+    MenuApplication application;
+    char output[2048];
+    Result result;
+
+    setup_context(&context, "execute_doctor_pending");
+    seed_department_and_doctor(&context);
+
+    result = MenuApplication_init(&application, &context.paths);
+    assert(result.success == 1);
+    result = MenuApplication_add_patient(
+        &application,
+        &(Patient){
+            "PAT6004",
+            "Ivy",
+            PATIENT_GENDER_FEMALE,
+            31,
+            "13800000088",
+            "110101199101010091",
+            "None",
+            "Healthy",
+            0,
+            "pending one"
+        },
+        output,
+        sizeof(output)
+    );
+    assert(result.success == 1);
+    result = MenuApplication_add_patient(
+        &application,
+        &(Patient){
+            "PAT6005",
+            "Jack",
+            PATIENT_GENDER_MALE,
+            42,
+            "13800000089",
+            "110101198202020092",
+            "None",
+            "Healthy",
+            0,
+            "pending two"
+        },
+        output,
+        sizeof(output)
+    );
+    assert(result.success == 1);
+    result = MenuApplication_create_registration(
+        &application,
+        "PAT6004",
+        "DOC0001",
+        "DEP0001",
+        "2026-03-20T18:00",
+        output,
+        sizeof(output)
+    );
+    assert(result.success == 1);
+    result = MenuApplication_create_registration(
+        &application,
+        "PAT6005",
+        "DOC0001",
+        "DEP0001",
+        "2026-03-20T18:10",
+        output,
+        sizeof(output)
+    );
+    assert(result.success == 1);
+    result = MenuApplication_create_visit_record(
+        &application,
+        "REG0001",
+        "Cough",
+        "Cold",
+        "Rest",
+        0,
+        0,
+        1,
+        "2026-03-20T18:20",
+        output,
+        sizeof(output)
+    );
+    assert(result.success == 1);
+
+    result = execute_action_with_text_io(
+        &application,
+        MENU_ACTION_DOCTOR_PENDING_LIST,
+        "DOC0001\n",
+        output,
+        sizeof(output)
+    );
+    assert(result.success == 1);
+    assert(strstr(output, "REG0002") != 0);
+    assert(strstr(output, "PAT6005") != 0);
+    assert(strstr(output, "REG0001") == 0);
+}
+
 int main(void) {
     test_clerk_flow_add_query_patient_and_registration();
     test_doctor_flow_create_visit_and_query_history();
@@ -728,5 +1018,9 @@ int main(void) {
     test_execute_action_inpatient_bed_query_lists_beds();
     test_execute_action_doctor_visit_preserves_long_complaint();
     test_execute_action_rejects_invalid_medicine_price();
+    test_execute_action_updates_patient_record();
+    test_execute_action_patient_query_registration_lists_records();
+    test_execute_action_doctor_exam_record_create_and_complete();
+    test_execute_action_doctor_pending_list_filters_diagnosed();
     return 0;
 }

@@ -48,5 +48,11 @@ Result RegistrationService_find_by_patient_id(
     const RegistrationRepositoryFilter *filter,
     LinkedList *out_registrations
 );
+Result RegistrationService_find_by_doctor_id(
+    RegistrationService *service,
+    const char *doctor_id,
+    const RegistrationRepositoryFilter *filter,
+    LinkedList *out_registrations
+);
 
 #endif
