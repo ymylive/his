@@ -134,7 +134,7 @@
 - Create: `src/common/LinkedList.c`
 - Test: `tests/test_input_helper.c`
 
-- [ ] **Step 1: 写出最小失败测试**
+- [x] **Step 1: 写出最小失败测试**
 
 ```c
 #include <assert.h>
@@ -149,12 +149,12 @@ int main(void) {
 }
 ```
 
-- [ ] **Step 2: 运行测试确认当前失败**
+- [x] **Step 2: 运行测试确认当前失败**
 
 Run: `cmake -S . -B build`
 Expected: configure succeeds after `CMakeLists.txt` is added, but test target is not ready yet
 
-- [ ] **Step 3: 实现最小可运行骨架**
+- [x] **Step 3: 实现最小可运行骨架**
 
 ```c
 typedef struct {
@@ -166,12 +166,12 @@ Result Result_make_success(const char *msg);
 Result Result_make_failure(const char *msg);
 ```
 
-- [ ] **Step 4: 接入 CTest**
+- [x] **Step 4: 接入 CTest**
 
 Run: `cmake -S . -B build && cmake --build build`
 Expected: project and test executable build successfully
 
-- [ ] **Step 5: 执行测试**
+- [x] **Step 5: 执行测试**
 
 Run: `ctest --test-dir build --output-on-failure`
 Expected: `100% tests passed`
@@ -194,12 +194,12 @@ git commit -m "chore: bootstrap lightweight his project"
 - Modify: `src/common/LinkedList.c`
 - Test: `tests/test_common.c`
 
-- [ ] **Step 1: 写输入与编号测试**
-- [ ] **Step 2: 支持整数、金额、非空字符串校验**
-- [ ] **Step 3: 支持前缀型主键生成，如 `PAT0001`**
-- [ ] **Step 4: 实现通用链表节点的新增、删除、查找、遍历能力**
-- [ ] **Step 5: 针对头结点、尾结点和空链表写链表边界测试**
-- [ ] **Step 6: 运行 `ctest --test-dir build --output-on-failure`**
+- [x] **Step 1: 写输入与编号测试**
+- [x] **Step 2: 支持整数、金额、非空字符串校验**
+- [x] **Step 3: 支持前缀型主键生成，如 `PAT0001`**
+- [x] **Step 4: 实现通用链表节点的新增、删除、查找、遍历能力**
+- [x] **Step 5: 针对头结点、尾结点和空链表写链表边界测试**
+- [x] **Step 6: 运行 `ctest --test-dir build --output-on-failure`**
 - [ ] **Step 7: 提交**
 
 ## Chunk 2: 领域模型与 txt 仓储
