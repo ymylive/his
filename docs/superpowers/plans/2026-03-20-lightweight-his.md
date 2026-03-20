@@ -223,7 +223,7 @@ git commit -m "chore: bootstrap lightweight his project"
 - Create: `src/domain/DispenseRecord.c`
 - Test: `tests/test_domain.c`
 
-- [ ] **Step 1: 为状态流转最复杂的 `Registration` 写测试**
+- [x] **Step 1: 为状态流转最复杂的 `Registration` 写测试**
 
 ```c
 assert(reg.status == REG_STATUS_PENDING);
@@ -231,10 +231,10 @@ Registration_mark_diagnosed(&reg);
 assert(reg.status == REG_STATUS_DIAGNOSED);
 ```
 
-- [ ] **Step 2: 实现患者、医生、科室、挂号、看诊记录、检查记录、处方、发药记录、药品等结构体与枚举**
-- [ ] **Step 3: 加入金额、数量、库存等边界校验**
-- [ ] **Step 4: 为每类核心实体设计链表节点挂接方式**
-- [ ] **Step 5: 构建并运行 `ctest --test-dir build --output-on-failure`**
+- [x] **Step 2: 实现患者、医生、科室、挂号、看诊记录、检查记录、处方、发药记录、药品等结构体与枚举**
+- [x] **Step 3: 加入金额、数量、库存等边界校验**
+- [x] **Step 4: 为每类核心实体设计链表节点挂接方式**
+- [x] **Step 5: 构建并运行 `ctest --test-dir build --output-on-failure`**
 - [ ] **Step 6: 提交**
 
 ### Task 4: 建立通用 txt 仓储基类
@@ -246,10 +246,10 @@ assert(reg.status == REG_STATUS_DIAGNOSED);
 - Create: `src/repository/RepositoryUtils.c`
 - Test: `tests/test_repository_utils.c`
 
-- [ ] **Step 1: 写字段切分、字段数校验、空行过滤测试**
-- [ ] **Step 2: 实现按 `|` 分隔的解析逻辑**
-- [ ] **Step 3: 实现文件不存在时的安全创建策略**
-- [ ] **Step 4: 运行 `ctest --test-dir build --output-on-failure`**
+- [x] **Step 1: 写字段切分、字段数校验、空行过滤测试**
+- [x] **Step 2: 实现按 `|` 分隔的解析逻辑**
+- [x] **Step 3: 实现文件不存在时的安全创建策略**
+- [x] **Step 4: 运行 `ctest --test-dir build --output-on-failure`**
 - [ ] **Step 5: 提交**
 
 ### Task 5: 为患者、医生、科室、挂号、记录和药品建立专用仓储

@@ -36,6 +36,14 @@
 - 通用链表基础设施 `LinkedList`
 - 单元测试 `test_result`、`test_common`
 
+当前已经完成第二阶段基础建模增量：
+
+- 核心领域模型 `Department / Doctor / Patient / Registration`
+- 门诊记录模型 `VisitRecord / ExaminationRecord / Prescription / DispenseRecord / Medicine`
+- `Registration` 状态流转与时间戳约束
+- 通用 `txt` 仓储基座 `RepositoryUtils / TextFileRepository`
+- 单元测试 `test_domain`、`test_repository_utils`
+
 ## 构建与测试
 
 在项目根目录执行：
