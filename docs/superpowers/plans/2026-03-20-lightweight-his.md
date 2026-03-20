@@ -70,29 +70,22 @@
 - `include/domain/Bed.h`
 - `include/domain/Admission.h`
 - `include/domain/InpatientOrder.h`
-- `include/domain/InpatientBill.h`
 - `include/repository/InpatientOrderRepository.h`
 - `include/repository/BedRepository.h`
 - `include/repository/AdmissionRepository.h`
-- `include/repository/InpatientBillRepository.h`
 - `include/service/InpatientService.h`
 - `include/service/BedService.h`
-- `include/service/InpatientBillingService.h`
 - `src/domain/Ward.c`
 - `src/domain/Bed.c`
 - `src/domain/Admission.c`
 - `src/domain/InpatientOrder.c`
-- `src/domain/InpatientBill.c`
 - `src/repository/InpatientOrderRepository.c`
 - `src/repository/BedRepository.c`
 - `src/repository/AdmissionRepository.c`
-- `src/repository/InpatientBillRepository.c`
 - `src/service/InpatientService.c`
 - `src/service/BedService.c`
-- `src/service/InpatientBillingService.c`
 - `tests/test_inpatient_service.c`
 - `tests/test_bed_service.c`
-- `tests/test_inpatient_billing_service.c`
 
 ## Chunk 1: 工程骨架与公共能力
 
@@ -191,22 +184,20 @@ git commit -m "chore: bootstrap lightweight his project"
 - Create: `include/domain/ExaminationRecord.h`
 - Create: `include/domain/Prescription.h`
 - Create: `include/domain/Medicine.h`
-- Create: `include/domain/Bill.h`
 - Create: `src/domain/Registration.c`
 - Create: `src/domain/VisitRecord.c`
 - Create: `src/domain/ExaminationRecord.c`
-- Create: `src/domain/Bill.c`
 - Test: `tests/test_domain.c`
 
-- [ ] **Step 1: 为状态流转最复杂的 `Registration` 与 `Bill` 写测试**
+- [ ] **Step 1: 为状态流转最复杂的 `Registration` 写测试**
 
 ```c
 assert(reg.status == REG_STATUS_PENDING);
 Registration_mark_diagnosed(&reg);
-assert(reg.status == REG_STATUS_DIAGNOSED_PENDING_PAYMENT);
+assert(reg.status == REG_STATUS_DIAGNOSED);
 ```
 
-- [ ] **Step 2: 实现患者、医生、科室、挂号、看诊记录、检查记录、药品、账单等结构体与枚举**
+- [ ] **Step 2: 实现患者、医生、科室、挂号、看诊记录、检查记录、处方、药品等结构体与枚举**
 - [ ] **Step 3: 加入金额、数量、库存等边界校验**
 - [ ] **Step 4: 为每类核心实体设计链表节点挂接方式**
 - [ ] **Step 5: 构建并运行 `ctest --test-dir build --output-on-failure`**
@@ -227,7 +218,7 @@ assert(reg.status == REG_STATUS_DIAGNOSED_PENDING_PAYMENT);
 - [ ] **Step 4: 运行 `ctest --test-dir build --output-on-failure`**
 - [ ] **Step 5: 提交**
 
-### Task 5: 为患者、医生、科室、挂号、记录、药品和账单建立专用仓储
+### Task 5: 为患者、医生、科室、挂号、记录和药品建立专用仓储
 
 **Files:**
 - Create: `include/repository/DepartmentRepository.h`
@@ -237,7 +228,6 @@ assert(reg.status == REG_STATUS_DIAGNOSED_PENDING_PAYMENT);
 - Create: `include/repository/VisitRecordRepository.h`
 - Create: `include/repository/ExaminationRecordRepository.h`
 - Create: `include/repository/MedicineRepository.h`
-- Create: `include/repository/BillRepository.h`
 - Create: `src/repository/DepartmentRepository.c`
 - Create: `src/repository/DoctorRepository.c`
 - Create: `src/repository/PatientRepository.c`
@@ -245,7 +235,6 @@ assert(reg.status == REG_STATUS_DIAGNOSED_PENDING_PAYMENT);
 - Create: `src/repository/VisitRecordRepository.c`
 - Create: `src/repository/ExaminationRecordRepository.c`
 - Create: `src/repository/MedicineRepository.c`
-- Create: `src/repository/BillRepository.c`
 - Test: `tests/test_doctor_repository.c`
 - Test: `tests/test_patient_repository.c`
 - Test: `tests/test_registration_repository.c`
@@ -301,7 +290,7 @@ assert(reg.status == REG_STATUS_DIAGNOSED_PENDING_PAYMENT);
 - Modify: `include/repository/RegistrationRepository.h`
 - Test: `tests/test_registration_service.c`
 
-- [ ] **Step 1: 写挂号、退号、重复收费前状态校验测试**
+- [ ] **Step 1: 写挂号、退号、接诊前状态校验测试**
 - [ ] **Step 2: 实现挂号单创建与状态初始值**
 - [ ] **Step 3: 限制已接诊记录不可退号**
 - [ ] **Step 4: 运行 `ctest --test-dir build --output-on-failure`**
@@ -325,22 +314,7 @@ assert(reg.status == REG_STATUS_DIAGNOSED_PENDING_PAYMENT);
 - [ ] **Step 5: 运行 `ctest --test-dir build --output-on-failure`**
 - [ ] **Step 6: 提交**
 
-### Task 10: 收费服务
-
-**Files:**
-- Create: `include/service/BillingService.h`
-- Create: `src/service/BillingService.c`
-- Modify: `include/domain/Bill.h`
-- Modify: `include/repository/BillRepository.h`
-- Test: `tests/test_billing_service.c`
-
-- [ ] **Step 1: 写账单生成、收费、重复收费、退费测试**
-- [ ] **Step 2: 实现由挂号费 + 药费生成账单**
-- [ ] **Step 3: 限制未生成账单不能收费，已发药账单不能直接退费**
-- [ ] **Step 4: 运行 `ctest --test-dir build --output-on-failure`**
-- [ ] **Step 5: 提交**
-
-### Task 11: 药房与药品管理服务
+### Task 10: 药房与药品管理服务
 
 **Files:**
 - Create: `include/service/PharmacyService.h`
@@ -357,39 +331,35 @@ assert(reg.status == REG_STATUS_DIAGNOSED_PENDING_PAYMENT);
 
 ## Chunk 4: 基础住院业务闭环
 
-### Task 12: 住院领域模型与仓储
+### Task 11: 住院领域模型与仓储
 
 **Files:**
 - Create: `include/domain/Ward.h`
 - Create: `include/domain/Bed.h`
 - Create: `include/domain/Admission.h`
 - Create: `include/domain/InpatientOrder.h`
-- Create: `include/domain/InpatientBill.h`
 - Create: `src/domain/Ward.c`
 - Create: `src/domain/Bed.c`
 - Create: `src/domain/Admission.c`
-- Create: `src/domain/InpatientBill.c`
 - Create: `include/repository/WardRepository.h`
 - Create: `include/repository/InpatientOrderRepository.h`
 - Create: `include/repository/BedRepository.h`
 - Create: `include/repository/AdmissionRepository.h`
-- Create: `include/repository/InpatientBillRepository.h`
 - Create: `src/domain/InpatientOrder.c`
 - Create: `src/repository/WardRepository.c`
 - Create: `src/repository/BedRepository.c`
 - Create: `src/repository/AdmissionRepository.c`
 - Create: `src/repository/InpatientOrderRepository.c`
-- Create: `src/repository/InpatientBillRepository.c`
 - Test: `tests/test_inpatient_domain.c`
 
 - [ ] **Step 1: 为床位状态与住院状态流转写失败测试**
-- [ ] **Step 2: 实现病区、床位、入院、住院账单结构体与状态函数**
-- [ ] **Step 3: 实现病房、床位、入院、住院结算的 txt 读写仓储**
+- [ ] **Step 2: 实现病区、床位、入院、住院记录结构体与状态函数**
+- [ ] **Step 3: 实现病房、床位、入院、住院记录的 txt 读写仓储**
 - [ ] **Step 4: 增加“占用床位不可再次分配、未出院不可重复入院”校验**
 - [ ] **Step 5: 运行 `ctest --test-dir build --output-on-failure`**
 - [ ] **Step 6: 提交**
 
-### Task 13: 入院与床位服务
+### Task 12: 入院与床位服务
 
 **Files:**
 - Create: `include/service/InpatientService.h`
@@ -408,23 +378,9 @@ assert(reg.status == REG_STATUS_DIAGNOSED_PENDING_PAYMENT);
 - [ ] **Step 5: 运行 `ctest --test-dir build --output-on-failure`**
 - [ ] **Step 6: 提交**
 
-### Task 14: 住院费用与出院结算服务
-
-**Files:**
-- Create: `include/service/InpatientBillingService.h`
-- Create: `src/service/InpatientBillingService.c`
-- Modify: `include/repository/InpatientBillRepository.h`
-- Test: `tests/test_inpatient_billing_service.c`
-
-- [ ] **Step 1: 写预交金累计、住院费用累计、未结清不可出院测试**
-- [ ] **Step 2: 实现预交金登记、费用追加、余额计算**
-- [ ] **Step 3: 实现出院结算并释放床位**
-- [ ] **Step 4: 运行 `ctest --test-dir build --output-on-failure`**
-- [ ] **Step 5: 提交**
-
 ## Chunk 5: UI、报表与日志
 
-### Task 15: 控制台菜单与角色视图
+### Task 13: 控制台菜单与角色视图
 
 **Files:**
 - Create: `include/ui/MenuController.h`
@@ -433,13 +389,13 @@ assert(reg.status == REG_STATUS_DIAGNOSED_PENDING_PAYMENT);
 - Test: `tests/test_menu_controller.c`
 
 - [ ] **Step 1: 写菜单路由与非法输入回退测试**
-- [ ] **Step 2: 为管理员、挂号员、医生、收费员、住院登记员、病区管理员、药房人员提供独立菜单**
+- [ ] **Step 2: 为管理员、挂号员、医生、住院登记员、病区管理员、药房人员提供独立菜单**
 - [ ] **Step 3: 每次操作后统一输出编号、状态和下一步提示**
 - [ ] **Step 4: 为住院菜单增加病区床位查询、入院登记、出院办理入口**
 - [ ] **Step 5: 运行 `ctest --test-dir build --output-on-failure`**
 - [ ] **Step 6: 提交**
 
-### Task 16: 报表与日志服务
+### Task 14: 报表与日志服务
 
 **Files:**
 - Create: `include/repository/LogRepository.h`
@@ -448,7 +404,7 @@ assert(reg.status == REG_STATUS_DIAGNOSED_PENDING_PAYMENT);
 - Create: `src/service/ReportService.c`
 - Test: `tests/test_report_service.c`
 
-- [ ] **Step 1: 写日报、收入统计、库存预警、床位占用率测试**
+- [ ] **Step 1: 写日报、接诊统计、库存预警、床位占用率测试**
 - [ ] **Step 2: 写关键操作日志记录测试**
 - [ ] **Step 3: 实现按日期/科室/医生/病区的统计查询**
 - [ ] **Step 4: 补齐医护视角、管理视角、患者视角三类报表入口**
@@ -457,7 +413,7 @@ assert(reg.status == REG_STATUS_DIAGNOSED_PENDING_PAYMENT);
 
 ## Chunk 6: 原始数据、回归验证与答辩准备
 
-### Task 17: 条件性数据分析与预测功能
+### Task 15: 条件性数据分析与预测功能
 
 **Files:**
 - Create: `include/service/AnalyticsService.h`
@@ -471,7 +427,7 @@ assert(reg.status == REG_STATUS_DIAGNOSED_PENDING_PAYMENT);
 - [ ] **Step 5: 运行 `ctest --test-dir build --output-on-failure` 或记录跳过原因**
 - [ ] **Step 6: 提交**
 
-### Task 18: 初始化现场评测数据
+### Task 16: 初始化现场评测数据
 
 **Files:**
 - Create: `data/users.txt`
@@ -483,23 +439,21 @@ assert(reg.status == REG_STATUS_DIAGNOSED_PENDING_PAYMENT);
 - Create: `data/exam_records.txt`
 - Create: `data/prescriptions.txt`
 - Create: `data/medicines.txt`
-- Create: `data/bills.txt`
 - Create: `data/wards.txt`
 - Create: `data/beds.txt`
 - Create: `data/admissions.txt`
 - Create: `data/inpatient_orders.txt`
-- Create: `data/inpatient_bills.txt`
 - Create: `data/logs.txt`
 
 - [ ] **Step 1: 为每个文件写表头**
 - [ ] **Step 2: 准备至少 100 名门诊患者、30 名住院患者、20 名医生、5 个科室、3 类病房、20 类药品**
 - [ ] **Step 3: 保证每个 txt 文件至少 30 条记录，并考虑重名、长字段、别名等情况**
 - [ ] **Step 4: 准备空白数据集、正常数据集、异常污染数据集三套样例**
-- [ ] **Step 5: 增加住院床位冲突、欠费未出院等异常样例**
+- [ ] **Step 5: 增加住院床位冲突、重复出院等异常样例**
 - [ ] **Step 6: 手动运行系统验证所有数据集都能被识别**
 - [ ] **Step 7: 提交**
 
-### Task 19: 最小集成验证
+### Task 17: 最小集成验证
 
 **Files:**
 - Modify: `tests/`
@@ -527,12 +481,11 @@ All tests pass
 2. 管理员维护科室并新增医生，按科室查看医生
 3. 挂号员新增患者并挂号
 4. 医生接诊、写看诊记录并补充检查记录
-5. 收费员收费
-6. 药房发药并展示库存变化与库存预警
-7. 住院登记员办理入院并分配床位
-8. 记录预交金和住院费用，办理出院结算
-9. 查询患者历史医疗记录和时间范围记录
-10. 管理员查看日报、床位统计与日志
+5. 药房发药并展示库存变化与库存预警
+6. 住院登记员办理入院并分配床位
+7. 维护住院记录并办理出院释放床位
+8. 查询患者历史医疗记录和时间范围记录
+9. 管理员查看日报、床位统计与日志
 
 - [ ] **Step 3: 准备代码检查版源码，补齐必要代码注释并确认链表实现可展示**
 - [ ] **Step 4: 固化总结报告，至少包含测试方案、成员分工、完成情况**
@@ -545,8 +498,8 @@ All tests pass
 | --- | --- | --- |
 | 第 1 周 | 明确需求、搭骨架、建数据模型 | 工程初始化、设计文档 |
 | 第 2 周 | 完成患者、挂号、接诊 | 门诊前半流程 |
-| 第 3 周 | 完成收费、发药、库存 | 门诊闭环 MVP |
-| 第 4 周 | 完成基础住院：入院、床位、结算 | 门诊 + 住院闭环 |
+| 第 3 周 | 完成发药、库存与处方联动 | 门诊闭环 MVP |
+| 第 4 周 | 完成基础住院：入院、床位、出院 | 门诊 + 住院闭环 |
 | 第 5 周 | 完成统计、日志、数据样例、回归测试 | 答辩版系统 |
 | 第 6 周 | 整理总结报告、代码检查材料、条件性分析功能 | 最终提交版 |
 
