@@ -270,9 +270,65 @@ static void test_low_stock_alerts_and_insufficient_stock_rejected(void) {
     DispenseRecordRepository_clear_list(&failed_records);
 }
 
+static void test_query_dispense_history_by_prescription_id(void) {
+    char medicine_path[TEXT_FILE_REPOSITORY_PATH_CAPACITY];
+    char record_path[TEXT_FILE_REPOSITORY_PATH_CAPACITY];
+    PharmacyService service;
+    LinkedList records;
+    DispenseRecord *stored_record = 0;
+    Result result;
+
+    TestPharmacyService_make_path(medicine_path, sizeof(medicine_path), "history", "medicine");
+    TestPharmacyService_make_path(record_path, sizeof(record_path), "history", "record");
+
+    result = PharmacyService_init(&service, medicine_path, record_path);
+    assert(result.success == 1);
+
+    result = PharmacyService_add_medicine(
+        &service,
+        &(Medicine){
+            "MED9001",
+            "HistoryMed",
+            10.00,
+            10,
+            "DEP09",
+            1
+        }
+    );
+    assert(result.success == 1);
+
+    result = PharmacyService_dispense_medicine(
+        &service,
+        "RX9001",
+        "MED9001",
+        2,
+        "PHA9001",
+        "2026-03-20T19:00:00",
+        0
+    );
+    assert(result.success == 1);
+
+    LinkedList_init(&records);
+    result = PharmacyService_find_dispense_records_by_prescription_id(&service, "RX9001", &records);
+    assert(result.success == 1);
+    assert(LinkedList_count(&records) == 1);
+
+    stored_record = (DispenseRecord *)records.head->data;
+    assert(stored_record != 0);
+    assert(strcmp(stored_record->prescription_id, "RX9001") == 0);
+    assert(strcmp(stored_record->medicine_id, "MED9001") == 0);
+    assert(stored_record->quantity == 2);
+    assert(strcmp(stored_record->pharmacist_id, "PHA9001") == 0);
+    assert(strcmp(stored_record->dispensed_at, "2026-03-20T19:00:00") == 0);
+    assert(stored_record->status == DISPENSE_STATUS_COMPLETED);
+
+    PharmacyService_clear_dispense_record_results(&records);
+}
+
 int main(void) {
     test_add_restock_and_query_inventory();
     test_dispense_updates_inventory_and_writes_record();
     test_low_stock_alerts_and_insufficient_stock_rejected();
+    test_query_dispense_history_by_prescription_id();
     return 0;
 }

@@ -915,6 +915,38 @@ Result MenuApplication_discharge_patient(
     );
 }
 
+static Result MenuApplication_transfer_bed(
+    MenuApplication *application,
+    const char *admission_id,
+    const char *target_bed_id,
+    const char *transferred_at,
+    char *buffer,
+    size_t capacity
+) {
+    Admission admission;
+    Result result = InpatientService_transfer_bed(
+        &application->inpatient_service,
+        admission_id,
+        target_bed_id,
+        transferred_at,
+        &admission
+    );
+
+    if (result.success == 0) {
+        return MenuApplication_write_failure(result.message, buffer, capacity);
+    }
+
+    return MenuApplication_write_text(
+        buffer,
+        capacity,
+        "转床成功: %s | 病房=%s | 床位=%s | 时间=%s",
+        admission.admission_id,
+        admission.ward_id,
+        admission.bed_id,
+        transferred_at
+    );
+}
+
 Result MenuApplication_query_active_admission_by_patient(
     MenuApplication *application,
     const char *patient_id,
@@ -1148,6 +1180,71 @@ Result MenuApplication_find_low_stock_medicines(
 
     PharmacyService_clear_medicine_results(&medicines);
     return Result_make_success("low stock ready");
+}
+
+static Result MenuApplication_query_dispense_history_by_prescription_id(
+    MenuApplication *application,
+    const char *prescription_id,
+    char *buffer,
+    size_t capacity
+) {
+    LinkedList records;
+    const LinkedListNode *current = 0;
+    size_t used = 0;
+    Result result;
+
+    if (application == 0) {
+        return Result_make_failure("menu dispense history application missing");
+    }
+
+    LinkedList_init(&records);
+    result = PharmacyService_find_dispense_records_by_prescription_id(
+        &application->pharmacy_service,
+        prescription_id,
+        &records
+    );
+    if (result.success == 0) {
+        return MenuApplication_write_failure(result.message, buffer, capacity);
+    }
+
+    result = MenuApplication_write_text(
+        buffer,
+        capacity,
+        "发药记录(%zu): 处方=%s",
+        LinkedList_count(&records),
+        prescription_id
+    );
+    if (result.success == 0) {
+        PharmacyService_clear_dispense_record_results(&records);
+        return result;
+    }
+
+    used = strlen(buffer);
+    current = records.head;
+    while (current != 0) {
+        const DispenseRecord *record = (const DispenseRecord *)current->data;
+
+        result = MenuApplication_append_text(
+            buffer,
+            capacity,
+            &used,
+            "\n%s | %s | 数量=%d | 发药人=%s | %s",
+            record->dispense_id,
+            record->medicine_id,
+            record->quantity,
+            record->pharmacist_id,
+            record->dispensed_at
+        );
+        if (result.success == 0) {
+            PharmacyService_clear_dispense_record_results(&records);
+            return result;
+        }
+
+        current = current->next;
+    }
+
+    PharmacyService_clear_dispense_record_results(&records);
+    return Result_make_success("dispense history ready");
 }
 
 typedef struct MenuApplicationPromptContext {
@@ -1644,6 +1741,27 @@ Result MenuApplication_execute_action(
             }
             return result;
 
+        case MENU_ACTION_PATIENT_QUERY_DISPENSE:
+            result = MenuApplication_prompt_line(
+                &context,
+                "处方编号: ",
+                first_id,
+                sizeof(first_id)
+            );
+            if (result.success == 0) {
+                return result;
+            }
+            result = MenuApplication_query_dispense_history_by_prescription_id(
+                application,
+                first_id,
+                output_buffer,
+                sizeof(output_buffer)
+            );
+            if (output_buffer[0] != '\0') {
+                fprintf(output, "%s\n", output_buffer);
+            }
+            return result;
+
         case MENU_ACTION_DOCTOR_VISIT_RECORD:
             result = MenuApplication_prompt_line(
                 &context,
@@ -2018,6 +2136,47 @@ Result MenuApplication_execute_action(
             result = MenuApplication_query_current_patient_by_bed(
                 application,
                 first_id,
+                output_buffer,
+                sizeof(output_buffer)
+            );
+            if (output_buffer[0] != '\0') {
+                fprintf(output, "%s\n", output_buffer);
+            }
+            return result;
+
+        case MENU_ACTION_WARD_TRANSFER_BED:
+            result = MenuApplication_prompt_line(
+                &context,
+                "住院编号: ",
+                first_id,
+                sizeof(first_id)
+            );
+            if (result.success == 0) {
+                return result;
+            }
+            result = MenuApplication_prompt_line(
+                &context,
+                "目标床位编号: ",
+                second_id,
+                sizeof(second_id)
+            );
+            if (result.success == 0) {
+                return result;
+            }
+            result = MenuApplication_prompt_line(
+                &context,
+                "转床时间: ",
+                time_value,
+                sizeof(time_value)
+            );
+            if (result.success == 0) {
+                return result;
+            }
+            result = MenuApplication_transfer_bed(
+                application,
+                first_id,
+                second_id,
+                time_value,
                 output_buffer,
                 sizeof(output_buffer)
             );

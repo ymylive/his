@@ -47,4 +47,11 @@ Result PharmacyService_find_low_stock_medicines(
 );
 void PharmacyService_clear_medicine_results(LinkedList *medicines);
 
+Result PharmacyService_find_dispense_records_by_prescription_id(
+    PharmacyService *service,
+    const char *prescription_id,
+    LinkedList *out_records
+);
+void PharmacyService_clear_dispense_record_results(LinkedList *records);
+
 #endif

@@ -388,10 +388,71 @@ static void test_transfer_bed_updates_admission_and_bed_states(void) {
     assert(strcmp(admission.bed_id, "BED0002") == 0);
 }
 
+static void test_transfer_bed_fails_when_target_ward_not_active_and_keeps_persisted_state(void) {
+    InpatientServiceTestContext context;
+    Patient patient_seed = make_patient("PAT0001", "Alice", 1);
+    Ward current_ward_seed = make_ward("WRD0001", 2, 1, WARD_STATUS_ACTIVE);
+    Ward target_ward_seed = make_ward("WRD0002", 2, 0, WARD_STATUS_CLOSED);
+    Bed occupied_bed = make_bed("BED0001", "WRD0001", BED_STATUS_OCCUPIED, "ADM0001");
+    Bed target_bed = make_bed("BED0002", "WRD0002", BED_STATUS_AVAILABLE, "");
+    Admission admission_seed = make_admission(
+        "ADM0001",
+        "PAT0001",
+        "WRD0001",
+        "BED0001",
+        "2026-03-20T08:00",
+        ADMISSION_STATUS_ACTIVE,
+        "",
+        "observation"
+    );
+    Admission transferred;
+    Ward current_ward;
+    Ward target_ward;
+    Bed first_bed;
+    Bed second_bed;
+    Admission admission;
+    Result result;
+
+    setup_context(&context, "transfer_fail_target_ward");
+
+    assert(PatientRepository_append(&context.patient_repository, &patient_seed).success == 1);
+    assert(WardRepository_append(&context.ward_repository, &current_ward_seed).success == 1);
+    assert(WardRepository_append(&context.ward_repository, &target_ward_seed).success == 1);
+    assert(BedRepository_append(&context.bed_repository, &occupied_bed).success == 1);
+    assert(BedRepository_append(&context.bed_repository, &target_bed).success == 1);
+    assert(AdmissionRepository_append(&context.admission_repository, &admission_seed).success == 1);
+
+    result = InpatientService_transfer_bed(
+        &context.service,
+        "ADM0001",
+        "BED0002",
+        "2026-03-21T09:00",
+        &transferred
+    );
+    assert(result.success == 0);
+
+    assert(WardRepository_find_by_id(&context.ward_repository, "WRD0001", &current_ward).success == 1);
+    assert(current_ward.occupied_beds == 1);
+    assert(WardRepository_find_by_id(&context.ward_repository, "WRD0002", &target_ward).success == 1);
+    assert(target_ward.occupied_beds == 0);
+
+    assert(BedRepository_find_by_id(&context.bed_repository, "BED0001", &first_bed).success == 1);
+    assert(first_bed.status == BED_STATUS_OCCUPIED);
+    assert(strcmp(first_bed.current_admission_id, "ADM0001") == 0);
+    assert(BedRepository_find_by_id(&context.bed_repository, "BED0002", &second_bed).success == 1);
+    assert(second_bed.status == BED_STATUS_AVAILABLE);
+    assert(strcmp(second_bed.current_admission_id, "") == 0);
+
+    assert(AdmissionRepository_find_by_id(&context.admission_repository, "ADM0001", &admission).success == 1);
+    assert(strcmp(admission.ward_id, "WRD0001") == 0);
+    assert(strcmp(admission.bed_id, "BED0001") == 0);
+}
+
 int main(void) {
     test_admit_patient_updates_patient_ward_bed_and_admission();
     test_admit_patient_rejects_duplicate_active_patient_and_occupied_bed();
     test_discharge_patient_releases_bed_and_clears_inpatient_flag();
     test_transfer_bed_updates_admission_and_bed_states();
+    test_transfer_bed_fails_when_target_ward_not_active_and_keeps_persisted_state();
     return 0;
 }

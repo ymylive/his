@@ -496,3 +496,33 @@ Result PharmacyService_find_low_stock_medicines(
 void PharmacyService_clear_medicine_results(LinkedList *medicines) {
     LinkedList_clear(medicines, free);
 }
+
+Result PharmacyService_find_dispense_records_by_prescription_id(
+    PharmacyService *service,
+    const char *prescription_id,
+    LinkedList *out_records
+) {
+    Result result = PharmacyService_validate_required_text(prescription_id, "prescription id");
+
+    if (result.success == 0) {
+        return result;
+    }
+
+    if (service == 0 || out_records == 0) {
+        return Result_make_failure("dispense history query arguments missing");
+    }
+
+    if (LinkedList_count(out_records) != 0) {
+        return Result_make_failure("dispense history output must be empty");
+    }
+
+    return DispenseRecordRepository_find_by_prescription_id(
+        &service->dispense_record_repository,
+        prescription_id,
+        out_records
+    );
+}
+
+void PharmacyService_clear_dispense_record_results(LinkedList *records) {
+    DispenseRecordRepository_clear_list(records);
+}

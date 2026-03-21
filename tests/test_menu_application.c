@@ -627,6 +627,68 @@ static void test_execute_action_inpatient_bed_query_lists_beds(void) {
     assert(strstr(output, "床位列表") != 0);
 }
 
+static void test_execute_action_ward_transfer_bed_moves_inpatient_to_target_bed(void) {
+    MenuApplicationTestContext context;
+    MenuApplication application;
+    AdmissionRepository admission_repository;
+    BedRepository bed_repository;
+    Bed second_bed;
+    Admission admission;
+    char output[2048];
+    Result result;
+
+    setup_context(&context, "execute_ward_transfer_bed");
+    seed_patient(&context, "PAT3002", "Dana", 0);
+    seed_ward_and_bed(&context);
+
+    result = MenuApplication_init(&application, &context.paths);
+    assert(result.success == 1);
+
+    result = BedRepository_init(&bed_repository, context.bed_path);
+    assert(result.success == 1);
+    memset(&second_bed, 0, sizeof(second_bed));
+    copy_text(second_bed.bed_id, sizeof(second_bed.bed_id), "BED0002");
+    copy_text(second_bed.ward_id, sizeof(second_bed.ward_id), "WRD0001");
+    copy_text(second_bed.room_no, sizeof(second_bed.room_no), "501");
+    copy_text(second_bed.bed_no, sizeof(second_bed.bed_no), "02");
+    second_bed.status = BED_STATUS_AVAILABLE;
+    assert(BedRepository_append(&bed_repository, &second_bed).success == 1);
+
+    memset(output, 0, sizeof(output));
+    result = MenuApplication_admit_patient(
+        &application,
+        "PAT3002",
+        "WRD0001",
+        "BED0001",
+        "2026-03-20T10:30",
+        "transfer seed",
+        output,
+        sizeof(output)
+    );
+    assert(result.success == 1);
+    assert(strstr(output, "ADM0001") != 0);
+
+    memset(output, 0, sizeof(output));
+    result = execute_action_with_text_io(
+        &application,
+        MENU_ACTION_WARD_TRANSFER_BED,
+        "ADM0001\n"
+        "BED0002\n"
+        "2026-03-21T09:00\n",
+        output,
+        sizeof(output)
+    );
+    assert(result.success == 1);
+    assert(strstr(output, "转床") != 0);
+    assert(strstr(output, "ADM0001") != 0);
+    assert(strstr(output, "BED0002") != 0);
+
+    result = AdmissionRepository_init(&admission_repository, context.admission_path);
+    assert(result.success == 1);
+    assert(AdmissionRepository_find_by_id(&admission_repository, "ADM0001", &admission).success == 1);
+    assert(strcmp(admission.bed_id, "BED0002") == 0);
+}
+
 static void test_execute_action_doctor_visit_preserves_long_complaint(void) {
     MenuApplicationTestContext context;
     MenuApplication application;
@@ -810,6 +872,55 @@ static void test_execute_action_patient_query_registration_lists_records(void) {
     assert(result.success == 1);
     assert(strstr(output, "REG0001") != 0);
     assert(strstr(output, "PAT6002") != 0);
+}
+
+static void test_execute_action_patient_query_dispense_lists_records(void) {
+    MenuApplicationTestContext context;
+    MenuApplication application;
+    char output[2048];
+    Result result;
+
+    setup_context(&context, "execute_patient_dispense_query");
+    result = MenuApplication_init(&application, &context.paths);
+    assert(result.success == 1);
+
+    result = MenuApplication_add_medicine(
+        &application,
+        &(Medicine){
+            "MED8001",
+            "PatientDispenseMed",
+            8.00,
+            10,
+            "DEP0001",
+            1
+        },
+        output,
+        sizeof(output)
+    );
+    assert(result.success == 1);
+
+    result = MenuApplication_dispense_medicine(
+        &application,
+        "RX8001",
+        "MED8001",
+        3,
+        "PHA8001",
+        "2026-03-20T20:00",
+        output,
+        sizeof(output)
+    );
+    assert(result.success == 1);
+
+    result = execute_action_with_text_io(
+        &application,
+        MENU_ACTION_PATIENT_QUERY_DISPENSE,
+        "RX8001\n",
+        output,
+        sizeof(output)
+    );
+    assert(result.success == 1);
+    assert(strstr(output, "RX8001") != 0);
+    assert(strstr(output, "MED8001") != 0);
 }
 
 static void test_execute_action_doctor_exam_record_create_and_complete(void) {
@@ -1016,10 +1127,12 @@ int main(void) {
     test_inpatient_flow_list_admit_and_discharge();
     test_pharmacy_flow_add_restock_dispense_and_low_stock();
     test_execute_action_inpatient_bed_query_lists_beds();
+    test_execute_action_ward_transfer_bed_moves_inpatient_to_target_bed();
     test_execute_action_doctor_visit_preserves_long_complaint();
     test_execute_action_rejects_invalid_medicine_price();
     test_execute_action_updates_patient_record();
     test_execute_action_patient_query_registration_lists_records();
+    test_execute_action_patient_query_dispense_lists_records();
     test_execute_action_doctor_exam_record_create_and_complete();
     test_execute_action_doctor_pending_list_filters_diagnosed();
     return 0;
