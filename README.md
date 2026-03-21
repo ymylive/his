@@ -202,6 +202,47 @@ cmake --build build --target his_desktop
 .\build\his_desktop.exe --smoke
 ```
 
+## 从零启动桌面版
+
+如果你是第一次在新机器上运行桌面控制页，可以按下面顺序执行：
+
+1. 安装 `MSYS2`，并在 `MSYS2 MinGW 32-bit` 终端安装构建工具
+
+```bash
+pacman -Syu
+pacman -S --needed mingw-w64-i686-gcc mingw-w64-i686-cmake mingw-w64-i686-ninja git
+```
+
+2. 在项目根目录生成并编译
+
+```powershell
+cmake -S . -B build
+cmake --build build --target his_desktop
+```
+
+3. 先做一次 smoke，确认桌面窗口能正常初始化
+
+```powershell
+.\build\his_desktop.exe --smoke
+```
+
+4. 正式启动桌面控制页
+
+```powershell
+.\build\his_desktop.exe
+```
+
+5. 使用下方演示账号登录，例如：
+
+- 管理员：`ADM0001 / admin123`
+- 患者：`PAT0001 / patient123`
+
+6. 若只想验证后端和桌面层测试，可执行：
+
+```powershell
+ctest --test-dir build --output-on-failure
+```
+
 ## 演示账号
 
 以下账号已写入 `data/users.txt`：
