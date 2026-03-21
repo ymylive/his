@@ -138,6 +138,44 @@
 - `ctest --test-dir build --output-on-failure`
 - 最新结果 `20/20` 测试通过
 
+## 依赖安装
+
+本项目当前默认面向 `Windows + MSYS2 MinGW32` 构建。
+
+### Windows / MSYS2
+
+1. 安装 MSYS2  
+   下载并安装：`https://www.msys2.org/`
+
+2. 打开 `MSYS2 MinGW 32-bit` 终端，安装构建工具
+
+```bash
+pacman -Syu
+pacman -S --needed mingw-w64-i686-gcc mingw-w64-i686-cmake mingw-w64-i686-ninja git
+```
+
+3. 可选：把以下目录加入系统 `PATH`
+
+```text
+C:\msys64\mingw32\bin
+C:\Program Files\Git\cmd
+```
+
+### 图形库说明
+
+- `raylib` 源码已随仓库 vendored 到 `third_party/raylib_vendor`
+- `raygui.h` 已随仓库提供在 `third_party/raygui.h`
+- 不需要额外单独安装 `raylib` / `raygui`
+
+### 中文字体说明
+
+桌面控制页会优先尝试加载系统中文字体，例如：
+
+- `C:\Windows\Fonts\NotoSansSC-VF.ttf`
+- `C:\Windows\Fonts\simhei.ttf`
+
+如果这些字体不存在，桌面端会回退到默认字体，但中文显示效果可能变差。
+
 ## 构建与测试
 
 在项目根目录执行：
