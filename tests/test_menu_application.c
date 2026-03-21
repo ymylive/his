@@ -1121,6 +1121,283 @@ static void test_execute_action_doctor_pending_list_filters_diagnosed(void) {
     assert(strstr(output, "REG0001") == 0);
 }
 
+static void test_execute_action_admin_patient_management_deletes_patient(void) {
+    MenuApplicationTestContext context;
+    MenuApplication application;
+    PatientRepository patient_repository;
+    Patient patient;
+    char output[2048];
+    Result result;
+
+    setup_context(&context, "execute_admin_patient");
+    seed_patient(&context, "PAT9101", "AdminDelete", 0);
+    result = MenuApplication_init(&application, &context.paths);
+    assert(result.success == 1);
+    result = PatientRepository_init(&patient_repository, context.patient_path);
+    assert(result.success == 1);
+
+    result = execute_action_with_text_io(
+        &application,
+        MENU_ACTION_ADMIN_PATIENT_MANAGEMENT,
+        "3\n"
+        "PAT9101\n",
+        output,
+        sizeof(output)
+    );
+    assert(result.success == 1);
+    assert(strstr(output, "PAT9101") != 0);
+    assert(PatientRepository_find_by_id(&patient_repository, "PAT9101", &patient).success == 0);
+}
+
+static void test_execute_action_admin_doctor_department_adds_and_lists_doctor(void) {
+    MenuApplicationTestContext context;
+    MenuApplication application;
+    char output[2048];
+    Result result;
+
+    setup_context(&context, "execute_admin_doctor_department");
+    result = MenuApplication_init(&application, &context.paths);
+    assert(result.success == 1);
+
+    result = execute_action_with_text_io(
+        &application,
+        MENU_ACTION_ADMIN_DOCTOR_DEPARTMENT,
+        "1\n"
+        "DEP9101\n"
+        "Surgery\n"
+        "Floor 9\n"
+        "Surgery Dept\n",
+        output,
+        sizeof(output)
+    );
+    assert(result.success == 1);
+    assert(strstr(output, "DEP9101") != 0);
+
+    result = execute_action_with_text_io(
+        &application,
+        MENU_ACTION_ADMIN_DOCTOR_DEPARTMENT,
+        "3\n"
+        "DOC9101\n"
+        "Dr.Bob\n"
+        "Attending\n"
+        "DEP9101\n"
+        "Tue PM\n"
+        "1\n",
+        output,
+        sizeof(output)
+    );
+    assert(result.success == 1);
+    assert(strstr(output, "DOC9101") != 0);
+
+    result = execute_action_with_text_io(
+        &application,
+        MENU_ACTION_ADMIN_DOCTOR_DEPARTMENT,
+        "5\n"
+        "DEP9101\n",
+        output,
+        sizeof(output)
+    );
+    assert(result.success == 1);
+    assert(strstr(output, "DOC9101") != 0);
+    assert(strstr(output, "DEP9101") != 0);
+}
+
+static void test_execute_action_admin_medical_records_queries_time_range(void) {
+    MenuApplicationTestContext context;
+    MenuApplication application;
+    char output[2048];
+    Result result;
+
+    setup_context(&context, "execute_admin_medical_records");
+    seed_department_and_doctor(&context);
+    result = MenuApplication_init(&application, &context.paths);
+    assert(result.success == 1);
+    result = MenuApplication_add_patient(
+        &application,
+        &(Patient){
+            "PAT9102",
+            "AdminRecord",
+            PATIENT_GENDER_FEMALE,
+            28,
+            "13800001111",
+            "110101199901019999",
+            "None",
+            "Healthy",
+            0,
+            "admin record"
+        },
+        output,
+        sizeof(output)
+    );
+    assert(result.success == 1);
+    result = MenuApplication_create_registration(
+        &application,
+        "PAT9102",
+        "DOC0001",
+        "DEP0001",
+        "2026-03-20T09:00",
+        output,
+        sizeof(output)
+    );
+    assert(result.success == 1);
+    result = MenuApplication_create_visit_record(
+        &application,
+        "REG0001",
+        "Headache",
+        "Migraine",
+        "Rest",
+        0,
+        0,
+        1,
+        "2026-03-20T09:30",
+        output,
+        sizeof(output)
+    );
+    assert(result.success == 1);
+
+    result = execute_action_with_text_io(
+        &application,
+        MENU_ACTION_ADMIN_MEDICAL_RECORDS,
+        "2026-03-20T00:00\n"
+        "2026-03-20T23:59\n",
+        output,
+        sizeof(output)
+    );
+    assert(result.success == 1);
+    assert(strstr(output, "registrations=1") != 0);
+    assert(strstr(output, "visits=1") != 0);
+}
+
+static void test_execute_action_admin_ward_bed_overview_lists_beds(void) {
+    MenuApplicationTestContext context;
+    MenuApplication application;
+    char output[2048];
+    Result result;
+
+    setup_context(&context, "execute_admin_ward_overview");
+    seed_ward_and_bed(&context);
+    result = MenuApplication_init(&application, &context.paths);
+    assert(result.success == 1);
+
+    result = execute_action_with_text_io(
+        &application,
+        MENU_ACTION_ADMIN_WARD_BED_OVERVIEW,
+        "WRD0001\n",
+        output,
+        sizeof(output)
+    );
+    assert(result.success == 1);
+    assert(strstr(output, "WRD0001") != 0);
+    assert(strstr(output, "BED0001") != 0);
+}
+
+static void test_execute_action_admin_medicine_overview_lists_low_stock(void) {
+    MenuApplicationTestContext context;
+    MenuApplication application;
+    char output[2048];
+    Result result;
+
+    setup_context(&context, "execute_admin_medicine");
+    result = MenuApplication_init(&application, &context.paths);
+    assert(result.success == 1);
+    result = MenuApplication_add_medicine(
+        &application,
+        &(Medicine){
+            "MED9101",
+            "AdminLowStock",
+            6.50,
+            1,
+            "DEP0001",
+            2
+        },
+        output,
+        sizeof(output)
+    );
+    assert(result.success == 1);
+
+    result = execute_action_with_text_io(
+        &application,
+        MENU_ACTION_ADMIN_MEDICINE_OVERVIEW,
+        "2\n",
+        output,
+        sizeof(output)
+    );
+    assert(result.success == 1);
+    assert(strstr(output, "MED9101") != 0);
+}
+
+static void test_execute_action_patient_query_medicine_usage_reports_missing_instruction(void) {
+    MenuApplicationTestContext context;
+    MenuApplication application;
+    char output[2048];
+    Result result;
+
+    setup_context(&context, "execute_patient_medicine_usage");
+    result = MenuApplication_init(&application, &context.paths);
+    assert(result.success == 1);
+    result = MenuApplication_add_medicine(
+        &application,
+        &(Medicine){
+            "MED9102",
+            "UsageInfoMed",
+            9.90,
+            8,
+            "DEP0001",
+            1
+        },
+        output,
+        sizeof(output)
+    );
+    assert(result.success == 1);
+
+    result = execute_action_with_text_io(
+        &application,
+        MENU_ACTION_PATIENT_QUERY_MEDICINE_USAGE,
+        "MED9102\n",
+        output,
+        sizeof(output)
+    );
+    assert(result.success == 1);
+    assert(strstr(output, "MED9102") != 0);
+    assert(strstr(output, "未维护用法说明") != 0);
+}
+
+static void test_execute_action_ward_discharge_check_reports_ready_status(void) {
+    MenuApplicationTestContext context;
+    MenuApplication application;
+    char output[2048];
+    Result result;
+
+    setup_context(&context, "execute_ward_discharge_check");
+    seed_patient(&context, "PAT9103", "DischargeReady", 0);
+    seed_ward_and_bed(&context);
+    result = MenuApplication_init(&application, &context.paths);
+    assert(result.success == 1);
+
+    result = MenuApplication_admit_patient(
+        &application,
+        "PAT9103",
+        "WRD0001",
+        "BED0001",
+        "2026-03-20T11:00",
+        "observation",
+        output,
+        sizeof(output)
+    );
+    assert(result.success == 1);
+
+    result = execute_action_with_text_io(
+        &application,
+        MENU_ACTION_WARD_DISCHARGE_CHECK,
+        "ADM0001\n",
+        output,
+        sizeof(output)
+    );
+    assert(result.success == 1);
+    assert(strstr(output, "ADM0001") != 0);
+    assert(strstr(output, "可办理出院") != 0);
+}
+
 int main(void) {
     test_clerk_flow_add_query_patient_and_registration();
     test_doctor_flow_create_visit_and_query_history();
@@ -1135,5 +1412,12 @@ int main(void) {
     test_execute_action_patient_query_dispense_lists_records();
     test_execute_action_doctor_exam_record_create_and_complete();
     test_execute_action_doctor_pending_list_filters_diagnosed();
+    test_execute_action_admin_patient_management_deletes_patient();
+    test_execute_action_admin_doctor_department_adds_and_lists_doctor();
+    test_execute_action_admin_medical_records_queries_time_range();
+    test_execute_action_admin_ward_bed_overview_lists_beds();
+    test_execute_action_admin_medicine_overview_lists_low_stock();
+    test_execute_action_patient_query_medicine_usage_reports_missing_instruction();
+    test_execute_action_ward_discharge_check_reports_ready_status();
     return 0;
 }

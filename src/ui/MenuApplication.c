@@ -6,6 +6,8 @@
 #include <stdio.h>
 #include <string.h>
 
+#include "service/DepartmentService.h"
+
 static int MenuApplication_is_blank(const char *text) {
     if (text == 0) {
         return 1;
@@ -1474,6 +1476,396 @@ static Result MenuApplication_prompt_medicine_form(
     return Result_make_success("medicine form ready");
 }
 
+static Result MenuApplication_prompt_department_form(
+    MenuApplicationPromptContext *context,
+    Department *out_department
+) {
+    if (out_department == 0) {
+        return Result_make_failure("department form missing");
+    }
+
+    memset(out_department, 0, sizeof(*out_department));
+    if (MenuApplication_prompt_line(
+            context,
+            "科室编号: ",
+            out_department->department_id,
+            sizeof(out_department->department_id)
+        ).success == 0) {
+        return Result_make_failure("input ended");
+    }
+    if (MenuApplication_prompt_line(
+            context,
+            "科室名称: ",
+            out_department->name,
+            sizeof(out_department->name)
+        ).success == 0) {
+        return Result_make_failure("input ended");
+    }
+    if (MenuApplication_prompt_line(
+            context,
+            "科室位置: ",
+            out_department->location,
+            sizeof(out_department->location)
+        ).success == 0) {
+        return Result_make_failure("input ended");
+    }
+    return MenuApplication_prompt_line(
+        context,
+        "科室描述: ",
+        out_department->description,
+        sizeof(out_department->description)
+    );
+}
+
+static Result MenuApplication_prompt_doctor_form(
+    MenuApplicationPromptContext *context,
+    Doctor *out_doctor
+) {
+    int status = 0;
+    Result result;
+
+    if (out_doctor == 0) {
+        return Result_make_failure("doctor form missing");
+    }
+
+    memset(out_doctor, 0, sizeof(*out_doctor));
+    result = MenuApplication_prompt_line(
+        context,
+        "医生工号: ",
+        out_doctor->doctor_id,
+        sizeof(out_doctor->doctor_id)
+    );
+    if (result.success == 0) {
+        return result;
+    }
+    result = MenuApplication_prompt_line(
+        context,
+        "姓名: ",
+        out_doctor->name,
+        sizeof(out_doctor->name)
+    );
+    if (result.success == 0) {
+        return result;
+    }
+    result = MenuApplication_prompt_line(
+        context,
+        "职称: ",
+        out_doctor->title,
+        sizeof(out_doctor->title)
+    );
+    if (result.success == 0) {
+        return result;
+    }
+    result = MenuApplication_prompt_line(
+        context,
+        "所属科室编号: ",
+        out_doctor->department_id,
+        sizeof(out_doctor->department_id)
+    );
+    if (result.success == 0) {
+        return result;
+    }
+    result = MenuApplication_prompt_line(
+        context,
+        "出诊安排: ",
+        out_doctor->schedule,
+        sizeof(out_doctor->schedule)
+    );
+    if (result.success == 0) {
+        return result;
+    }
+    result = MenuApplication_prompt_int(context, "状态(0停用/1启用): ", &status);
+    if (result.success == 0) {
+        return result;
+    }
+    out_doctor->status = (DoctorStatus)status;
+    return Result_make_success("doctor form ready");
+}
+
+static Result MenuApplication_delete_patient(
+    MenuApplication *application,
+    const char *patient_id,
+    char *buffer,
+    size_t capacity
+) {
+    Result result = PatientService_delete_patient(&application->patient_service, patient_id);
+
+    if (result.success == 0) {
+        return MenuApplication_write_failure(result.message, buffer, capacity);
+    }
+
+    return MenuApplication_write_text(buffer, capacity, "患者已删除: %s", patient_id);
+}
+
+static Result MenuApplication_add_department(
+    MenuApplication *application,
+    const Department *department,
+    char *buffer,
+    size_t capacity
+) {
+    DepartmentService department_service;
+    Result result;
+
+    if (application == 0 || department == 0) {
+        return Result_make_failure("department add arguments missing");
+    }
+
+    department_service.repository = application->doctor_service.department_repository;
+    result = DepartmentService_add(&department_service, department);
+    if (result.success == 0) {
+        return MenuApplication_write_failure(result.message, buffer, capacity);
+    }
+
+    return MenuApplication_write_text(
+        buffer,
+        capacity,
+        "科室已添加: %s | %s",
+        department->department_id,
+        department->name
+    );
+}
+
+static Result MenuApplication_update_department(
+    MenuApplication *application,
+    const Department *department,
+    char *buffer,
+    size_t capacity
+) {
+    DepartmentService department_service;
+    Result result;
+
+    if (application == 0 || department == 0) {
+        return Result_make_failure("department update arguments missing");
+    }
+
+    department_service.repository = application->doctor_service.department_repository;
+    result = DepartmentService_update(&department_service, department);
+    if (result.success == 0) {
+        return MenuApplication_write_failure(result.message, buffer, capacity);
+    }
+
+    return MenuApplication_write_text(
+        buffer,
+        capacity,
+        "科室已更新: %s | %s",
+        department->department_id,
+        department->name
+    );
+}
+
+static Result MenuApplication_add_doctor(
+    MenuApplication *application,
+    const Doctor *doctor,
+    char *buffer,
+    size_t capacity
+) {
+    Result result = DoctorService_add(&application->doctor_service, doctor);
+
+    if (result.success == 0) {
+        return MenuApplication_write_failure(result.message, buffer, capacity);
+    }
+
+    return MenuApplication_write_text(
+        buffer,
+        capacity,
+        "医生已添加: %s | %s | 科室=%s",
+        doctor->doctor_id,
+        doctor->name,
+        doctor->department_id
+    );
+}
+
+static Result MenuApplication_query_doctor(
+    MenuApplication *application,
+    const char *doctor_id,
+    char *buffer,
+    size_t capacity
+) {
+    Doctor doctor;
+    Result result = DoctorService_get_by_id(&application->doctor_service, doctor_id, &doctor);
+
+    if (result.success == 0) {
+        return MenuApplication_write_failure(result.message, buffer, capacity);
+    }
+
+    return MenuApplication_write_text(
+        buffer,
+        capacity,
+        "医生信息: %s | %s | 职称=%s | 科室=%s | 排班=%s",
+        doctor.doctor_id,
+        doctor.name,
+        doctor.title,
+        doctor.department_id,
+        doctor.schedule
+    );
+}
+
+static Result MenuApplication_list_doctors_by_department(
+    MenuApplication *application,
+    const char *department_id,
+    char *buffer,
+    size_t capacity
+) {
+    LinkedList doctors;
+    const LinkedListNode *current = 0;
+    size_t used = 0;
+    Result result = DoctorService_list_by_department(
+        &application->doctor_service,
+        department_id,
+        &doctors
+    );
+
+    if (result.success == 0) {
+        return MenuApplication_write_failure(result.message, buffer, capacity);
+    }
+
+    result = MenuApplication_write_text(
+        buffer,
+        capacity,
+        "科室医生列表: %s | count=%zu",
+        department_id,
+        LinkedList_count(&doctors)
+    );
+    if (result.success == 0) {
+        DoctorService_clear_list(&doctors);
+        return result;
+    }
+
+    used = strlen(buffer);
+    current = doctors.head;
+    while (current != 0) {
+        const Doctor *doctor = (const Doctor *)current->data;
+
+        result = MenuApplication_append_text(
+            buffer,
+            capacity,
+            &used,
+            "\n%s | %s | 职称=%s | 排班=%s",
+            doctor->doctor_id,
+            doctor->name,
+            doctor->title,
+            doctor->schedule
+        );
+        if (result.success == 0) {
+            DoctorService_clear_list(&doctors);
+            return result;
+        }
+
+        current = current->next;
+    }
+
+    DoctorService_clear_list(&doctors);
+    return Result_make_success("department doctor list ready");
+}
+
+static Result MenuApplication_query_records_by_time_range(
+    MenuApplication *application,
+    const char *time_from,
+    const char *time_to,
+    char *buffer,
+    size_t capacity
+) {
+    MedicalRecordHistory history;
+    Result result = MedicalRecordService_find_records_by_time_range(
+        &application->medical_record_service,
+        time_from,
+        time_to,
+        &history
+    );
+
+    if (result.success == 0) {
+        return MenuApplication_write_failure(result.message, buffer, capacity);
+    }
+
+    result = MenuApplication_write_text(
+        buffer,
+        capacity,
+        "时间范围记录: %s ~ %s | registrations=%zu | visits=%zu | examinations=%zu | admissions=%zu",
+        time_from,
+        time_to,
+        LinkedList_count(&history.registrations),
+        LinkedList_count(&history.visits),
+        LinkedList_count(&history.examinations),
+        LinkedList_count(&history.admissions)
+    );
+    MedicalRecordHistory_clear(&history);
+    return result;
+}
+
+static Result MenuApplication_query_medicine_detail(
+    MenuApplication *application,
+    const char *medicine_id,
+    char *buffer,
+    size_t capacity,
+    int include_instruction_note
+) {
+    Medicine medicine;
+    Result result = MedicineRepository_find_by_medicine_id(
+        &application->pharmacy_service.medicine_repository,
+        medicine_id,
+        &medicine
+    );
+
+    if (result.success == 0) {
+        return MenuApplication_write_failure(result.message, buffer, capacity);
+    }
+
+    if (include_instruction_note != 0) {
+        return MenuApplication_write_text(
+            buffer,
+            capacity,
+            "药品信息: %s | %s | 单价=%.2f | 科室=%s | 当前系统未维护用法说明",
+            medicine.medicine_id,
+            medicine.name,
+            medicine.price,
+            medicine.department_id
+        );
+    }
+
+    return MenuApplication_write_text(
+        buffer,
+        capacity,
+        "药品信息: %s | %s | 单价=%.2f | 库存=%d | 科室=%s",
+        medicine.medicine_id,
+        medicine.name,
+        medicine.price,
+        medicine.stock,
+        medicine.department_id
+    );
+}
+
+static Result MenuApplication_discharge_check(
+    MenuApplication *application,
+    const char *admission_id,
+    char *buffer,
+    size_t capacity
+) {
+    Admission admission;
+    Result result = InpatientService_find_by_id(
+        &application->inpatient_service,
+        admission_id,
+        &admission
+    );
+
+    if (result.success == 0) {
+        return MenuApplication_write_failure(result.message, buffer, capacity);
+    }
+
+    if (admission.status != ADMISSION_STATUS_ACTIVE) {
+        return MenuApplication_write_failure("admission not active", buffer, capacity);
+    }
+
+    return MenuApplication_write_text(
+        buffer,
+        capacity,
+        "出院前检查: %s | 患者=%s | 病房=%s | 床位=%s | 可办理出院",
+        admission.admission_id,
+        admission.patient_id,
+        admission.ward_id,
+        admission.bed_id
+    );
+}
+
 Result MenuApplication_execute_action(
     MenuApplication *application,
     MenuAction action,
@@ -1489,6 +1881,8 @@ Result MenuApplication_execute_action(
     char time_value[HIS_DOMAIN_TIME_CAPACITY];
     char long_text[HIS_DOMAIN_LARGE_TEXT_CAPACITY];
     Patient patient;
+    Doctor doctor;
+    Department department;
     Medicine medicine;
     int flag_one = 0;
     int flag_two = 0;
@@ -1510,6 +1904,259 @@ Result MenuApplication_execute_action(
     memset(long_text, 0, sizeof(long_text));
 
     switch (action) {
+        case MENU_ACTION_ADMIN_PATIENT_MANAGEMENT:
+            result = MenuApplication_prompt_line(
+                &context,
+                "1.添加 2.修改 3.删除 4.查询\n请选择: ",
+                first_id,
+                sizeof(first_id)
+            );
+            if (result.success == 0) {
+                return result;
+            }
+            if (strcmp(first_id, "1") == 0) {
+                result = MenuApplication_prompt_patient_form(&context, &patient);
+                if (result.success == 0) {
+                    return result;
+                }
+                result = MenuApplication_add_patient(
+                    application,
+                    &patient,
+                    output_buffer,
+                    sizeof(output_buffer)
+                );
+            } else if (strcmp(first_id, "2") == 0) {
+                result = MenuApplication_prompt_patient_form(&context, &patient);
+                if (result.success == 0) {
+                    return result;
+                }
+                result = MenuApplication_update_patient(
+                    application,
+                    &patient,
+                    output_buffer,
+                    sizeof(output_buffer)
+                );
+            } else if (strcmp(first_id, "3") == 0) {
+                result = MenuApplication_prompt_line(
+                    &context,
+                    "患者编号: ",
+                    second_id,
+                    sizeof(second_id)
+                );
+                if (result.success == 0) {
+                    return result;
+                }
+                result = MenuApplication_delete_patient(
+                    application,
+                    second_id,
+                    output_buffer,
+                    sizeof(output_buffer)
+                );
+            } else if (strcmp(first_id, "4") == 0) {
+                result = MenuApplication_prompt_line(
+                    &context,
+                    "患者编号: ",
+                    second_id,
+                    sizeof(second_id)
+                );
+                if (result.success == 0) {
+                    return result;
+                }
+                result = MenuApplication_query_patient(
+                    application,
+                    second_id,
+                    output_buffer,
+                    sizeof(output_buffer)
+                );
+            } else {
+                return Result_make_failure("invalid admin patient action");
+            }
+            if (output_buffer[0] != '\0') {
+                fprintf(output, "%s\n", output_buffer);
+            }
+            return result;
+
+        case MENU_ACTION_ADMIN_DOCTOR_DEPARTMENT:
+            result = MenuApplication_prompt_line(
+                &context,
+                "1.新增科室 2.修改科室 3.添加医生 4.查询医生 5.按科室查看医生\n请选择: ",
+                first_id,
+                sizeof(first_id)
+            );
+            if (result.success == 0) {
+                return result;
+            }
+            if (strcmp(first_id, "1") == 0 || strcmp(first_id, "2") == 0) {
+                result = MenuApplication_prompt_department_form(&context, &department);
+                if (result.success == 0) {
+                    return result;
+                }
+                result = strcmp(first_id, "1") == 0
+                    ? MenuApplication_add_department(
+                        application,
+                        &department,
+                        output_buffer,
+                        sizeof(output_buffer)
+                    )
+                    : MenuApplication_update_department(
+                        application,
+                        &department,
+                        output_buffer,
+                        sizeof(output_buffer)
+                    );
+            } else if (strcmp(first_id, "3") == 0) {
+                result = MenuApplication_prompt_doctor_form(&context, &doctor);
+                if (result.success == 0) {
+                    return result;
+                }
+                result = MenuApplication_add_doctor(
+                    application,
+                    &doctor,
+                    output_buffer,
+                    sizeof(output_buffer)
+                );
+            } else if (strcmp(first_id, "4") == 0) {
+                result = MenuApplication_prompt_line(
+                    &context,
+                    "医生工号: ",
+                    second_id,
+                    sizeof(second_id)
+                );
+                if (result.success == 0) {
+                    return result;
+                }
+                result = MenuApplication_query_doctor(
+                    application,
+                    second_id,
+                    output_buffer,
+                    sizeof(output_buffer)
+                );
+            } else if (strcmp(first_id, "5") == 0) {
+                result = MenuApplication_prompt_line(
+                    &context,
+                    "科室编号: ",
+                    second_id,
+                    sizeof(second_id)
+                );
+                if (result.success == 0) {
+                    return result;
+                }
+                result = MenuApplication_list_doctors_by_department(
+                    application,
+                    second_id,
+                    output_buffer,
+                    sizeof(output_buffer)
+                );
+            } else {
+                return Result_make_failure("invalid admin doctor department action");
+            }
+            if (output_buffer[0] != '\0') {
+                fprintf(output, "%s\n", output_buffer);
+            }
+            return result;
+
+        case MENU_ACTION_ADMIN_MEDICAL_RECORDS:
+            result = MenuApplication_prompt_line(
+                &context,
+                "起始时间: ",
+                time_value,
+                sizeof(time_value)
+            );
+            if (result.success == 0) {
+                return result;
+            }
+            result = MenuApplication_prompt_line(
+                &context,
+                "结束时间: ",
+                text_value,
+                sizeof(text_value)
+            );
+            if (result.success == 0) {
+                return result;
+            }
+            result = MenuApplication_query_records_by_time_range(
+                application,
+                time_value,
+                text_value,
+                output_buffer,
+                sizeof(output_buffer)
+            );
+            if (output_buffer[0] != '\0') {
+                fprintf(output, "%s\n", output_buffer);
+            }
+            return result;
+
+        case MENU_ACTION_ADMIN_WARD_BED_OVERVIEW:
+            result = MenuApplication_list_wards(
+                application,
+                output_buffer,
+                sizeof(output_buffer)
+            );
+            if (output_buffer[0] != '\0') {
+                fprintf(output, "%s\n", output_buffer);
+            }
+            memset(output_buffer, 0, sizeof(output_buffer));
+            result = MenuApplication_prompt_line(
+                &context,
+                "病房编号: ",
+                first_id,
+                sizeof(first_id)
+            );
+            if (result.success == 0) {
+                return result;
+            }
+            result = MenuApplication_list_beds_by_ward(
+                application,
+                first_id,
+                output_buffer,
+                sizeof(output_buffer)
+            );
+            if (output_buffer[0] != '\0') {
+                fprintf(output, "%s\n", output_buffer);
+            }
+            return result;
+
+        case MENU_ACTION_ADMIN_MEDICINE_OVERVIEW:
+            result = MenuApplication_prompt_line(
+                &context,
+                "1.药品详情 2.低库存提醒\n请选择: ",
+                first_id,
+                sizeof(first_id)
+            );
+            if (result.success == 0) {
+                return result;
+            }
+            if (strcmp(first_id, "1") == 0) {
+                result = MenuApplication_prompt_line(
+                    &context,
+                    "药品编号: ",
+                    second_id,
+                    sizeof(second_id)
+                );
+                if (result.success == 0) {
+                    return result;
+                }
+                result = MenuApplication_query_medicine_detail(
+                    application,
+                    second_id,
+                    output_buffer,
+                    sizeof(output_buffer),
+                    0
+                );
+            } else if (strcmp(first_id, "2") == 0) {
+                result = MenuApplication_find_low_stock_medicines(
+                    application,
+                    output_buffer,
+                    sizeof(output_buffer)
+                );
+            } else {
+                return Result_make_failure("invalid admin medicine action");
+            }
+            if (output_buffer[0] != '\0') {
+                fprintf(output, "%s\n", output_buffer);
+            }
+            return result;
+
         case MENU_ACTION_CLERK_ADD_PATIENT:
             result = MenuApplication_prompt_patient_form(&context, &patient);
             if (result.success == 0) {
@@ -1756,6 +2403,28 @@ Result MenuApplication_execute_action(
                 first_id,
                 output_buffer,
                 sizeof(output_buffer)
+            );
+            if (output_buffer[0] != '\0') {
+                fprintf(output, "%s\n", output_buffer);
+            }
+            return result;
+
+        case MENU_ACTION_PATIENT_QUERY_MEDICINE_USAGE:
+            result = MenuApplication_prompt_line(
+                &context,
+                "药品编号: ",
+                first_id,
+                sizeof(first_id)
+            );
+            if (result.success == 0) {
+                return result;
+            }
+            result = MenuApplication_query_medicine_detail(
+                application,
+                first_id,
+                output_buffer,
+                sizeof(output_buffer),
+                1
             );
             if (output_buffer[0] != '\0') {
                 fprintf(output, "%s\n", output_buffer);
@@ -2177,6 +2846,27 @@ Result MenuApplication_execute_action(
                 first_id,
                 second_id,
                 time_value,
+                output_buffer,
+                sizeof(output_buffer)
+            );
+            if (output_buffer[0] != '\0') {
+                fprintf(output, "%s\n", output_buffer);
+            }
+            return result;
+
+        case MENU_ACTION_WARD_DISCHARGE_CHECK:
+            result = MenuApplication_prompt_line(
+                &context,
+                "住院编号: ",
+                first_id,
+                sizeof(first_id)
+            );
+            if (result.success == 0) {
+                return result;
+            }
+            result = MenuApplication_discharge_check(
+                application,
+                first_id,
                 output_buffer,
                 sizeof(output_buffer)
             );
