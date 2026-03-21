@@ -81,6 +81,56 @@ static void DesktopApp_clear_registration_page(DesktopRegistrationPageState *reg
     memset(registration_page, 0, sizeof(*registration_page));
 }
 
+static int DesktopApp_file_exists(const char *path) {
+    return (path != 0 && FileExists(path)) ? 1 : 0;
+}
+
+int DesktopApp_resolve_data_path_for_base_dir(
+    const char *base_dir,
+    const char *file_name,
+    char *out_path,
+    size_t out_path_size,
+    DesktopAppPathExistsFn path_exists
+) {
+    char candidates[4][512];
+    int index = 0;
+
+    if (file_name == 0 || out_path == 0 || out_path_size == 0 || path_exists == 0) {
+        return 0;
+    }
+
+    snprintf(candidates[0], sizeof(candidates[0]), "%s/../data/%s", base_dir != 0 ? base_dir : ".", file_name);
+    snprintf(candidates[1], sizeof(candidates[1]), "data/%s", file_name);
+    snprintf(candidates[2], sizeof(candidates[2]), "%s/data/%s", base_dir != 0 ? base_dir : ".", file_name);
+    snprintf(candidates[3], sizeof(candidates[3]), "../data/%s", file_name);
+
+    for (index = 0; index < 4; index++) {
+        if (path_exists(candidates[index]) != 0) {
+            strncpy(out_path, candidates[index], out_path_size - 1);
+            out_path[out_path_size - 1] = '\0';
+            return 1;
+        }
+    }
+
+    strncpy(out_path, candidates[0], out_path_size - 1);
+    out_path[out_path_size - 1] = '\0';
+    return 0;
+}
+
+int DesktopApp_resolve_data_path(
+    const char *file_name,
+    char *out_path,
+    size_t out_path_size
+) {
+    return DesktopApp_resolve_data_path_for_base_dir(
+        GetApplicationDirectory(),
+        file_name,
+        out_path,
+        out_path_size,
+        DesktopApp_file_exists
+    );
+}
+
 void DesktopAppState_init(DesktopAppState *state) {
     if (state == 0) {
         return;

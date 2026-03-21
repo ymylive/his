@@ -98,6 +98,15 @@ static int test_font_exists_for_none(const char *path) {
     return 0;
 }
 
+static int test_path_exists_prefers_project_data(const char *path) {
+    if (path == 0) {
+        return 0;
+    }
+
+    return strcmp(path, "E:/project/his/build/../data/users.txt") == 0 ||
+           strcmp(path, "E:/project/his/build/data/users.txt") == 0;
+}
+
 static void test_cjk_font_path_resolution(void) {
     const char *picked = DesktopTheme_resolve_cjk_font_path(test_font_exists_for_noto);
     const char *missing = DesktopTheme_resolve_cjk_font_path(test_font_exists_for_none);
@@ -107,11 +116,26 @@ static void test_cjk_font_path_resolution(void) {
     assert(missing == 0);
 }
 
+static void test_data_path_resolution_prefers_project_root_over_build_data(void) {
+    char resolved[512];
+    int found = DesktopApp_resolve_data_path_for_base_dir(
+        "E:/project/his/build",
+        "users.txt",
+        resolved,
+        sizeof(resolved),
+        test_path_exists_prefers_project_data
+    );
+
+    assert(found == 1);
+    assert(strcmp(resolved, "E:/project/his/build/../data/users.txt") == 0);
+}
+
 int main(void) {
     test_default_state_and_message();
     test_login_page_switch_and_logout();
     test_role_home_pages_on_login();
     test_role_mapping();
     test_cjk_font_path_resolution();
+    test_data_path_resolution_prefers_project_root_over_build_data();
     return 0;
 }

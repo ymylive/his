@@ -260,7 +260,7 @@ static void DesktopPages_draw_login(DesktopApp *app) {
 
     DrawText("轻量级 HIS 桌面控制页", (int)card.x + 36, (int)card.y + 44, 34, app->theme.text_primary);
     DrawText(
-        "原生工作台 / 更稳的登录体验 / 现代医疗后台",
+        "原生工作台 / 自动识别账号角色 / 现代医疗后台",
         (int)card.x + 36,
         (int)card.y + 88,
         20,

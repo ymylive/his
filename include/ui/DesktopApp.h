@@ -169,6 +169,8 @@ typedef struct DesktopAppConfig {
     int smoke_mode;
 } DesktopAppConfig;
 
+typedef int (*DesktopAppPathExistsFn)(const char *path);
+
 void DesktopAppState_init(DesktopAppState *state);
 void DesktopAppState_dispose(DesktopAppState *state);
 void DesktopAppState_login_success(DesktopAppState *state, const User *user);
@@ -184,6 +186,18 @@ const char *DesktopApp_user_role_label(UserRole role);
 UserRole DesktopApp_role_from_index(int index);
 int DesktopApp_role_index_from_role(UserRole role);
 DesktopPage DesktopApp_home_page_for_role(UserRole role);
+int DesktopApp_resolve_data_path_for_base_dir(
+    const char *base_dir,
+    const char *file_name,
+    char *out_path,
+    size_t out_path_size,
+    DesktopAppPathExistsFn path_exists
+);
+int DesktopApp_resolve_data_path(
+    const char *file_name,
+    char *out_path,
+    size_t out_path_size
+);
 int DesktopApp_run(const DesktopAppConfig *config);
 
 #endif

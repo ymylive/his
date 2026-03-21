@@ -274,6 +274,9 @@ Result DesktopAdapters_login(
     }
 
     result = MenuApplication_login(application, user_id, password, required_role);
+    if (result.success == 0 && strcmp(result.message, "user role mismatch") == 0) {
+        result = MenuApplication_login(application, user_id, password, USER_ROLE_UNKNOWN);
+    }
     if (result.success == 0) {
         return result;
     }

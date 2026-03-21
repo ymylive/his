@@ -191,6 +191,12 @@ static void test_login_and_patient_search(void) {
     result = DesktopAdapters_login(&application, "PATD001", "desktop-pass", USER_ROLE_PATIENT, &user);
     assert(result.success == 1);
     assert(strcmp(user.user_id, "PATD001") == 0);
+    assert(user.role == USER_ROLE_PATIENT);
+
+    result = DesktopAdapters_login(&application, "PATD001", "desktop-pass", USER_ROLE_DOCTOR, &user);
+    assert(result.success == 1);
+    assert(strcmp(user.user_id, "PATD001") == 0);
+    assert(user.role == USER_ROLE_PATIENT);
 
     LinkedList_init(&results);
     result = DesktopAdapters_search_patients(
