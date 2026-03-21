@@ -1,0 +1,1 @@
+admission_id|patient_id|ward_id|bed_id|admitted_at|status|discharged_at|summary

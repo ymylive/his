@@ -8,6 +8,10 @@ set(CMAKE_C_EXTENSIONS OFF)
 
 include(CTest)
 
+set(BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
+set(BUILD_SHARED_LIBS OFF CACHE BOOL "" FORCE)
+add_subdirectory(third_party/raylib_vendor EXCLUDE_FROM_ALL)
+
 add_library(his_common
     src/common/IdGenerator.c
     src/common/InputHelper.c
@@ -33,8 +37,10 @@ add_library(his_common
     src/repository/PatientRepository.c
     src/repository/RegistrationRepository.c
     src/repository/TextFileRepository.c
+    src/repository/UserRepository.c
     src/repository/VisitRecordRepository.c
     src/repository/WardRepository.c
+    src/service/AuthService.c
     src/service/DepartmentService.c
     src/service/BedService.c
     src/service/DoctorService.c
@@ -54,6 +60,32 @@ add_executable(his
 )
 
 target_link_libraries(his PRIVATE his_common)
+
+add_library(desktop_core
+    src/ui/DesktopApp.c
+    src/ui/DesktopTheme.c
+    src/ui/DesktopPages.c
+    src/ui/DesktopAdapters.c
+)
+
+target_include_directories(desktop_core
+    PUBLIC
+        include
+        third_party
+)
+
+target_link_libraries(desktop_core
+    PUBLIC
+        his_common
+        raylib
+)
+
+add_executable(his_desktop
+    src/desktop/main.c
+)
+
+target_include_directories(his_desktop PRIVATE third_party)
+target_link_libraries(his_desktop PRIVATE desktop_core)
 
 add_executable(test_result
     tests/test_result.c
@@ -191,3 +223,27 @@ add_executable(test_menu_application
 target_link_libraries(test_menu_application PRIVATE his_common)
 
 add_test(NAME test_menu_application COMMAND test_menu_application)
+
+add_executable(test_desktop_state
+    tests/test_desktop_state.c
+)
+
+target_link_libraries(test_desktop_state PRIVATE desktop_core)
+
+add_test(NAME test_desktop_state COMMAND test_desktop_state)
+
+add_executable(test_desktop_adapters
+    tests/test_desktop_adapters.c
+)
+
+target_link_libraries(test_desktop_adapters PRIVATE desktop_core)
+
+add_test(NAME test_desktop_adapters COMMAND test_desktop_adapters)
+
+add_executable(test_auth_service
+    tests/test_auth_service.c
+)
+
+target_link_libraries(test_auth_service PRIVATE his_common)
+
+add_test(NAME test_auth_service COMMAND test_auth_service)

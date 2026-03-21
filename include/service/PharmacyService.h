@@ -36,6 +36,16 @@ Result PharmacyService_dispense_medicine(
     const char *dispensed_at,
     DispenseRecord *out_record
 );
+Result PharmacyService_dispense_medicine_for_patient(
+    PharmacyService *service,
+    const char *patient_id,
+    const char *prescription_id,
+    const char *medicine_id,
+    int quantity,
+    const char *pharmacist_id,
+    const char *dispensed_at,
+    DispenseRecord *out_record
+);
 Result PharmacyService_get_stock(
     PharmacyService *service,
     const char *medicine_id,
@@ -50,6 +60,11 @@ void PharmacyService_clear_medicine_results(LinkedList *medicines);
 Result PharmacyService_find_dispense_records_by_prescription_id(
     PharmacyService *service,
     const char *prescription_id,
+    LinkedList *out_records
+);
+Result PharmacyService_find_dispense_records_by_patient_id(
+    PharmacyService *service,
+    const char *patient_id,
     LinkedList *out_records
 );
 void PharmacyService_clear_dispense_record_results(LinkedList *records);

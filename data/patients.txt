@@ -1,0 +1,2 @@
+patient_id|name|gender|age|contact|id_card|allergy|medical_history|is_inpatient|remarks
+PAT0001|DemoPatient|2|28|13800000001|110101199801010011|None|Healthy|0|demo account

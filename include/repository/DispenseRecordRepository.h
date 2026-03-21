@@ -6,7 +6,7 @@
 #include "domain/DispenseRecord.h"
 #include "repository/TextFileRepository.h"
 
-#define DISPENSE_RECORD_REPOSITORY_FIELD_COUNT 7
+#define DISPENSE_RECORD_REPOSITORY_FIELD_COUNT 8
 
 typedef struct DispenseRecordRepository {
     TextFileRepository storage;
@@ -26,6 +26,15 @@ Result DispenseRecordRepository_find_by_dispense_id(
 Result DispenseRecordRepository_find_by_prescription_id(
     const DispenseRecordRepository *repository,
     const char *prescription_id,
+    LinkedList *out_records
+);
+Result DispenseRecordRepository_find_by_patient_id(
+    const DispenseRecordRepository *repository,
+    const char *patient_id,
+    LinkedList *out_records
+);
+Result DispenseRecordRepository_load_all(
+    const DispenseRecordRepository *repository,
     LinkedList *out_records
 );
 Result DispenseRecordRepository_save_all(

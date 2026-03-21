@@ -1,0 +1,2 @@
+doctor_id|name|title|department_id|schedule|status
+DOC0001|DemoDoctor|Attending|DEP0001|Mon-Fri AM|1

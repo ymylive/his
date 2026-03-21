@@ -207,6 +207,7 @@ static Result PharmacyService_generate_dispense_id(
 
 static Result PharmacyService_build_dispense_record(
     PharmacyService *service,
+    const char *patient_id,
     const char *prescription_id,
     const char *medicine_id,
     int quantity,
@@ -230,10 +231,14 @@ static Result PharmacyService_build_dispense_record(
     }
 
     memset(record->prescription_id, 0, sizeof(record->prescription_id));
+    memset(record->patient_id, 0, sizeof(record->patient_id));
     memset(record->medicine_id, 0, sizeof(record->medicine_id));
     memset(record->pharmacist_id, 0, sizeof(record->pharmacist_id));
     memset(record->dispensed_at, 0, sizeof(record->dispensed_at));
 
+    if (patient_id != 0) {
+        strncpy(record->patient_id, patient_id, sizeof(record->patient_id) - 1);
+    }
     strncpy(record->prescription_id, prescription_id, sizeof(record->prescription_id) - 1);
     strncpy(record->medicine_id, medicine_id, sizeof(record->medicine_id) - 1);
     strncpy(record->pharmacist_id, pharmacist_id, sizeof(record->pharmacist_id) - 1);
@@ -332,8 +337,10 @@ Result PharmacyService_restock_medicine(
     return result;
 }
 
-Result PharmacyService_dispense_medicine(
+static Result PharmacyService_dispense_medicine_internal(
     PharmacyService *service,
+    const char *patient_id,
+    int require_patient_id,
     const char *prescription_id,
     const char *medicine_id,
     int quantity,
@@ -349,6 +356,18 @@ Result PharmacyService_dispense_medicine(
 
     if (result.success == 0) {
         return result;
+    }
+
+    if (require_patient_id) {
+        result = PharmacyService_validate_required_text(patient_id, "patient id");
+        if (result.success == 0) {
+            return result;
+        }
+    } else if (patient_id != 0 && patient_id[0] != '\0') {
+        result = PharmacyService_validate_optional_text(patient_id, "patient id");
+        if (result.success == 0) {
+            return result;
+        }
     }
 
     result = PharmacyService_validate_required_text(medicine_id, "medicine id");
@@ -390,6 +409,7 @@ Result PharmacyService_dispense_medicine(
     memset(&record, 0, sizeof(record));
     result = PharmacyService_build_dispense_record(
         service,
+        patient_id,
         prescription_id,
         medicine_id,
         quantity,
@@ -424,6 +444,51 @@ Result PharmacyService_dispense_medicine(
     }
 
     return Result_make_success("medicine dispensed");
+}
+
+Result PharmacyService_dispense_medicine(
+    PharmacyService *service,
+    const char *prescription_id,
+    const char *medicine_id,
+    int quantity,
+    const char *pharmacist_id,
+    const char *dispensed_at,
+    DispenseRecord *out_record
+) {
+    return PharmacyService_dispense_medicine_internal(
+        service,
+        "",
+        0,
+        prescription_id,
+        medicine_id,
+        quantity,
+        pharmacist_id,
+        dispensed_at,
+        out_record
+    );
+}
+
+Result PharmacyService_dispense_medicine_for_patient(
+    PharmacyService *service,
+    const char *patient_id,
+    const char *prescription_id,
+    const char *medicine_id,
+    int quantity,
+    const char *pharmacist_id,
+    const char *dispensed_at,
+    DispenseRecord *out_record
+) {
+    return PharmacyService_dispense_medicine_internal(
+        service,
+        patient_id,
+        1,
+        prescription_id,
+        medicine_id,
+        quantity,
+        pharmacist_id,
+        dispensed_at,
+        out_record
+    );
 }
 
 Result PharmacyService_get_stock(
@@ -519,6 +584,32 @@ Result PharmacyService_find_dispense_records_by_prescription_id(
     return DispenseRecordRepository_find_by_prescription_id(
         &service->dispense_record_repository,
         prescription_id,
+        out_records
+    );
+}
+
+Result PharmacyService_find_dispense_records_by_patient_id(
+    PharmacyService *service,
+    const char *patient_id,
+    LinkedList *out_records
+) {
+    Result result = PharmacyService_validate_required_text(patient_id, "patient id");
+
+    if (result.success == 0) {
+        return result;
+    }
+
+    if (service == 0 || out_records == 0) {
+        return Result_make_failure("dispense history query arguments missing");
+    }
+
+    if (LinkedList_count(out_records) != 0) {
+        return Result_make_failure("dispense history output must be empty");
+    }
+
+    return DispenseRecordRepository_find_by_patient_id(
+        &service->dispense_record_repository,
+        patient_id,
         out_records
     );
 }

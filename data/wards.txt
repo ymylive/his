@@ -1,0 +1,1 @@
+ward_id|name|department_id|location|capacity|occupied_beds|status

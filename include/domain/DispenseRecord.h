@@ -10,6 +10,7 @@ typedef enum DispenseStatus {
 
 typedef struct DispenseRecord {
     char dispense_id[HIS_DOMAIN_ID_CAPACITY];
+    char patient_id[HIS_DOMAIN_ID_CAPACITY];
     char prescription_id[HIS_DOMAIN_ID_CAPACITY];
     char medicine_id[HIS_DOMAIN_ID_CAPACITY];
     int quantity;

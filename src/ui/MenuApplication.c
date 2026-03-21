@@ -1,6 +1,7 @@
 #include "ui/MenuApplication.h"
 
 #include <ctype.h>
+#include <limits.h>
 #include <stdlib.h>
 #include <stdarg.h>
 #include <stdio.h>
@@ -36,6 +37,58 @@ static Result MenuApplication_validate_required_text(
     }
 
     return Result_make_success("text valid");
+}
+
+static void MenuApplication_clear_patient_session_state(MenuApplication *application) {
+    if (application == 0) {
+        return;
+    }
+
+    application->has_bound_patient_session = 0;
+    memset(application->bound_patient_id, 0, sizeof(application->bound_patient_id));
+}
+
+static void MenuApplication_clear_authenticated_user_state(MenuApplication *application) {
+    if (application == 0) {
+        return;
+    }
+
+    application->has_authenticated_user = 0;
+    memset(&application->authenticated_user, 0, sizeof(application->authenticated_user));
+}
+
+static Result MenuApplication_require_patient_session(MenuApplication *application) {
+    if (application == 0) {
+        return Result_make_failure("menu application missing");
+    }
+
+    if (application->has_bound_patient_session == 0 ||
+        MenuApplication_is_blank(application->bound_patient_id)) {
+        return Result_make_failure("patient session not bound");
+    }
+
+    return Result_make_success("patient session ready");
+}
+
+static Result MenuApplication_authorize_patient_session(
+    MenuApplication *application,
+    const char *requested_patient_id
+) {
+    Result result = MenuApplication_require_patient_session(application);
+    if (result.success == 0) {
+        return result;
+    }
+
+    result = MenuApplication_validate_required_text(requested_patient_id, "patient id");
+    if (result.success == 0) {
+        return result;
+    }
+
+    if (strcmp(application->bound_patient_id, requested_patient_id) != 0) {
+        return Result_make_failure("patient session unauthorized");
+    }
+
+    return Result_make_success("patient session authorized");
 }
 
 static Result MenuApplication_write_text(
@@ -170,6 +223,10 @@ Result MenuApplication_init(MenuApplication *application, const MenuApplicationP
         return Result_make_failure("menu application arguments missing");
     }
 
+    result = MenuApplication_validate_required_text(paths->user_path, "user path");
+    if (result.success == 0) {
+        return result;
+    }
     result = MenuApplication_validate_required_text(paths->patient_path, "patient path");
     if (result.success == 0) {
         return result;
@@ -213,6 +270,15 @@ Result MenuApplication_init(MenuApplication *application, const MenuApplicationP
     result = MenuApplication_validate_required_text(
         paths->dispense_record_path,
         "dispense record path"
+    );
+    if (result.success == 0) {
+        return result;
+    }
+
+    result = AuthService_init(
+        &application->auth_service,
+        paths->user_path,
+        paths->patient_path
     );
     if (result.success == 0) {
         return result;
@@ -283,11 +349,100 @@ Result MenuApplication_init(MenuApplication *application, const MenuApplicationP
         return result;
     }
 
-    return PharmacyService_init(
+    result = PharmacyService_init(
         &application->pharmacy_service,
         paths->medicine_path,
         paths->dispense_record_path
     );
+    if (result.success == 1) {
+        MenuApplication_clear_authenticated_user_state(application);
+        MenuApplication_clear_patient_session_state(application);
+    }
+
+    return result;
+}
+
+Result MenuApplication_login(
+    MenuApplication *application,
+    const char *user_id,
+    const char *password,
+    UserRole required_role
+) {
+    User user;
+    Result result;
+
+    if (application == 0) {
+        return Result_make_failure("menu application missing");
+    }
+
+    MenuApplication_clear_authenticated_user_state(application);
+    MenuApplication_clear_patient_session_state(application);
+
+    result = AuthService_authenticate(
+        &application->auth_service,
+        user_id,
+        password,
+        required_role,
+        &user
+    );
+    if (result.success == 0) {
+        return result;
+    }
+
+    application->authenticated_user = user;
+    application->has_authenticated_user = 1;
+
+    if (user.role == USER_ROLE_PATIENT) {
+        result = MenuApplication_bind_patient_session(application, user.user_id);
+        if (result.success == 0) {
+            MenuApplication_clear_authenticated_user_state(application);
+            return result;
+        }
+    }
+
+    return Result_make_success("menu application login ready");
+}
+
+void MenuApplication_logout(MenuApplication *application) {
+    MenuApplication_clear_authenticated_user_state(application);
+    MenuApplication_clear_patient_session_state(application);
+}
+
+Result MenuApplication_bind_patient_session(MenuApplication *application, const char *patient_id) {
+    Patient patient;
+    Result result;
+
+    if (application == 0) {
+        return Result_make_failure("menu application missing");
+    }
+
+    result = MenuApplication_validate_required_text(patient_id, "patient id");
+    if (result.success == 0) {
+        return result;
+    }
+
+    MenuApplication_clear_patient_session_state(application);
+    result = PatientService_find_patient_by_id(
+        &application->patient_service,
+        patient_id,
+        &patient
+    );
+    if (result.success == 0) {
+        return result;
+    }
+
+    strncpy(
+        application->bound_patient_id,
+        patient.patient_id,
+        sizeof(application->bound_patient_id) - 1
+    );
+    application->bound_patient_id[sizeof(application->bound_patient_id) - 1] = '\0';
+    application->has_bound_patient_session = 1;
+    return Result_make_success("patient session bound");
+}
+
+void MenuApplication_reset_patient_session(MenuApplication *application) {
+    MenuApplication_clear_patient_session_state(application);
 }
 
 Result MenuApplication_add_patient(
@@ -1063,6 +1218,7 @@ Result MenuApplication_restock_medicine(
 
 Result MenuApplication_dispense_medicine(
     MenuApplication *application,
+    const char *patient_id,
     const char *prescription_id,
     const char *medicine_id,
     int quantity,
@@ -1073,8 +1229,9 @@ Result MenuApplication_dispense_medicine(
 ) {
     DispenseRecord record;
     int stock = 0;
-    Result result = PharmacyService_dispense_medicine(
+    Result result = PharmacyService_dispense_medicine_for_patient(
         &application->pharmacy_service,
+        patient_id,
         prescription_id,
         medicine_id,
         quantity,
@@ -1095,7 +1252,8 @@ Result MenuApplication_dispense_medicine(
     return MenuApplication_write_text(
         buffer,
         capacity,
-        "发药完成: 处方=%s | 药品=%s | 数量=%d | 当前库存=%d",
+        "发药完成: 患者=%s | 处方=%s | 药品=%s | 数量=%d | 当前库存=%d",
+        record.patient_id,
         record.prescription_id,
         record.medicine_id,
         record.quantity,
@@ -1249,6 +1407,86 @@ static Result MenuApplication_query_dispense_history_by_prescription_id(
     return Result_make_success("dispense history ready");
 }
 
+static Result MenuApplication_query_dispense_history_by_patient_id(
+    MenuApplication *application,
+    const char *patient_id,
+    char *buffer,
+    size_t capacity
+) {
+    LinkedList records;
+    const LinkedListNode *current = 0;
+    size_t used = 0;
+    Result result;
+
+    if (application == 0) {
+        return Result_make_failure("menu dispense history application missing");
+    }
+
+    LinkedList_init(&records);
+    result = PharmacyService_find_dispense_records_by_patient_id(
+        &application->pharmacy_service,
+        patient_id,
+        &records
+    );
+    if (result.success == 0) {
+        return MenuApplication_write_failure(result.message, buffer, capacity);
+    }
+
+    result = MenuApplication_write_text(
+        buffer,
+        capacity,
+        "发药记录(%zu): 患者=%s",
+        LinkedList_count(&records),
+        patient_id
+    );
+    if (result.success == 0) {
+        PharmacyService_clear_dispense_record_results(&records);
+        return result;
+    }
+
+    used = strlen(buffer);
+    current = records.head;
+    while (current != 0) {
+        const DispenseRecord *record = (const DispenseRecord *)current->data;
+
+        result = MenuApplication_append_text(
+            buffer,
+            capacity,
+            &used,
+            "\n%s | 处方=%s | 药品=%s | 数量=%d | 发药人=%s | %s",
+            record->dispense_id,
+            record->prescription_id,
+            record->medicine_id,
+            record->quantity,
+            record->pharmacist_id,
+            record->dispensed_at
+        );
+        if (result.success == 0) {
+            PharmacyService_clear_dispense_record_results(&records);
+            return result;
+        }
+
+        current = current->next;
+    }
+
+    PharmacyService_clear_dispense_record_results(&records);
+    return Result_make_success("dispense patient history ready");
+}
+
+static void MenuApplication_discard_rest_of_line(FILE *input) {
+    int character = 0;
+
+    if (input == 0) {
+        return;
+    }
+
+    while ((character = fgetc(input)) != EOF) {
+        if (character == '\n') {
+            return;
+        }
+    }
+}
+
 typedef struct MenuApplicationPromptContext {
     FILE *input;
     FILE *output;
@@ -1277,6 +1515,12 @@ static Result MenuApplication_prompt_line(
     }
 
     length = strlen(buffer);
+    if (length > 0 && buffer[length - 1] != '\n' && !feof(context->input)) {
+        MenuApplication_discard_rest_of_line(context->input);
+        buffer[0] = '\0';
+        return Result_make_failure("input too long");
+    }
+
     if (length > 0 && buffer[length - 1] == '\n') {
         buffer[length - 1] = '\0';
     }
@@ -1299,7 +1543,7 @@ static Result MenuApplication_prompt_int(
     }
 
     value = strtol(buffer, &end_pointer, 10);
-    if (end_pointer == buffer || end_pointer == 0) {
+    if (end_pointer == buffer || end_pointer == 0 || value < INT_MIN || value > INT_MAX) {
         return Result_make_failure("numeric input invalid");
     }
 
@@ -2190,6 +2434,26 @@ Result MenuApplication_execute_action(
             return result;
 
         case MENU_ACTION_CLERK_QUERY_PATIENT:
+            result = MenuApplication_prompt_line(
+                &context,
+                "患者编号: ",
+                first_id,
+                sizeof(first_id)
+            );
+            if (result.success == 0) {
+                return result;
+            }
+            result = MenuApplication_query_patient(
+                application,
+                first_id,
+                output_buffer,
+                sizeof(output_buffer)
+            );
+            if (output_buffer[0] != '\0') {
+                fprintf(output, "%s\n", output_buffer);
+            }
+            return result;
+
         case MENU_ACTION_PATIENT_BASIC_INFO:
             result = MenuApplication_prompt_line(
                 &context,
@@ -2197,6 +2461,10 @@ Result MenuApplication_execute_action(
                 first_id,
                 sizeof(first_id)
             );
+            if (result.success == 0) {
+                return result;
+            }
+            result = MenuApplication_authorize_patient_session(application, first_id);
             if (result.success == 0) {
                 return result;
             }
@@ -2332,6 +2600,10 @@ Result MenuApplication_execute_action(
             if (result.success == 0) {
                 return result;
             }
+            result = MenuApplication_authorize_patient_session(application, first_id);
+            if (result.success == 0) {
+                return result;
+            }
             result = MenuApplication_query_registrations_by_patient(
                 application,
                 first_id,
@@ -2365,9 +2637,6 @@ Result MenuApplication_execute_action(
             return result;
 
         case MENU_ACTION_DOCTOR_QUERY_PATIENT_HISTORY:
-        case MENU_ACTION_PATIENT_QUERY_VISITS:
-        case MENU_ACTION_PATIENT_QUERY_EXAMS:
-        case MENU_ACTION_PATIENT_QUERY_ADMISSIONS:
             result = MenuApplication_prompt_line(
                 &context,
                 "患者编号: ",
@@ -2388,17 +2657,23 @@ Result MenuApplication_execute_action(
             }
             return result;
 
-        case MENU_ACTION_PATIENT_QUERY_DISPENSE:
+        case MENU_ACTION_PATIENT_QUERY_VISITS:
+        case MENU_ACTION_PATIENT_QUERY_EXAMS:
+        case MENU_ACTION_PATIENT_QUERY_ADMISSIONS:
             result = MenuApplication_prompt_line(
                 &context,
-                "处方编号: ",
+                "患者编号: ",
                 first_id,
                 sizeof(first_id)
             );
             if (result.success == 0) {
                 return result;
             }
-            result = MenuApplication_query_dispense_history_by_prescription_id(
+            result = MenuApplication_authorize_patient_session(application, first_id);
+            if (result.success == 0) {
+                return result;
+            }
+            result = MenuApplication_query_patient_history(
                 application,
                 first_id,
                 output_buffer,
@@ -2409,7 +2684,27 @@ Result MenuApplication_execute_action(
             }
             return result;
 
+        case MENU_ACTION_PATIENT_QUERY_DISPENSE:
+            result = MenuApplication_require_patient_session(application);
+            if (result.success == 0) {
+                return result;
+            }
+            result = MenuApplication_query_dispense_history_by_patient_id(
+                application,
+                application->bound_patient_id,
+                output_buffer,
+                sizeof(output_buffer)
+            );
+            if (output_buffer[0] != '\0') {
+                fprintf(output, "%s\n", output_buffer);
+            }
+            return result;
+
         case MENU_ACTION_PATIENT_QUERY_MEDICINE_USAGE:
+            result = MenuApplication_require_patient_session(application);
+            if (result.success == 0) {
+                return result;
+            }
             result = MenuApplication_prompt_line(
                 &context,
                 "药品编号: ",
@@ -2920,6 +3215,15 @@ Result MenuApplication_execute_action(
         case MENU_ACTION_PHARMACY_DISPENSE:
             result = MenuApplication_prompt_line(
                 &context,
+                "患者编号: ",
+                text_value,
+                sizeof(text_value)
+            );
+            if (result.success == 0) {
+                return result;
+            }
+            result = MenuApplication_prompt_line(
+                &context,
                 "处方编号: ",
                 first_id,
                 sizeof(first_id)
@@ -2960,6 +3264,7 @@ Result MenuApplication_execute_action(
             }
             result = MenuApplication_dispense_medicine(
                 application,
+                text_value,
                 first_id,
                 second_id,
                 flag_one,

@@ -111,6 +111,7 @@ static void test_domain_entities_exist(void) {
     };
     DispenseRecord dispense = {
         "DSP0001",
+        "PAT0001",
         "PRE0001",
         "MED0001",
         2,

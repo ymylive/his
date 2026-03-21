@@ -126,8 +126,9 @@ static void test_dispense_updates_inventory_and_writes_record(void) {
     assert(result.success == 1);
 
     memset(&record, 0, sizeof(record));
-    result = PharmacyService_dispense_medicine(
+    result = PharmacyService_dispense_medicine_for_patient(
         &service,
+        "PAT2001",
         "RX2001",
         "MED2001",
         6,
@@ -137,6 +138,7 @@ static void test_dispense_updates_inventory_and_writes_record(void) {
     );
     assert(result.success == 1);
     assert(record.dispense_id[0] != '\0');
+    assert(strcmp(record.patient_id, "PAT2001") == 0);
     assert(strcmp(record.prescription_id, "RX2001") == 0);
     assert(strcmp(record.medicine_id, "MED2001") == 0);
     assert(record.quantity == 6);
@@ -149,17 +151,14 @@ static void test_dispense_updates_inventory_and_writes_record(void) {
     assert(stock == 14);
 
     LinkedList_init(&records);
-    result = DispenseRecordRepository_find_by_prescription_id(
-        &service.dispense_record_repository,
-        "RX2001",
-        &records
-    );
+    result = PharmacyService_find_dispense_records_by_patient_id(&service, "PAT2001", &records);
     assert(result.success == 1);
     assert(LinkedList_count(&records) == 1);
 
     stored_record = (DispenseRecord *)records.head->data;
     assert(stored_record != 0);
     assert(strcmp(stored_record->dispense_id, record.dispense_id) == 0);
+    assert(strcmp(stored_record->patient_id, "PAT2001") == 0);
     assert(stored_record->quantity == 6);
     DispenseRecordRepository_clear_list(&records);
 }
@@ -270,7 +269,7 @@ static void test_low_stock_alerts_and_insufficient_stock_rejected(void) {
     DispenseRecordRepository_clear_list(&failed_records);
 }
 
-static void test_query_dispense_history_by_prescription_id(void) {
+static void test_query_dispense_history_by_patient_id(void) {
     char medicine_path[TEXT_FILE_REPOSITORY_PATH_CAPACITY];
     char record_path[TEXT_FILE_REPOSITORY_PATH_CAPACITY];
     PharmacyService service;
@@ -297,8 +296,9 @@ static void test_query_dispense_history_by_prescription_id(void) {
     );
     assert(result.success == 1);
 
-    result = PharmacyService_dispense_medicine(
+    result = PharmacyService_dispense_medicine_for_patient(
         &service,
+        "PAT9001",
         "RX9001",
         "MED9001",
         2,
@@ -308,13 +308,26 @@ static void test_query_dispense_history_by_prescription_id(void) {
     );
     assert(result.success == 1);
 
+    result = PharmacyService_dispense_medicine_for_patient(
+        &service,
+        "PAT9002",
+        "RX9002",
+        "MED9001",
+        1,
+        "PHA9001",
+        "2026-03-20T19:10:00",
+        0
+    );
+    assert(result.success == 1);
+
     LinkedList_init(&records);
-    result = PharmacyService_find_dispense_records_by_prescription_id(&service, "RX9001", &records);
+    result = PharmacyService_find_dispense_records_by_patient_id(&service, "PAT9001", &records);
     assert(result.success == 1);
     assert(LinkedList_count(&records) == 1);
 
     stored_record = (DispenseRecord *)records.head->data;
     assert(stored_record != 0);
+    assert(strcmp(stored_record->patient_id, "PAT9001") == 0);
     assert(strcmp(stored_record->prescription_id, "RX9001") == 0);
     assert(strcmp(stored_record->medicine_id, "MED9001") == 0);
     assert(stored_record->quantity == 2);
@@ -329,6 +342,6 @@ int main(void) {
     test_add_restock_and_query_inventory();
     test_dispense_updates_inventory_and_writes_record();
     test_low_stock_alerts_and_insufficient_stock_rejected();
-    test_query_dispense_history_by_prescription_id();
+    test_query_dispense_history_by_patient_id();
     return 0;
 }

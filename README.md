@@ -114,11 +114,29 @@
 - 应用层集成测试 `test_menu_application`
 - 当前刻意未接通的菜单项包括：患者侧发药记录、药品使用方法、独立药品出库、管理员综合维护入口、转床与出院前检查
 
+当前已经完成第十一阶段认证与原生桌面控制页增量：
+
+- 文件账号认证 `UserRepository / AuthService`
+- `data/users.txt` 已提供七类角色登录账号
+- 患者发药记录已按 `patient_id` 做 ownership 关联
+- 新增原生桌面控制页 `his_desktop`，采用 `raylib + raygui`
+- 桌面端当前已具备：
+- 登录页
+- 首页仪表盘
+- 患者查询页
+- 挂号页
+- 发药记录页
+- 医生工作台
+- 住院管理页
+- 药房工作台
+- 已支持中文字体加载、高 DPI、基础角色页面可见性控制
+- 新增桌面层测试 `test_desktop_state`、`test_desktop_adapters`
+
 当前本地统一验证结果：
 
 - `cmake --build build`
 - `ctest --test-dir build --output-on-failure`
-- 最新结果 `17/17` 测试通过
+- 最新结果 `20/20` 测试通过
 
 ## 构建与测试
 
@@ -130,12 +148,48 @@ cmake --build build
 ctest --test-dir build --output-on-failure
 ```
 
+## 桌面控制页
+
+桌面版可执行文件：
+
+```powershell
+cmake -S . -B build
+cmake --build build --target his_desktop
+.\build\his_desktop.exe
+```
+
+快速 smoke：
+
+```powershell
+.\build\his_desktop.exe --smoke
+```
+
+## 演示账号
+
+以下账号已写入 `data/users.txt`：
+
+| 角色 | 用户编号 | 密码 |
+| --- | --- | --- |
+| 系统管理员 | `ADM0001` | `admin123` |
+| 挂号员 | `CLK0001` | `clerk123` |
+| 医生 | `DOC0001` | `doctor123` |
+| 住院登记员 | `INP0001` | `inpatient123` |
+| 病区管理员 | `WRD0001` | `ward123` |
+| 药房人员 | `PHA0001` | `pharmacy123` |
+| 患者 | `PAT0001` | `patient123` |
+
 ## 文档入口
 
 - 规格说明与可行性分析：
   `docs/superpowers/specs/2026-03-20-lightweight-his-design.md`
 - 开发计划：
   `docs/superpowers/plans/2026-03-20-lightweight-his.md`
+- 桌面控制页设计：
+  `docs/superpowers/specs/2026-03-21-desktop-control-panel-design.md`
+- 桌面控制页实施计划：
+  `docs/superpowers/plans/2026-03-21-desktop-control-panel.md`
+- 桌面业务页实施计划：
+  `docs/superpowers/plans/2026-03-21-desktop-business-pages.md`
 
 ## 设计规模
 
@@ -154,15 +208,25 @@ ctest --test-dir build --output-on-failure
 .
 ├─ CMakeLists.txt
 ├─ README.md
+├─ third_party/
 ├─ data/
 ├─ docs/
 │  └─ superpowers/
 │     ├─ plans/
 │     └─ specs/
 ├─ include/
-│  └─ common/
+│  ├─ common/
+│  ├─ domain/
+│  ├─ repository/
+│  ├─ service/
+│  └─ ui/
 ├─ src/
 │  ├─ common/
+│  ├─ desktop/
+│  ├─ domain/
+│  ├─ repository/
+│  ├─ service/
+│  ├─ ui/
 │  └─ main.c
 └─ tests/
 ```
@@ -171,6 +235,6 @@ ctest --test-dir build --output-on-failure
 
 下一阶段继续按计划推进：
 
-- 继续补齐管理员菜单、医生检查记录、患者侧个人记录查询的真实执行
-- 准备 `data/` 演示数据集，让挂号、住院、药房链路可直接现场演示
-- 继续增强住院/病历跨文件保存的一致性补偿逻辑，并补集成验证与答辩材料
+- 继续修整桌面控制页交互细节与可操作性
+- 扩展桌面端页面数据展示深度，例如医生页明细、住院床位列表、药房库存表
+- 准备更完整的 `data/` 演示数据集，让控制台与桌面端都能直接演示完整业务链路

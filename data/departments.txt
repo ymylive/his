@@ -1,0 +1,2 @@
+department_id|name|location|description
+DEP0001|General|Floor 1|General clinic

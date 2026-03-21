@@ -1,0 +1,1 @@
+bed_id|ward_id|room_no|bed_no|status|current_admission_id|occupied_at|released_at

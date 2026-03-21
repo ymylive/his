@@ -1,0 +1,1 @@
+medicine_id|name|price|stock|department_id|low_stock_threshold

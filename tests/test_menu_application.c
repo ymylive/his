@@ -10,6 +10,7 @@
 #include "domain/Doctor.h"
 #include "domain/Medicine.h"
 #include "domain/Patient.h"
+#include "domain/User.h"
 #include "domain/Ward.h"
 #include "repository/AdmissionRepository.h"
 #include "repository/BedRepository.h"
@@ -21,9 +22,11 @@
 #include "repository/RegistrationRepository.h"
 #include "repository/VisitRecordRepository.h"
 #include "repository/WardRepository.h"
+#include "service/AuthService.h"
 #include "ui/MenuApplication.h"
 
 typedef struct MenuApplicationTestContext {
+    char user_path[TEXT_FILE_REPOSITORY_PATH_CAPACITY];
     char patient_path[TEXT_FILE_REPOSITORY_PATH_CAPACITY];
     char department_path[TEXT_FILE_REPOSITORY_PATH_CAPACITY];
     char doctor_path[TEXT_FILE_REPOSITORY_PATH_CAPACITY];
@@ -76,6 +79,7 @@ static void setup_context(MenuApplicationTestContext *context, const char *test_
     assert(context != 0);
 
     memset(context, 0, sizeof(*context));
+    build_test_path(context->user_path, sizeof(context->user_path), test_name, "users.txt");
     build_test_path(context->patient_path, sizeof(context->patient_path), test_name, "patients.txt");
     build_test_path(
         context->department_path,
@@ -118,6 +122,7 @@ static void setup_context(MenuApplicationTestContext *context, const char *test_
         "dispense_records.txt"
     );
 
+    context->paths.user_path = context->user_path;
     context->paths.patient_path = context->patient_path;
     context->paths.department_path = context->department_path;
     context->paths.doctor_path = context->doctor_path;
@@ -129,6 +134,20 @@ static void setup_context(MenuApplicationTestContext *context, const char *test_
     context->paths.admission_path = context->admission_path;
     context->paths.medicine_path = context->medicine_path;
     context->paths.dispense_record_path = context->dispense_record_path;
+}
+
+static void seed_user_account(
+    const MenuApplicationTestContext *context,
+    const char *user_id,
+    const char *password,
+    UserRole role
+) {
+    AuthService auth_service;
+    Result result = AuthService_init(&auth_service, context->user_path, context->patient_path);
+
+    assert(result.success == 1);
+    result = AuthService_register_user(&auth_service, user_id, password, role);
+    assert(result.success == 1);
 }
 
 static void seed_department_and_doctor(const MenuApplicationTestContext *context) {
@@ -562,6 +581,7 @@ static void test_pharmacy_flow_add_restock_dispense_and_low_stock(void) {
     memset(output, 0, sizeof(output));
     result = MenuApplication_dispense_medicine(
         &application,
+        "PAT4001",
         "RX4001",
         "MED4001",
         6,
@@ -783,6 +803,29 @@ static void test_execute_action_rejects_invalid_medicine_price(void) {
     assert(strstr(result.message, "invalid") != 0);
 }
 
+static void test_execute_action_rejects_overlong_prompt_input(void) {
+    MenuApplicationTestContext context;
+    MenuApplication application;
+    char output[2048];
+    Result result;
+
+    setup_context(&context, "execute_overlong_prompt");
+    result = MenuApplication_init(&application, &context.paths);
+    assert(result.success == 1);
+
+    result = execute_action_with_text_io(
+        &application,
+        MENU_ACTION_CLERK_QUERY_REGISTRATION,
+        "2\n"
+        "REG1234567890123456789012345678901234567890\n"
+        "2026-03-20T12:00\n",
+        output,
+        sizeof(output)
+    );
+    assert(result.success == 0);
+    assert(strstr(result.message, "too long") != 0);
+}
+
 static void test_execute_action_updates_patient_record(void) {
     MenuApplicationTestContext context;
     MenuApplication application;
@@ -861,6 +904,9 @@ static void test_execute_action_patient_query_registration_lists_records(void) {
         sizeof(output)
     );
     assert(result.success == 1);
+    seed_user_account(&context, "PAT6002", "patient-pass", USER_ROLE_PATIENT);
+    result = MenuApplication_login(&application, "PAT6002", "patient-pass", USER_ROLE_PATIENT);
+    assert(result.success == 1);
 
     result = execute_action_with_text_io(
         &application,
@@ -872,6 +918,235 @@ static void test_execute_action_patient_query_registration_lists_records(void) {
     assert(result.success == 1);
     assert(strstr(output, "REG0001") != 0);
     assert(strstr(output, "PAT6002") != 0);
+    MenuApplication_logout(&application);
+}
+
+static void test_patient_session_authorizes_only_bound_patient_routes(void) {
+    MenuApplicationTestContext context;
+    MenuApplication application;
+    char output[2048];
+    Result result;
+
+    setup_context(&context, "patient_session_patient_routes");
+    seed_department_and_doctor(&context);
+
+    result = MenuApplication_init(&application, &context.paths);
+    assert(result.success == 1);
+    result = MenuApplication_add_patient(
+        &application,
+        &(Patient){
+            "PAT7001",
+            "Nina",
+            PATIENT_GENDER_FEMALE,
+            29,
+            "13800000101",
+            "110101199701010101",
+            "None",
+            "Healthy",
+            0,
+            "session A"
+        },
+        output,
+        sizeof(output)
+    );
+    assert(result.success == 1);
+    result = MenuApplication_add_patient(
+        &application,
+        &(Patient){
+            "PAT7002",
+            "Owen",
+            PATIENT_GENDER_MALE,
+            32,
+            "13800000102",
+            "110101199402020202",
+            "None",
+            "Healthy",
+            0,
+            "session B"
+        },
+        output,
+        sizeof(output)
+    );
+    assert(result.success == 1);
+    result = MenuApplication_create_registration(
+        &application,
+        "PAT7001",
+        "DOC0001",
+        "DEP0001",
+        "2026-03-20T14:20",
+        output,
+        sizeof(output)
+    );
+    assert(result.success == 1);
+    result = MenuApplication_create_registration(
+        &application,
+        "PAT7002",
+        "DOC0001",
+        "DEP0001",
+        "2026-03-20T14:25",
+        output,
+        sizeof(output)
+    );
+    assert(result.success == 1);
+
+    result = MenuApplication_create_visit_record(
+        &application,
+        "REG0001",
+        "Fever",
+        "Common cold",
+        "Hydrate",
+        0,
+        0,
+        1,
+        "2026-03-20T14:30",
+        output,
+        sizeof(output)
+    );
+    assert(result.success == 1);
+    result = MenuApplication_create_visit_record(
+        &application,
+        "REG0002",
+        "Cough",
+        "Flu",
+        "Rest",
+        1,
+        0,
+        1,
+        "2026-03-20T14:40",
+        output,
+        sizeof(output)
+    );
+    assert(result.success == 1);
+
+    result = MenuApplication_add_medicine(
+        &application,
+        &(Medicine){
+            "MED7001",
+            "SessionMed",
+            12.00,
+            20,
+            "DEP0001",
+            3
+        },
+        output,
+        sizeof(output)
+    );
+    assert(result.success == 1);
+    result = MenuApplication_dispense_medicine(
+        &application,
+        "PAT7001",
+        "RX7001",
+        "MED7001",
+        2,
+        "PHA7001",
+        "2026-03-20T15:00",
+        output,
+        sizeof(output)
+    );
+    assert(result.success == 1);
+    result = MenuApplication_dispense_medicine(
+        &application,
+        "PAT7002",
+        "RX7002",
+        "MED7001",
+        1,
+        "PHA7001",
+        "2026-03-20T15:10",
+        output,
+        sizeof(output)
+    );
+    assert(result.success == 1);
+
+    seed_user_account(&context, "PAT7001", "session-pass", USER_ROLE_PATIENT);
+    result = MenuApplication_login(&application, "PAT7001", "session-pass", USER_ROLE_PATIENT);
+    assert(result.success == 1);
+
+    result = execute_action_with_text_io(
+        &application,
+        MENU_ACTION_PATIENT_BASIC_INFO,
+        "PAT7001\n",
+        output,
+        sizeof(output)
+    );
+    assert(result.success == 1);
+    assert(strstr(output, "PAT7001") != 0);
+
+    result = execute_action_with_text_io(
+        &application,
+        MENU_ACTION_PATIENT_BASIC_INFO,
+        "PAT7002\n",
+        output,
+        sizeof(output)
+    );
+    assert(result.success == 0);
+    assert(strstr(result.message, "session") != 0);
+
+    result = execute_action_with_text_io(
+        &application,
+        MENU_ACTION_PATIENT_QUERY_REGISTRATION,
+        "PAT7002\n",
+        output,
+        sizeof(output)
+    );
+    assert(result.success == 0);
+    assert(strstr(result.message, "session") != 0);
+
+    result = execute_action_with_text_io(
+        &application,
+        MENU_ACTION_PATIENT_QUERY_VISITS,
+        "PAT7002\n",
+        output,
+        sizeof(output)
+    );
+    assert(result.success == 0);
+    assert(strstr(result.message, "session") != 0);
+
+    result = execute_action_with_text_io(
+        &application,
+        MENU_ACTION_PATIENT_QUERY_EXAMS,
+        "PAT7002\n",
+        output,
+        sizeof(output)
+    );
+    assert(result.success == 0);
+    assert(strstr(result.message, "session") != 0);
+
+    result = execute_action_with_text_io(
+        &application,
+        MENU_ACTION_PATIENT_QUERY_ADMISSIONS,
+        "PAT7002\n",
+        output,
+        sizeof(output)
+    );
+    assert(result.success == 0);
+    assert(strstr(result.message, "session") != 0);
+
+    result = execute_action_with_text_io(
+        &application,
+        MENU_ACTION_PATIENT_QUERY_DISPENSE,
+        "",
+        output,
+        sizeof(output)
+    );
+    assert(result.success == 1);
+    assert(strstr(output, "PAT7001") != 0);
+    assert(strstr(output, "RX7001") != 0);
+    assert(strstr(output, "RX7002") == 0);
+
+    result = MenuApplication_login(&application, "PAT7999", "wrong-pass", USER_ROLE_PATIENT);
+    assert(result.success == 0);
+
+    result = execute_action_with_text_io(
+        &application,
+        MENU_ACTION_PATIENT_BASIC_INFO,
+        "PAT7001\n",
+        output,
+        sizeof(output)
+    );
+    assert(result.success == 0);
+    assert(strstr(result.message, "session") != 0);
+
+    MenuApplication_logout(&application);
 }
 
 static void test_execute_action_patient_query_dispense_lists_records(void) {
@@ -901,6 +1176,7 @@ static void test_execute_action_patient_query_dispense_lists_records(void) {
 
     result = MenuApplication_dispense_medicine(
         &application,
+        "PAT8001",
         "RX8001",
         "MED8001",
         3,
@@ -910,17 +1186,39 @@ static void test_execute_action_patient_query_dispense_lists_records(void) {
         sizeof(output)
     );
     assert(result.success == 1);
+    result = MenuApplication_add_patient(
+        &application,
+        &(Patient){
+            "PAT8001",
+            "DispenseViewer",
+            PATIENT_GENDER_FEMALE,
+            30,
+            "13800008001",
+            "110101199101010801",
+            "None",
+            "Healthy",
+            0,
+            "dispense route"
+        },
+        output,
+        sizeof(output)
+    );
+    assert(result.success == 1);
+    seed_user_account(&context, "PAT8001", "dispense-pass", USER_ROLE_PATIENT);
+    result = MenuApplication_login(&application, "PAT8001", "dispense-pass", USER_ROLE_PATIENT);
+    assert(result.success == 1);
 
     result = execute_action_with_text_io(
         &application,
         MENU_ACTION_PATIENT_QUERY_DISPENSE,
-        "RX8001\n",
+        "",
         output,
         sizeof(output)
     );
     assert(result.success == 1);
     assert(strstr(output, "RX8001") != 0);
     assert(strstr(output, "MED8001") != 0);
+    MenuApplication_logout(&application);
 }
 
 static void test_execute_action_doctor_exam_record_create_and_complete(void) {
@@ -1349,6 +1647,27 @@ static void test_execute_action_patient_query_medicine_usage_reports_missing_ins
         sizeof(output)
     );
     assert(result.success == 1);
+    result = MenuApplication_add_patient(
+        &application,
+        &(Patient){
+            "PAT9104",
+            "MedicineUsageViewer",
+            PATIENT_GENDER_FEMALE,
+            26,
+            "13800009104",
+            "110101199801019104",
+            "None",
+            "Healthy",
+            0,
+            "medicine usage route"
+        },
+        output,
+        sizeof(output)
+    );
+    assert(result.success == 1);
+    seed_user_account(&context, "PAT9104", "usage-pass", USER_ROLE_PATIENT);
+    result = MenuApplication_login(&application, "PAT9104", "usage-pass", USER_ROLE_PATIENT);
+    assert(result.success == 1);
 
     result = execute_action_with_text_io(
         &application,
@@ -1360,6 +1679,7 @@ static void test_execute_action_patient_query_medicine_usage_reports_missing_ins
     assert(result.success == 1);
     assert(strstr(output, "MED9102") != 0);
     assert(strstr(output, "未维护用法说明") != 0);
+    MenuApplication_logout(&application);
 }
 
 static void test_execute_action_ward_discharge_check_reports_ready_status(void) {
@@ -1407,8 +1727,10 @@ int main(void) {
     test_execute_action_ward_transfer_bed_moves_inpatient_to_target_bed();
     test_execute_action_doctor_visit_preserves_long_complaint();
     test_execute_action_rejects_invalid_medicine_price();
+    test_execute_action_rejects_overlong_prompt_input();
     test_execute_action_updates_patient_record();
     test_execute_action_patient_query_registration_lists_records();
+    test_patient_session_authorizes_only_bound_patient_routes();
     test_execute_action_patient_query_dispense_lists_records();
     test_execute_action_doctor_exam_record_create_and_complete();
     test_execute_action_doctor_pending_list_filters_diagnosed();

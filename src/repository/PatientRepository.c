@@ -1,6 +1,7 @@
 #include "repository/PatientRepository.h"
 
 #include <errno.h>
+#include <limits.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -61,12 +62,32 @@ static Result PatientRepository_parse_int(const char *text, int *out_value) {
 
     errno = 0;
     value = strtol(text, &end, 10);
-    if (errno != 0 || end == text || *end != '\0') {
+    if (errno != 0 || end == text || *end != '\0' || value < INT_MIN || value > INT_MAX) {
         return Result_make_failure("integer field invalid");
     }
 
     *out_value = (int)value;
     return Result_make_success("integer field parsed");
+}
+
+static Result PatientRepository_copy_field_bounded(
+    char *destination,
+    size_t destination_capacity,
+    const char *source
+) {
+    size_t source_length = 0;
+
+    if (destination == 0 || destination_capacity == 0 || source == 0) {
+        return Result_make_failure("patient field copy arguments missing");
+    }
+
+    source_length = strlen(source);
+    if (source_length >= destination_capacity) {
+        return Result_make_failure("patient field too long");
+    }
+
+    memcpy(destination, source, source_length + 1);
+    return Result_make_success("patient field copied");
 }
 
 static Result PatientRepository_parse_line(const char *line, Patient *out_patient) {
@@ -101,8 +122,23 @@ static Result PatientRepository_parse_line(const char *line, Patient *out_patien
     }
 
     memset(out_patient, 0, sizeof(*out_patient));
-    strcpy(out_patient->patient_id, fields[0]);
-    strcpy(out_patient->name, fields[1]);
+    result = PatientRepository_copy_field_bounded(
+        out_patient->patient_id,
+        sizeof(out_patient->patient_id),
+        fields[0]
+    );
+    if (result.success == 0) {
+        return result;
+    }
+
+    result = PatientRepository_copy_field_bounded(
+        out_patient->name,
+        sizeof(out_patient->name),
+        fields[1]
+    );
+    if (result.success == 0) {
+        return result;
+    }
 
     result = PatientRepository_parse_int(fields[2], &parsed_value);
     if (result.success == 0) {
@@ -116,10 +152,41 @@ static Result PatientRepository_parse_line(const char *line, Patient *out_patien
     }
     out_patient->age = parsed_value;
 
-    strcpy(out_patient->contact, fields[4]);
-    strcpy(out_patient->id_card, fields[5]);
-    strcpy(out_patient->allergy, fields[6]);
-    strcpy(out_patient->medical_history, fields[7]);
+    result = PatientRepository_copy_field_bounded(
+        out_patient->contact,
+        sizeof(out_patient->contact),
+        fields[4]
+    );
+    if (result.success == 0) {
+        return result;
+    }
+
+    result = PatientRepository_copy_field_bounded(
+        out_patient->id_card,
+        sizeof(out_patient->id_card),
+        fields[5]
+    );
+    if (result.success == 0) {
+        return result;
+    }
+
+    result = PatientRepository_copy_field_bounded(
+        out_patient->allergy,
+        sizeof(out_patient->allergy),
+        fields[6]
+    );
+    if (result.success == 0) {
+        return result;
+    }
+
+    result = PatientRepository_copy_field_bounded(
+        out_patient->medical_history,
+        sizeof(out_patient->medical_history),
+        fields[7]
+    );
+    if (result.success == 0) {
+        return result;
+    }
 
     result = PatientRepository_parse_int(fields[8], &parsed_value);
     if (result.success == 0) {
@@ -127,7 +194,14 @@ static Result PatientRepository_parse_line(const char *line, Patient *out_patien
     }
     out_patient->is_inpatient = parsed_value;
 
-    strcpy(out_patient->remarks, fields[9]);
+    result = PatientRepository_copy_field_bounded(
+        out_patient->remarks,
+        sizeof(out_patient->remarks),
+        fields[9]
+    );
+    if (result.success == 0) {
+        return result;
+    }
 
     return PatientRepository_validate_patient(out_patient);
 }

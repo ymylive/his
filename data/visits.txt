@@ -1,0 +1,1 @@
+visit_id|registration_id|patient_id|doctor_id|department_id|chief_complaint|diagnosis|advice|need_exam|need_admission|need_medicine|visit_time

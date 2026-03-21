@@ -1,0 +1,1 @@
+dispense_id|patient_id|prescription_id|medicine_id|quantity|pharmacist_id|dispensed_at|status

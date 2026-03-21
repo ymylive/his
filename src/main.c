@@ -4,6 +4,37 @@
 #include "ui/MenuApplication.h"
 #include "ui/MenuController.h"
 
+static UserRole role_to_user_role(MenuRole role) {
+    switch (role) {
+        case MENU_ROLE_ADMIN:
+            return USER_ROLE_ADMIN;
+        case MENU_ROLE_REGISTRATION_CLERK:
+            return USER_ROLE_REGISTRATION_CLERK;
+        case MENU_ROLE_DOCTOR:
+            return USER_ROLE_DOCTOR;
+        case MENU_ROLE_PATIENT:
+            return USER_ROLE_PATIENT;
+        case MENU_ROLE_INPATIENT_REGISTRAR:
+            return USER_ROLE_INPATIENT_REGISTRAR;
+        case MENU_ROLE_WARD_MANAGER:
+            return USER_ROLE_WARD_MANAGER;
+        case MENU_ROLE_PHARMACY:
+            return USER_ROLE_PHARMACY;
+        default:
+            return USER_ROLE_UNKNOWN;
+    }
+}
+
+static void discard_rest_of_line(FILE *input) {
+    int character = 0;
+
+    while ((character = fgetc(input)) != EOF) {
+        if (character == '\n') {
+            return;
+        }
+    }
+}
+
 static int read_line(char *buffer, size_t capacity) {
     size_t length = 0;
 
@@ -16,6 +47,12 @@ static int read_line(char *buffer, size_t capacity) {
     }
 
     length = strlen(buffer);
+    if (length > 0 && buffer[length - 1] != '\n' && !feof(stdin)) {
+        discard_rest_of_line(stdin);
+        buffer[0] = '\0';
+        return -1;
+    }
+
     if (length > 0 && buffer[length - 1] == '\n') {
         buffer[length - 1] = '\0';
     }
@@ -26,8 +63,10 @@ static int read_line(char *buffer, size_t capacity) {
 int main(void) {
     char menu_text[2048];
     char input[128];
+    char password[128];
     MenuApplication application;
     MenuApplicationPaths paths = {
+        "data/users.txt",
         "data/patients.txt",
         "data/departments.txt",
         "data/doctors.txt",
@@ -60,9 +99,17 @@ int main(void) {
 
         puts(menu_text);
         printf("请选择角色编号: ");
-        if (!read_line(input, sizeof(input))) {
-            puts("输入流结束，系统退出。");
-            return 0;
+        result = Result_make_success("line ready");
+        {
+            int read_result = read_line(input, sizeof(input));
+            if (read_result == 0) {
+                puts("输入流结束，系统退出。");
+                return 0;
+            }
+            if (read_result < 0) {
+                puts("输入过长，请重新输入。");
+                continue;
+            }
         }
 
         result = MenuController_parse_main_selection(input, &role);
@@ -76,6 +123,46 @@ int main(void) {
             return 0;
         }
 
+        {
+            UserRole required_role = role_to_user_role(role);
+            if (required_role == USER_ROLE_UNKNOWN) {
+                puts("角色未配置登录映射。");
+                continue;
+            }
+
+            printf("请输入[%s]用户编号: ", MenuController_role_label(role));
+            {
+                int read_result = read_line(input, sizeof(input));
+                if (read_result == 0) {
+                    puts("输入流结束，系统退出。");
+                    return 0;
+                }
+                if (read_result < 0) {
+                    puts("输入过长，请重新输入。");
+                    continue;
+                }
+            }
+
+            printf("请输入密码: ");
+            {
+                int read_result = read_line(password, sizeof(password));
+                if (read_result == 0) {
+                    puts("输入流结束，系统退出。");
+                    return 0;
+                }
+                if (read_result < 0) {
+                    puts("输入过长，请重新输入。");
+                    continue;
+                }
+            }
+
+            result = MenuApplication_login(&application, input, password, required_role);
+            if (result.success == 0) {
+                printf("登录失败: %s\n", result.message);
+                continue;
+            }
+        }
+
         for (;;) {
             MenuAction action = MENU_ACTION_INVALID;
 
@@ -87,9 +174,16 @@ int main(void) {
 
             puts(menu_text);
             printf("[%s] 请选择操作编号: ", MenuController_role_label(role));
-            if (!read_line(input, sizeof(input))) {
-                puts("输入流结束，系统退出。");
-                return 0;
+            {
+                int read_result = read_line(input, sizeof(input));
+                if (read_result == 0) {
+                    puts("输入流结束，系统退出。");
+                    return 0;
+                }
+                if (read_result < 0) {
+                    puts("输入过长，请重新输入。");
+                    continue;
+                }
             }
 
             result = MenuController_parse_role_selection(role, input, &action);
@@ -108,5 +202,7 @@ int main(void) {
                 printf("操作未完成: %s\n", result.message);
             }
         }
+
+        MenuApplication_logout(&application);
     }
 }

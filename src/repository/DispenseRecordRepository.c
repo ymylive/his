@@ -7,7 +7,7 @@
 #include "repository/RepositoryUtils.h"
 
 static const char DISPENSE_RECORD_REPOSITORY_HEADER[] =
-    "dispense_id|prescription_id|medicine_id|quantity|pharmacist_id|dispensed_at|status";
+    "dispense_id|patient_id|prescription_id|medicine_id|quantity|pharmacist_id|dispensed_at|status";
 
 typedef struct DispenseRecordFindByIdContext {
     const char *dispense_id;
@@ -19,6 +19,15 @@ typedef struct DispenseRecordCollectByPrescriptionContext {
     const char *prescription_id;
     LinkedList *out_records;
 } DispenseRecordCollectByPrescriptionContext;
+
+typedef struct DispenseRecordCollectByPatientContext {
+    const char *patient_id;
+    LinkedList *out_records;
+} DispenseRecordCollectByPatientContext;
+
+typedef struct DispenseRecordLoadContext {
+    LinkedList *out_records;
+} DispenseRecordLoadContext;
 
 static int DispenseRecordRepository_is_empty_text(const char *text) {
     return text == 0 || text[0] == '\0';
@@ -106,6 +115,15 @@ static Result DispenseRecordRepository_validate(const DispenseRecord *record) {
     }
 
     result = DispenseRecordRepository_validate_text_field(record->dispense_id, "dispense_id", 0);
+    if (!result.success) {
+        return result;
+    }
+
+    result = DispenseRecordRepository_validate_text_field(
+        record->patient_id,
+        "patient_id",
+        1
+    );
     if (!result.success) {
         return result;
     }
@@ -205,8 +223,9 @@ static Result DispenseRecordRepository_serialize(
     written = snprintf(
         line,
         capacity,
-        "%s|%s|%s|%d|%s|%s|%d",
+        "%s|%s|%s|%s|%d|%s|%s|%d",
         record->dispense_id,
+        record->patient_id,
         record->prescription_id,
         record->medicine_id,
         record->quantity,
@@ -261,17 +280,22 @@ static Result DispenseRecordRepository_parse_line(
         fields[0]
     );
     DispenseRecordRepository_copy_text(
+        out_record->patient_id,
+        sizeof(out_record->patient_id),
+        fields[1]
+    );
+    DispenseRecordRepository_copy_text(
         out_record->prescription_id,
         sizeof(out_record->prescription_id),
-        fields[1]
+        fields[2]
     );
     DispenseRecordRepository_copy_text(
         out_record->medicine_id,
         sizeof(out_record->medicine_id),
-        fields[2]
+        fields[3]
     );
 
-    result = DispenseRecordRepository_parse_int(fields[3], &out_record->quantity);
+    result = DispenseRecordRepository_parse_int(fields[4], &out_record->quantity);
     if (!result.success) {
         return result;
     }
@@ -279,15 +303,15 @@ static Result DispenseRecordRepository_parse_line(
     DispenseRecordRepository_copy_text(
         out_record->pharmacist_id,
         sizeof(out_record->pharmacist_id),
-        fields[4]
+        fields[5]
     );
     DispenseRecordRepository_copy_text(
         out_record->dispensed_at,
         sizeof(out_record->dispensed_at),
-        fields[5]
+        fields[6]
     );
 
-    result = DispenseRecordRepository_parse_status(fields[6], &out_record->status);
+    result = DispenseRecordRepository_parse_status(fields[7], &out_record->status);
     if (!result.success) {
         return result;
     }
@@ -354,6 +378,65 @@ static Result DispenseRecordRepository_collect_by_prescription_line_handler(
     }
 
     return Result_make_success("dispense collected");
+}
+
+static Result DispenseRecordRepository_collect_by_patient_line_handler(
+    const char *line,
+    void *context
+) {
+    DispenseRecordCollectByPatientContext *collect_context =
+        (DispenseRecordCollectByPatientContext *)context;
+    DispenseRecord record;
+    DispenseRecord *copy = 0;
+    Result result = DispenseRecordRepository_parse_line(line, &record);
+
+    if (!result.success) {
+        return result;
+    }
+
+    if (strcmp(record.patient_id, collect_context->patient_id) != 0) {
+        return Result_make_success("dispense skipped");
+    }
+
+    copy = (DispenseRecord *)malloc(sizeof(*copy));
+    if (copy == 0) {
+        return Result_make_failure("failed to allocate dispense result");
+    }
+
+    *copy = record;
+    if (!LinkedList_append(collect_context->out_records, copy)) {
+        free(copy);
+        return Result_make_failure("failed to append dispense result");
+    }
+
+    return Result_make_success("dispense collected");
+}
+
+static Result DispenseRecordRepository_load_line_handler(
+    const char *line,
+    void *context
+) {
+    DispenseRecordLoadContext *load_context = (DispenseRecordLoadContext *)context;
+    DispenseRecord record;
+    DispenseRecord *copy = 0;
+    Result result = DispenseRecordRepository_parse_line(line, &record);
+
+    if (!result.success) {
+        return result;
+    }
+
+    copy = (DispenseRecord *)malloc(sizeof(*copy));
+    if (copy == 0) {
+        return Result_make_failure("failed to allocate dispense result");
+    }
+
+    *copy = record;
+    if (!LinkedList_append(load_context->out_records, copy)) {
+        free(copy);
+        return Result_make_failure("failed to append dispense result");
+    }
+
+    return Result_make_success("dispense loaded");
 }
 
 Result DispenseRecordRepository_init(DispenseRecordRepository *repository, const char *path) {
@@ -500,6 +583,79 @@ Result DispenseRecordRepository_find_by_prescription_id(
     }
 
     *out_records = matches;
+    return Result_make_success("dispense records loaded");
+}
+
+Result DispenseRecordRepository_find_by_patient_id(
+    const DispenseRecordRepository *repository,
+    const char *patient_id,
+    LinkedList *out_records
+) {
+    DispenseRecordCollectByPatientContext context;
+    LinkedList matches;
+    Result result;
+
+    if (patient_id == 0 || patient_id[0] == '\0' || out_records == 0) {
+        return Result_make_failure("dispense patient query arguments invalid");
+    }
+
+    if (LinkedList_count(out_records) != 0) {
+        return Result_make_failure("output dispense list must be empty");
+    }
+
+    result = DispenseRecordRepository_ensure_storage(repository);
+    if (!result.success) {
+        return result;
+    }
+
+    LinkedList_init(&matches);
+    context.patient_id = patient_id;
+    context.out_records = &matches;
+    result = TextFileRepository_for_each_data_line(
+        &repository->storage,
+        DispenseRecordRepository_collect_by_patient_line_handler,
+        &context
+    );
+    if (!result.success) {
+        DispenseRecordRepository_clear_list(&matches);
+        return result;
+    }
+
+    *out_records = matches;
+    return Result_make_success("dispense records loaded");
+}
+
+Result DispenseRecordRepository_load_all(
+    const DispenseRecordRepository *repository,
+    LinkedList *out_records
+) {
+    DispenseRecordLoadContext context;
+    Result result;
+
+    if (repository == 0 || out_records == 0) {
+        return Result_make_failure("dispense load arguments invalid");
+    }
+
+    if (LinkedList_count(out_records) != 0) {
+        return Result_make_failure("output dispense list must be empty");
+    }
+
+    result = DispenseRecordRepository_ensure_storage(repository);
+    if (!result.success) {
+        return result;
+    }
+
+    context.out_records = out_records;
+    result = TextFileRepository_for_each_data_line(
+        &repository->storage,
+        DispenseRecordRepository_load_line_handler,
+        &context
+    );
+    if (!result.success) {
+        DispenseRecordRepository_clear_list(out_records);
+        return result;
+    }
+
     return Result_make_success("dispense records loaded");
 }
 

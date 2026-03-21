@@ -1,0 +1,1 @@
+examination_id|visit_id|patient_id|doctor_id|exam_item|exam_type|status|result|requested_at|completed_at

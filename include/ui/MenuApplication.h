@@ -7,6 +7,8 @@
 #include "common/Result.h"
 #include "domain/Medicine.h"
 #include "domain/Patient.h"
+#include "domain/User.h"
+#include "service/AuthService.h"
 #include "service/BedService.h"
 #include "service/DoctorService.h"
 #include "service/InpatientService.h"
@@ -17,6 +19,7 @@
 #include "ui/MenuController.h"
 
 typedef struct MenuApplicationPaths {
+    const char *user_path;
     const char *patient_path;
     const char *department_path;
     const char *doctor_path;
@@ -31,6 +34,7 @@ typedef struct MenuApplicationPaths {
 } MenuApplicationPaths;
 
 typedef struct MenuApplication {
+    AuthService auth_service;
     PatientService patient_service;
     DoctorService doctor_service;
     RegistrationRepository registration_repository;
@@ -39,9 +43,25 @@ typedef struct MenuApplication {
     InpatientService inpatient_service;
     BedService bed_service;
     PharmacyService pharmacy_service;
+    User authenticated_user;
+    int has_authenticated_user;
+    char bound_patient_id[HIS_DOMAIN_ID_CAPACITY];
+    int has_bound_patient_session;
 } MenuApplication;
 
 Result MenuApplication_init(MenuApplication *application, const MenuApplicationPaths *paths);
+Result MenuApplication_login(
+    MenuApplication *application,
+    const char *user_id,
+    const char *password,
+    UserRole required_role
+);
+void MenuApplication_logout(MenuApplication *application);
+Result MenuApplication_bind_patient_session(
+    MenuApplication *application,
+    const char *patient_id
+);
+void MenuApplication_reset_patient_session(MenuApplication *application);
 Result MenuApplication_add_patient(
     MenuApplication *application,
     const Patient *patient,
@@ -186,6 +206,7 @@ Result MenuApplication_restock_medicine(
 );
 Result MenuApplication_dispense_medicine(
     MenuApplication *application,
+    const char *patient_id,
     const char *prescription_id,
     const char *medicine_id,
     int quantity,

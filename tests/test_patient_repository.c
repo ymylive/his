@@ -295,10 +295,43 @@ static void test_duplicate_patient_id_is_rejected(void) {
     PatientRepository_clear_loaded_list(&patients);
 }
 
+static void test_load_all_rejects_overlong_persisted_field(void) {
+    char path[TEXT_FILE_REPOSITORY_PATH_CAPACITY];
+    PatientRepository repository;
+    LinkedList patients;
+    char overlong_name[HIS_DOMAIN_NAME_CAPACITY + 32];
+    FILE *file = 0;
+    Result result;
+
+    memset(overlong_name, 'N', sizeof(overlong_name) - 1);
+    overlong_name[sizeof(overlong_name) - 1] = '\0';
+
+    TestPatientRepository_make_path(path, sizeof(path), "reject_overlong");
+    result = PatientRepository_init(&repository, path);
+    assert(result.success == 1);
+
+    file = fopen(path, "w");
+    assert(file != 0);
+    assert(fputs(PATIENT_REPOSITORY_HEADER "\n", file) != EOF);
+    assert(
+        fprintf(
+            file,
+            "PAT0401|%s|1|40|13800000007|ID0401|None|History|0|Remark\n",
+            overlong_name
+        ) > 0
+    );
+    fclose(file);
+
+    LinkedList_init(&patients);
+    result = PatientRepository_load_all(&repository, &patients);
+    assert(result.success == 0);
+}
+
 int main(void) {
     test_append_and_find_by_id();
     test_load_all_reads_back_records();
     test_save_all_rewrites_table();
     test_duplicate_patient_id_is_rejected();
+    test_load_all_rejects_overlong_persisted_field();
     return 0;
 }

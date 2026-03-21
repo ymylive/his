@@ -1,0 +1,1 @@
+registration_id|patient_id|doctor_id|department_id|registered_at|status|diagnosed_at|cancelled_at
