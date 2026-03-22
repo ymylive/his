@@ -255,3 +255,35 @@ add_executable(test_auth_service
 target_link_libraries(test_auth_service PRIVATE his_common)
 
 add_test(NAME test_auth_service COMMAND test_auth_service)
+
+set(HIS_TEST_TARGETS
+    test_result
+    test_common
+    test_domain
+    test_repository_utils
+    test_patient_repository
+    test_doctor_repository
+    test_registration_repository
+    test_doctor_service
+    test_registration_service
+    test_patient_service
+    test_pharmacy_service
+    test_inpatient_domain
+    test_bed_service
+    test_inpatient_service
+    test_medical_record_service
+    test_menu_controller
+    test_menu_application
+    test_desktop_state
+    test_desktop_adapters
+    test_desktop_workflows
+    test_auth_service
+)
+
+foreach(test_target IN LISTS HIS_TEST_TARGETS)
+    if(MSVC)
+        target_compile_options(${test_target} PRIVATE /UNDEBUG)
+    else()
+        target_compile_options(${test_target} PRIVATE -UNDEBUG)
+    endif()
+endforeach()

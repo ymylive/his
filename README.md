@@ -187,6 +187,28 @@ cmake --build build
 ctest --test-dir build --output-on-failure
 ```
 
+## 生成便携发布包
+
+如果需要产出一个可直接解压运行的 Windows 便携发布包，可在项目根目录执行：
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\package-release.ps1
+```
+
+脚本会完成以下动作：
+
+- 以 `Release` 方式配置并编译 `build-release`
+- 运行 `ctest --test-dir build-release --output-on-failure`
+- 运行 `.\build-release\his_desktop.exe --smoke`
+- 在 `dist/` 下生成便携目录与 zip 包，内容包含：
+- `his_desktop.exe`
+- `his.exe`
+- `data/`
+- `README.md`
+- `run_desktop.bat`
+- `run_console.bat`
+- `START_HERE.txt`
+
 ## 桌面控制页
 
 桌面版可执行文件：
