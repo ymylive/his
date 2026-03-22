@@ -45,6 +45,32 @@ Result DesktopAdapters_submit_registration(
     const char *registered_at,
     Registration *out_registration
 );
+Result DesktopAdapters_query_registration(
+    MenuApplication *application,
+    const char *registration_id,
+    char *buffer,
+    size_t capacity
+);
+Result DesktopAdapters_cancel_registration(
+    MenuApplication *application,
+    const char *registration_id,
+    const char *cancelled_at,
+    char *buffer,
+    size_t capacity
+);
+Result DesktopAdapters_query_registrations_by_patient(
+    MenuApplication *application,
+    const char *patient_id,
+    char *buffer,
+    size_t capacity
+);
+Result DesktopAdapters_query_records_by_time_range(
+    MenuApplication *application,
+    const char *time_from,
+    const char *time_to,
+    char *buffer,
+    size_t capacity
+);
 Result DesktopAdapters_query_pending_registrations_by_doctor(
     MenuApplication *application,
     const char *doctor_id,
@@ -128,6 +154,20 @@ Result DesktopAdapters_query_current_patient_by_bed(
     char *buffer,
     size_t capacity
 );
+Result DesktopAdapters_transfer_bed(
+    MenuApplication *application,
+    const char *admission_id,
+    const char *target_bed_id,
+    const char *transferred_at,
+    char *buffer,
+    size_t capacity
+);
+Result DesktopAdapters_discharge_check(
+    MenuApplication *application,
+    const char *admission_id,
+    char *buffer,
+    size_t capacity
+);
 Result DesktopAdapters_add_medicine(
     MenuApplication *application,
     const Medicine *medicine,
@@ -155,6 +195,13 @@ Result DesktopAdapters_dispense_medicine(
 Result DesktopAdapters_query_medicine_stock(
     MenuApplication *application,
     const char *medicine_id,
+    char *buffer,
+    size_t capacity
+);
+Result DesktopAdapters_query_medicine_detail(
+    MenuApplication *application,
+    const char *medicine_id,
+    int include_instruction_note,
     char *buffer,
     size_t capacity
 );

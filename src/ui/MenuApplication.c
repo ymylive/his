@@ -1072,7 +1072,7 @@ Result MenuApplication_discharge_patient(
     );
 }
 
-static Result MenuApplication_transfer_bed(
+Result MenuApplication_transfer_bed(
     MenuApplication *application,
     const char *admission_id,
     const char *target_bed_id,
@@ -2002,7 +2002,7 @@ static Result MenuApplication_list_doctors_by_department(
     return Result_make_success("department doctor list ready");
 }
 
-static Result MenuApplication_query_records_by_time_range(
+Result MenuApplication_query_records_by_time_range(
     MenuApplication *application,
     const char *time_from,
     const char *time_to,
@@ -2036,7 +2036,7 @@ static Result MenuApplication_query_records_by_time_range(
     return result;
 }
 
-static Result MenuApplication_query_medicine_detail(
+Result MenuApplication_query_medicine_detail(
     MenuApplication *application,
     const char *medicine_id,
     char *buffer,
@@ -2078,7 +2078,7 @@ static Result MenuApplication_query_medicine_detail(
     );
 }
 
-static Result MenuApplication_discharge_check(
+Result MenuApplication_discharge_check(
     MenuApplication *application,
     const char *admission_id,
     char *buffer,

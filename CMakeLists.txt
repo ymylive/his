@@ -240,6 +240,14 @@ target_link_libraries(test_desktop_adapters PRIVATE desktop_core)
 
 add_test(NAME test_desktop_adapters COMMAND test_desktop_adapters)
 
+add_executable(test_desktop_workflows
+    tests/test_desktop_workflows.c
+)
+
+target_link_libraries(test_desktop_workflows PRIVATE desktop_core)
+
+add_test(NAME test_desktop_workflows COMMAND test_desktop_workflows)
+
 add_executable(test_auth_service
     tests/test_auth_service.c
 )

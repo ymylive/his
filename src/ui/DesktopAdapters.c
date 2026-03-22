@@ -473,6 +473,105 @@ Result DesktopAdapters_submit_registration(
     );
 }
 
+Result DesktopAdapters_query_registration(
+    MenuApplication *application,
+    const char *registration_id,
+    char *buffer,
+    size_t capacity
+) {
+    Result result = DesktopAdapters_require_output_buffer(
+        application,
+        buffer,
+        capacity,
+        "registration query adapter arguments missing"
+    );
+
+    if (result.success == 0) {
+        return result;
+    }
+
+    return MenuApplication_query_registration(application, registration_id, buffer, capacity);
+}
+
+Result DesktopAdapters_cancel_registration(
+    MenuApplication *application,
+    const char *registration_id,
+    const char *cancelled_at,
+    char *buffer,
+    size_t capacity
+) {
+    Result result = DesktopAdapters_require_output_buffer(
+        application,
+        buffer,
+        capacity,
+        "registration cancel adapter arguments missing"
+    );
+
+    if (result.success == 0) {
+        return result;
+    }
+
+    return MenuApplication_cancel_registration(
+        application,
+        registration_id,
+        cancelled_at,
+        buffer,
+        capacity
+    );
+}
+
+Result DesktopAdapters_query_registrations_by_patient(
+    MenuApplication *application,
+    const char *patient_id,
+    char *buffer,
+    size_t capacity
+) {
+    Result result = DesktopAdapters_require_output_buffer(
+        application,
+        buffer,
+        capacity,
+        "registration patient query adapter arguments missing"
+    );
+
+    if (result.success == 0) {
+        return result;
+    }
+
+    return MenuApplication_query_registrations_by_patient(
+        application,
+        patient_id,
+        buffer,
+        capacity
+    );
+}
+
+Result DesktopAdapters_query_records_by_time_range(
+    MenuApplication *application,
+    const char *time_from,
+    const char *time_to,
+    char *buffer,
+    size_t capacity
+) {
+    Result result = DesktopAdapters_require_output_buffer(
+        application,
+        buffer,
+        capacity,
+        "time range adapter arguments missing"
+    );
+
+    if (result.success == 0) {
+        return result;
+    }
+
+    return MenuApplication_query_records_by_time_range(
+        application,
+        time_from,
+        time_to,
+        buffer,
+        capacity
+    );
+}
+
 Result DesktopAdapters_query_pending_registrations_by_doctor(
     MenuApplication *application,
     const char *doctor_id,
@@ -778,6 +877,55 @@ Result DesktopAdapters_query_current_patient_by_bed(
     );
 }
 
+Result DesktopAdapters_transfer_bed(
+    MenuApplication *application,
+    const char *admission_id,
+    const char *target_bed_id,
+    const char *transferred_at,
+    char *buffer,
+    size_t capacity
+) {
+    Result result = DesktopAdapters_require_output_buffer(
+        application,
+        buffer,
+        capacity,
+        "inpatient transfer adapter arguments missing"
+    );
+
+    if (result.success == 0) {
+        return result;
+    }
+
+    return MenuApplication_transfer_bed(
+        application,
+        admission_id,
+        target_bed_id,
+        transferred_at,
+        buffer,
+        capacity
+    );
+}
+
+Result DesktopAdapters_discharge_check(
+    MenuApplication *application,
+    const char *admission_id,
+    char *buffer,
+    size_t capacity
+) {
+    Result result = DesktopAdapters_require_output_buffer(
+        application,
+        buffer,
+        capacity,
+        "inpatient discharge check adapter arguments missing"
+    );
+
+    if (result.success == 0) {
+        return result;
+    }
+
+    return MenuApplication_discharge_check(application, admission_id, buffer, capacity);
+}
+
 Result DesktopAdapters_add_medicine(
     MenuApplication *application,
     const Medicine *medicine,
@@ -890,6 +1038,33 @@ Result DesktopAdapters_query_medicine_stock(
         medicine_id,
         buffer,
         capacity
+    );
+}
+
+Result DesktopAdapters_query_medicine_detail(
+    MenuApplication *application,
+    const char *medicine_id,
+    int include_instruction_note,
+    char *buffer,
+    size_t capacity
+) {
+    Result result = DesktopAdapters_require_output_buffer(
+        application,
+        buffer,
+        capacity,
+        "pharmacy medicine detail adapter arguments missing"
+    );
+
+    if (result.success == 0) {
+        return result;
+    }
+
+    return MenuApplication_query_medicine_detail(
+        application,
+        medicine_id,
+        buffer,
+        capacity,
+        include_instruction_note
     );
 }
 

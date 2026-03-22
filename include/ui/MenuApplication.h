@@ -108,6 +108,13 @@ Result MenuApplication_query_registrations_by_patient(
     char *buffer,
     size_t capacity
 );
+Result MenuApplication_query_records_by_time_range(
+    MenuApplication *application,
+    const char *time_from,
+    const char *time_to,
+    char *buffer,
+    size_t capacity
+);
 Result MenuApplication_query_pending_registrations_by_doctor(
     MenuApplication *application,
     const char *doctor_id,
@@ -191,6 +198,20 @@ Result MenuApplication_query_current_patient_by_bed(
     char *buffer,
     size_t capacity
 );
+Result MenuApplication_transfer_bed(
+    MenuApplication *application,
+    const char *admission_id,
+    const char *target_bed_id,
+    const char *transferred_at,
+    char *buffer,
+    size_t capacity
+);
+Result MenuApplication_discharge_check(
+    MenuApplication *application,
+    const char *admission_id,
+    char *buffer,
+    size_t capacity
+);
 Result MenuApplication_add_medicine(
     MenuApplication *application,
     const Medicine *medicine,
@@ -220,6 +241,13 @@ Result MenuApplication_query_medicine_stock(
     const char *medicine_id,
     char *buffer,
     size_t capacity
+);
+Result MenuApplication_query_medicine_detail(
+    MenuApplication *application,
+    const char *medicine_id,
+    char *buffer,
+    size_t capacity,
+    int include_instruction_note
 );
 Result MenuApplication_find_low_stock_medicines(
     MenuApplication *application,
