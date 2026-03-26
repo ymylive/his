@@ -167,8 +167,9 @@ void DesktopAppState_login_success(DesktopAppState *state, const User *user) {
 
     state->current_user = *user;
     state->logged_in = 1;
+    state->workbench_page = 0;
     state->current_page = DesktopApp_home_page_for_role(user->role);
-    state->login_form.password[0] = '\0';
+    memset(state->login_form.password, 0, sizeof(state->login_form.password));
     state->dashboard.loaded = 0;
     DesktopApp_clear_patient_page(&state->patient_page);
     DesktopApp_clear_registration_page(&state->registration_page);
@@ -194,7 +195,7 @@ void DesktopAppState_logout(DesktopAppState *state) {
     state->logged_in = 0;
     state->current_page = DESKTOP_PAGE_LOGIN;
     state->should_close = 0;
-    state->login_form.password[0] = '\0';
+    memset(state->login_form.password, 0, sizeof(state->login_form.password));
 }
 
 void DesktopAppState_set_page(DesktopAppState *state, DesktopPage page) {

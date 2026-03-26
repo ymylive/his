@@ -202,6 +202,48 @@ static int InpatientService_has_active_admission_for_bed(
     return 0;
 }
 
+static Result InpatientService_next_admission_sequence_from_list(
+    const LinkedList *admissions,
+    int *out_sequence
+) {
+    LinkedListNode *current = 0;
+    int max_sequence = 0;
+
+    if (out_sequence == 0) {
+        return Result_make_failure("admission sequence output missing");
+    }
+
+    current = admissions->head;
+    while (current != 0) {
+        const Admission *admission = (const Admission *)current->data;
+        const char *suffix = admission->admission_id + strlen(INPATIENT_SERVICE_ID_PREFIX);
+        char *end_pointer = 0;
+        long value = 0;
+
+        if (strncmp(
+                admission->admission_id,
+                INPATIENT_SERVICE_ID_PREFIX,
+                strlen(INPATIENT_SERVICE_ID_PREFIX)
+            ) != 0) {
+            return Result_make_failure("admission id format invalid");
+        }
+
+        value = strtol(suffix, &end_pointer, 10);
+        if (end_pointer == suffix || end_pointer == 0 || *end_pointer != '\0' || value < 0) {
+            return Result_make_failure("admission id format invalid");
+        }
+
+        if ((int)value > max_sequence) {
+            max_sequence = (int)value;
+        }
+
+        current = current->next;
+    }
+
+    *out_sequence = max_sequence + 1;
+    return Result_make_success("admission sequence ready");
+}
+
 static Result InpatientService_next_admission_sequence(
     InpatientService *service,
     int *out_sequence
@@ -422,7 +464,7 @@ Result InpatientService_admit_patient(
         return Result_make_failure("bed not assignable");
     }
 
-    result = InpatientService_next_admission_sequence(service, &next_sequence);
+    result = InpatientService_next_admission_sequence_from_list(&admissions, &next_sequence);
     if (result.success == 0) {
         InpatientService_clear_all(&patients, &wards, &beds, &admissions);
         return result;

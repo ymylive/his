@@ -3,7 +3,7 @@
 
 #include "domain/DomainTypes.h"
 
-#define HIS_USER_PASSWORD_HASH_CAPACITY 65
+#define HIS_USER_PASSWORD_HASH_CAPACITY 98
 
 typedef enum UserRole {
     USER_ROLE_UNKNOWN = 0,

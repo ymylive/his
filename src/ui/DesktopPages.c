@@ -10,6 +10,7 @@
 #include "raygui.h"
 
 #include "ui/DesktopAdapters.h"
+#include "ui/Workbench.h"
 
 static const char *DESKTOP_ROLE_OPTIONS =
     "患者;医生;系统管理员;挂号员;住院登记员;病区管理员;药房人员";
@@ -328,6 +329,7 @@ static void DesktopPages_draw_login(DesktopApp *app) {
 }
 
 static void DesktopPages_draw_topbar(DesktopApp *app) {
+    const WorkbenchDef *wb = Workbench_get(app->state.current_user.role);
     Rectangle rect = { 0.0f, 0.0f, (float)GetScreenWidth(), (float)app->theme.topbar_height };
     Rectangle logout_button = {
         (float)(GetScreenWidth() - 110),
@@ -346,6 +348,8 @@ static void DesktopPages_draw_topbar(DesktopApp *app) {
     }
 
     DrawRectangleRec(rect, app->theme.panel_alt);
+    /* Accent bar at top */
+    DrawRectangle(0, 0, GetScreenWidth(), 3, wb != 0 ? wb->accent : app->theme.nav_active);
     DrawLine(0, app->theme.topbar_height - 1, GetScreenWidth(), app->theme.topbar_height - 1, app->theme.border);
     DrawText("Lightweight HIS Desktop", 24, 22, 28, app->theme.text_primary);
     DrawText(
@@ -368,55 +372,7 @@ static void DesktopPages_draw_topbar(DesktopApp *app) {
     }
 }
 
-static void DesktopPages_draw_sidebar(DesktopApp *app) {
-    const DesktopPage pages[] = {
-        DESKTOP_PAGE_DASHBOARD,
-        DESKTOP_PAGE_PATIENTS,
-        DESKTOP_PAGE_REGISTRATION,
-        DESKTOP_PAGE_DOCTOR,
-        DESKTOP_PAGE_INPATIENT,
-        DESKTOP_PAGE_PHARMACY,
-        DESKTOP_PAGE_DISPENSE,
-        DESKTOP_PAGE_SYSTEM
-    };
-    const int page_count = (int)(sizeof(pages) / sizeof(pages[0]));
-    int i = 0;
-    int visible_index = 0;
-
-    DrawRectangle(0, app->theme.topbar_height, app->theme.sidebar_width, GetScreenHeight(), app->theme.nav_background);
-    DrawLine(app->theme.sidebar_width - 1, app->theme.topbar_height, app->theme.sidebar_width - 1, GetScreenHeight(), app->theme.border);
-
-    if (DesktopPages_page_visible_for_role(app->state.current_user.role, app->state.current_page) == 0) {
-        DesktopAppState_set_page(&app->state, DESKTOP_PAGE_DASHBOARD);
-    }
-
-    for (i = 0; i < page_count; i++) {
-        const int is_visible = DesktopPages_page_visible_for_role(app->state.current_user.role, pages[i]);
-        Rectangle button = {
-            18.0f,
-            (float)(app->theme.topbar_height + 18 + visible_index * 58),
-            (float)(app->theme.sidebar_width - 36),
-            42.0f
-        };
-
-        if (is_visible == 0) {
-            continue;
-        }
-
-        if (app->state.current_page == pages[i]) {
-            DrawRectangleRounded(button, 0.2f, 8, app->theme.nav_active);
-        }
-
-        if (GuiButton(button, DesktopApp_page_label(pages[i]))) {
-            DesktopAppState_set_page(&app->state, pages[i]);
-            if (pages[i] == DESKTOP_PAGE_DASHBOARD) {
-                app->state.dashboard.loaded = 0;
-            }
-        }
-
-        visible_index++;
-    }
-}
+/* Old sidebar removed - now using Workbench_draw_sidebar */
 
 static void DesktopPages_draw_dashboard(DesktopApp *app, Rectangle panel) {
     Rectangle cards[4];
@@ -1253,6 +1209,7 @@ static void DesktopPages_draw_system(const DesktopApp *app, Rectangle panel) {
 
 void DesktopPages_draw(DesktopApp *app) {
     Rectangle panel;
+    const WorkbenchDef *wb;
 
     if (app == 0) {
         return;
@@ -1264,38 +1221,14 @@ void DesktopPages_draw(DesktopApp *app) {
         return;
     }
 
+    wb = Workbench_get(app->state.current_user.role);
+
     DesktopPages_draw_topbar(app);
-    DesktopPages_draw_sidebar(app);
+    Workbench_draw_sidebar(app, wb);
     DesktopPages_draw_message_bar(app);
 
     panel = DesktopPages_main_panel(app);
-    switch (app->state.current_page) {
-        case DESKTOP_PAGE_DASHBOARD:
-            DesktopPages_draw_dashboard(app, panel);
-            break;
-        case DESKTOP_PAGE_PATIENTS:
-            DesktopPages_draw_patients(app, panel);
-            break;
-        case DESKTOP_PAGE_REGISTRATION:
-            DesktopPages_draw_registration(app, panel);
-            break;
-        case DESKTOP_PAGE_DOCTOR:
-            DesktopPages_draw_doctor(app, panel);
-            break;
-        case DESKTOP_PAGE_INPATIENT:
-            DesktopPages_draw_inpatient(app, panel);
-            break;
-        case DESKTOP_PAGE_PHARMACY:
-            DesktopPages_draw_pharmacy(app, panel);
-            break;
-        case DESKTOP_PAGE_DISPENSE:
-            DesktopPages_draw_dispense(app, panel);
-            break;
-        case DESKTOP_PAGE_SYSTEM:
-            DesktopPages_draw_system(app, panel);
-            break;
-        default:
-            DesktopPages_draw_dashboard(app, panel);
-            break;
+    if (wb != 0 && wb->draw != 0) {
+        wb->draw(app, panel, app->state.workbench_page);
     }
 }

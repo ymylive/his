@@ -17,6 +17,7 @@ add_library(his_common
     src/common/InputHelper.c
     src/common/LinkedList.c
     src/common/Result.c
+    src/common/StringUtils.c
     src/domain/Admission.c
     src/domain/Bed.c
     src/domain/DispenseRecord.c
@@ -66,6 +67,14 @@ add_library(desktop_core
     src/ui/DesktopTheme.c
     src/ui/DesktopPages.c
     src/ui/DesktopAdapters.c
+    src/ui/WorkbenchCommon.c
+    src/ui/workbench/AdminWorkbench.c
+    src/ui/workbench/ClerkWorkbench.c
+    src/ui/workbench/DoctorWorkbench.c
+    src/ui/workbench/PatientWorkbench.c
+    src/ui/workbench/InpatientWorkbench.c
+    src/ui/workbench/WardWorkbench.c
+    src/ui/workbench/PharmacyWorkbench.c
 )
 
 target_include_directories(desktop_core

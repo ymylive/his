@@ -157,6 +157,7 @@ int main(void) {
             }
 
             result = MenuApplication_login(&application, input, password, required_role);
+            memset(password, 0, sizeof(password));
             if (result.success == 0) {
                 printf("登录失败: %s\n", result.message);
                 continue;

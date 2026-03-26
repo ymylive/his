@@ -309,6 +309,53 @@ static Result RegistrationService_validate_related_entities(
     return Result_make_success("related entities valid");
 }
 
+static Result RegistrationService_next_sequence_from_list(
+    const LinkedList *registrations,
+    int *out_sequence
+) {
+    LinkedListNode *current = 0;
+    int max_sequence = 0;
+
+    if (out_sequence == 0) {
+        return Result_make_failure("registration sequence output missing");
+    }
+
+    current = registrations->head;
+    while (current != 0) {
+        const Registration *registration = (const Registration *)current->data;
+        const char *suffix = registration->registration_id;
+        char *end = 0;
+        long value = 0;
+
+        if (strncmp(
+                registration->registration_id,
+                REGISTRATION_SERVICE_ID_PREFIX,
+                strlen(REGISTRATION_SERVICE_ID_PREFIX)) != 0) {
+            return Result_make_failure("registration id format invalid");
+        }
+
+        suffix += strlen(REGISTRATION_SERVICE_ID_PREFIX);
+        if (!RegistrationService_has_text(suffix)) {
+            return Result_make_failure("registration id format invalid");
+        }
+
+        errno = 0;
+        value = strtol(suffix, &end, 10);
+        if (errno != 0 || end == suffix || end == 0 || *end != '\0' || value < 0) {
+            return Result_make_failure("registration id format invalid");
+        }
+
+        if ((int)value > max_sequence) {
+            max_sequence = (int)value;
+        }
+
+        current = current->next;
+    }
+
+    *out_sequence = max_sequence + 1;
+    return Result_make_success("registration sequence ready");
+}
+
 static Result RegistrationService_next_registration_sequence(
     RegistrationService *service,
     int *out_sequence
@@ -471,6 +518,8 @@ Result RegistrationService_create(
     const char *registered_at,
     Registration *out_registration
 ) {
+    LinkedList registrations;
+    Registration *copy = 0;
     char registration_id[HIS_DOMAIN_ID_CAPACITY];
     int next_sequence = 0;
     Result result;
@@ -493,8 +542,14 @@ Result RegistrationService_create(
         return result;
     }
 
-    result = RegistrationService_next_registration_sequence(service, &next_sequence);
+    result = RegistrationService_load_all_registrations(service, &registrations);
     if (!result.success) {
+        return result;
+    }
+
+    result = RegistrationService_next_sequence_from_list(&registrations, &next_sequence);
+    if (!result.success) {
+        RegistrationRepository_clear_list(&registrations);
         return result;
     }
 
@@ -504,6 +559,7 @@ Result RegistrationService_create(
             REGISTRATION_SERVICE_ID_PREFIX,
             next_sequence,
             REGISTRATION_SERVICE_ID_WIDTH)) {
+        RegistrationRepository_clear_list(&registrations);
         return Result_make_failure("failed to generate registration id");
     }
 
@@ -516,13 +572,29 @@ Result RegistrationService_create(
         registered_at
     );
     if (!result.success) {
+        RegistrationRepository_clear_list(&registrations);
         return result;
     }
 
-    return RegistrationRepository_append(
+    copy = (Registration *)malloc(sizeof(*copy));
+    if (copy == 0) {
+        RegistrationRepository_clear_list(&registrations);
+        return Result_make_failure("failed to allocate registration");
+    }
+
+    *copy = *out_registration;
+    if (!LinkedList_append(&registrations, copy)) {
+        free(copy);
+        RegistrationRepository_clear_list(&registrations);
+        return Result_make_failure("failed to append registration");
+    }
+
+    result = RegistrationRepository_save_all(
         service->registration_repository,
-        out_registration
+        &registrations
     );
+    RegistrationRepository_clear_list(&registrations);
+    return result;
 }
 
 Result RegistrationService_find_by_registration_id(

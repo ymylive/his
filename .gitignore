@@ -3,3 +3,4 @@ build-release/
 dist/
 third_party/raylib/
 .worktrees/
+.superpowers/

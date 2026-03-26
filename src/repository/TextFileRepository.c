@@ -10,7 +10,7 @@
 #define HIS_MKDIR(path) _mkdir(path)
 #else
 #include <sys/types.h>
-#define HIS_MKDIR(path) mkdir(path, 0777)
+#define HIS_MKDIR(path) mkdir(path, 0750)
 #endif
 
 #include "repository/RepositoryUtils.h"
@@ -170,6 +170,7 @@ Result TextFileRepository_init(TextFileRepository *repository, const char *path)
     }
 
     strcpy(repository->path, path);
+    repository->initialized = 0;
     return Result_make_success("repository ready");
 }
 
@@ -179,6 +180,10 @@ Result TextFileRepository_ensure_file_exists(const TextFileRepository *repositor
 
     if (!TextFileRepository_has_path(repository)) {
         return Result_make_failure("repository not initialized");
+    }
+
+    if (repository->initialized) {
+        return Result_make_success("repository file ready");
     }
 
     result = TextFileRepository_create_parent_directories(repository->path);
@@ -192,6 +197,7 @@ Result TextFileRepository_ensure_file_exists(const TextFileRepository *repositor
     }
 
     fclose(file);
+    ((TextFileRepository *)repository)->initialized = 1;
     return Result_make_success("repository file ready");
 }
 
@@ -248,4 +254,56 @@ Result TextFileRepository_append_line(
 
     fclose(file);
     return Result_make_success("repository line appended");
+}
+
+Result TextFileRepository_save_file(
+    const TextFileRepository *repository,
+    const char *content
+) {
+    char tmp_path[TEXT_FILE_REPOSITORY_PATH_CAPACITY + 8];
+    FILE *file = 0;
+    Result result;
+
+    if (content == 0) {
+        return Result_make_failure("content missing");
+    }
+
+    result = TextFileRepository_ensure_file_exists(repository);
+    if (result.success == 0) {
+        return result;
+    }
+
+    if (snprintf(tmp_path, sizeof(tmp_path), "%s.tmp", repository->path) >= (int)sizeof(tmp_path)) {
+        return Result_make_failure("repository path too long for temp file");
+    }
+
+    file = fopen(tmp_path, "w");
+    if (file == 0) {
+        return Result_make_failure("failed to open temp file");
+    }
+
+    if (fputs(content, file) == EOF) {
+        fclose(file);
+        remove(tmp_path);
+        return Result_make_failure("failed to write temp file");
+    }
+
+    if (ferror(file) != 0) {
+        fclose(file);
+        remove(tmp_path);
+        return Result_make_failure("temp file write error");
+    }
+
+    fclose(file);
+
+#if defined(_WIN32)
+    remove(repository->path);
+#endif
+
+    if (rename(tmp_path, repository->path) != 0) {
+        remove(tmp_path);
+        return Result_make_failure("failed to replace repository file");
+    }
+
+    return Result_make_success("repository file saved");
 }

@@ -152,6 +152,7 @@ typedef struct DesktopAppState {
     User current_user;
     int logged_in;
     int should_close;
+    int workbench_page;
 } DesktopAppState;
 
 typedef struct DesktopApp {

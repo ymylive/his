@@ -339,6 +339,49 @@ static void *MedicalRecordService_remove_node(
     return data;
 }
 
+static Result MedicalRecordService_next_visit_sequence_from_list(
+    const LinkedList *visits,
+    int *out_sequence
+) {
+    LinkedListNode *current = 0;
+    int max_sequence = 0;
+
+    if (out_sequence == 0) {
+        return Result_make_failure("visit sequence output missing");
+    }
+
+    current = visits->head;
+    while (current != 0) {
+        const VisitRecord *record = (const VisitRecord *)current->data;
+        const char *suffix = record->visit_id + strlen(MEDICAL_RECORD_VISIT_ID_PREFIX);
+        char *end_pointer = 0;
+        long value = 0;
+
+        if (strncmp(
+                record->visit_id,
+                MEDICAL_RECORD_VISIT_ID_PREFIX,
+                strlen(MEDICAL_RECORD_VISIT_ID_PREFIX)
+            ) != 0) {
+            return Result_make_failure("visit id format invalid");
+        }
+
+        errno = 0;
+        value = strtol(suffix, &end_pointer, 10);
+        if (errno != 0 || end_pointer == suffix || end_pointer == 0 || *end_pointer != '\0') {
+            return Result_make_failure("visit id format invalid");
+        }
+
+        if ((int)value > max_sequence) {
+            max_sequence = (int)value;
+        }
+
+        current = current->next;
+    }
+
+    *out_sequence = max_sequence + 1;
+    return Result_make_success("visit sequence ready");
+}
+
 static Result MedicalRecordService_next_visit_sequence(
     MedicalRecordService *service,
     int *out_sequence
@@ -390,6 +433,49 @@ static Result MedicalRecordService_next_visit_sequence(
     VisitRecordRepository_clear_list(&visits);
     *out_sequence = max_sequence + 1;
     return Result_make_success("visit sequence ready");
+}
+
+static Result MedicalRecordService_next_examination_sequence_from_list(
+    const LinkedList *examinations,
+    int *out_sequence
+) {
+    LinkedListNode *current = 0;
+    int max_sequence = 0;
+
+    if (out_sequence == 0) {
+        return Result_make_failure("exam sequence output missing");
+    }
+
+    current = examinations->head;
+    while (current != 0) {
+        const ExaminationRecord *record = (const ExaminationRecord *)current->data;
+        const char *suffix = record->examination_id + strlen(MEDICAL_RECORD_EXAM_ID_PREFIX);
+        char *end_pointer = 0;
+        long value = 0;
+
+        if (strncmp(
+                record->examination_id,
+                MEDICAL_RECORD_EXAM_ID_PREFIX,
+                strlen(MEDICAL_RECORD_EXAM_ID_PREFIX)
+            ) != 0) {
+            return Result_make_failure("exam id format invalid");
+        }
+
+        errno = 0;
+        value = strtol(suffix, &end_pointer, 10);
+        if (errno != 0 || end_pointer == suffix || end_pointer == 0 || *end_pointer != '\0') {
+            return Result_make_failure("exam id format invalid");
+        }
+
+        if ((int)value > max_sequence) {
+            max_sequence = (int)value;
+        }
+
+        current = current->next;
+    }
+
+    *out_sequence = max_sequence + 1;
+    return Result_make_success("exam sequence ready");
 }
 
 static Result MedicalRecordService_next_examination_sequence(
@@ -654,7 +740,7 @@ Result MedicalRecordService_create_visit_record(
         return Result_make_failure("registration already has visit record");
     }
 
-    result = MedicalRecordService_next_visit_sequence(service, &next_sequence);
+    result = MedicalRecordService_next_visit_sequence_from_list(&visits, &next_sequence);
     if (result.success == 0) {
         VisitRecordRepository_clear_list(&visits);
         RegistrationRepository_clear_list(&registrations);
@@ -970,7 +1056,7 @@ Result MedicalRecordService_create_examination_record(
         return Result_make_failure("visit not found");
     }
 
-    result = MedicalRecordService_next_examination_sequence(service, &next_sequence);
+    result = MedicalRecordService_next_examination_sequence_from_list(&examinations, &next_sequence);
     if (result.success == 0) {
         ExaminationRecordRepository_clear_list(&examinations);
         VisitRecordRepository_clear_list(&visits);

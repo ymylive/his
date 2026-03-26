@@ -3,7 +3,9 @@
 #include <ctype.h>
 #include <stdint.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
+#include <time.h>
 
 #include "repository/RepositoryUtils.h"
 
@@ -49,8 +51,20 @@ static Result AuthService_validate_text(const char *text, const char *field_name
     return Result_make_success("text valid");
 }
 
+static void AuthService_generate_salt(char *salt_hex, size_t capacity) {
+    unsigned int seed = (unsigned int)(time(NULL) ^ clock());
+    int i = 0;
+
+    (void)capacity;
+    srand(seed);
+    for (i = 0; i < 16; i++) {
+        snprintf(salt_hex + i * 2, 3, "%02x", rand() % 256);
+    }
+}
+
 static Result AuthService_hash_password(
     const char *password,
+    const char *salt_hex,
     char *out_hash,
     size_t out_hash_capacity
 ) {
@@ -59,6 +73,8 @@ static Result AuthService_hash_password(
     uint64_t h3 = UINT64_C(7809847782465536322);
     uint64_t h4 = UINT64_C(9650029242287828579);
     size_t index = 0;
+    size_t salt_len = 0;
+    int iteration = 0;
     int written = 0;
     Result result = AuthService_validate_text(password, "password");
 
@@ -70,28 +86,53 @@ static Result AuthService_hash_password(
         return Result_make_failure("password hash buffer too small");
     }
 
-    while (password[index] != '\0') {
-        unsigned char value = (unsigned char)password[index];
+    if (salt_hex == 0 || strlen(salt_hex) != 32) {
+        return Result_make_failure("salt must be 32 hex characters");
+    }
 
-        h1 ^= (uint64_t)(value + 17U);
+    /* Mix salt into initial state */
+    salt_len = strlen(salt_hex);
+    for (index = 0; index < salt_len; index++) {
+        unsigned char value = (unsigned char)salt_hex[index];
+        h1 ^= (uint64_t)(value + 7U);
         h1 *= UINT64_C(1099511628211);
-
-        h2 ^= (uint64_t)(value + 37U);
+        h2 ^= (uint64_t)(value + 13U);
         h2 *= UINT64_C(1469598103934665603);
+    }
 
-        h3 ^= (uint64_t)(value + 73U);
-        h3 *= UINT64_C(1099511628211);
+    /* 1000 iterations of password mixing */
+    for (iteration = 0; iteration < 1000; iteration++) {
+        index = 0;
+        while (password[index] != '\0') {
+            unsigned char value = (unsigned char)password[index];
 
-        h4 ^= (uint64_t)(value + 131U);
-        h4 *= UINT64_C(1469598103934665603);
+            h1 ^= (uint64_t)(value + 17U);
+            h1 *= UINT64_C(1099511628211);
 
-        index++;
+            h2 ^= (uint64_t)(value + 37U);
+            h2 *= UINT64_C(1469598103934665603);
+
+            h3 ^= (uint64_t)(value + 73U);
+            h3 *= UINT64_C(1099511628211);
+
+            h4 ^= (uint64_t)(value + 131U);
+            h4 *= UINT64_C(1469598103934665603);
+
+            index++;
+        }
+
+        /* Feed back between rounds */
+        h1 ^= h4;
+        h2 ^= h3;
+        h3 ^= h1;
+        h4 ^= h2;
     }
 
     written = snprintf(
         out_hash,
         out_hash_capacity,
-        "%016llx%016llx%016llx%016llx",
+        "%s$%016llx%016llx%016llx%016llx",
+        salt_hex,
         (unsigned long long)h1,
         (unsigned long long)h2,
         (unsigned long long)h3,
@@ -147,6 +188,7 @@ Result AuthService_register_user(
 ) {
     User user;
     Patient patient;
+    char salt_hex[33];
     Result result;
 
     if (service == 0) {
@@ -183,7 +225,10 @@ Result AuthService_register_user(
     user.user_id[sizeof(user.user_id) - 1] = '\0';
     user.role = role;
 
-    result = AuthService_hash_password(password, user.password_hash, sizeof(user.password_hash));
+    memset(salt_hex, 0, sizeof(salt_hex));
+    AuthService_generate_salt(salt_hex, sizeof(salt_hex));
+
+    result = AuthService_hash_password(password, salt_hex, user.password_hash, sizeof(user.password_hash));
     if (result.success == 0) {
         return result;
     }
@@ -200,7 +245,12 @@ Result AuthService_authenticate(
 ) {
     User loaded_user;
     char password_hash[HIS_USER_PASSWORD_HASH_CAPACITY];
+    char extracted_salt[33];
+    const char *dummy_salt = "00000000000000000000000000000000";
+    const char *dollar_pos = 0;
+    int user_found = 0;
     Result result;
+    Result find_result;
 
     if (service == 0 || out_user == 0) {
         return Result_make_failure("auth arguments missing");
@@ -220,14 +270,36 @@ Result AuthService_authenticate(
         return Result_make_failure("required role invalid");
     }
 
-    result = UserRepository_find_by_user_id(&service->user_repository, user_id, &loaded_user);
-    if (result.success == 0) {
-        return Result_make_failure("invalid credentials");
+    memset(&loaded_user, 0, sizeof(loaded_user));
+    find_result = UserRepository_find_by_user_id(&service->user_repository, user_id, &loaded_user);
+    user_found = find_result.success;
+
+    /* Extract salt from stored hash, or use dummy salt for timing protection */
+    memset(extracted_salt, 0, sizeof(extracted_salt));
+    if (user_found != 0) {
+        dollar_pos = strchr(loaded_user.password_hash, '$');
+        if (dollar_pos != 0 && (dollar_pos - loaded_user.password_hash) == 32) {
+            memcpy(extracted_salt, loaded_user.password_hash, 32);
+            extracted_salt[32] = '\0';
+        } else {
+            /* Malformed stored hash -- treat as not found */
+            user_found = 0;
+            strncpy(extracted_salt, dummy_salt, 32);
+            extracted_salt[32] = '\0';
+        }
+    } else {
+        strncpy(extracted_salt, dummy_salt, 32);
+        extracted_salt[32] = '\0';
     }
 
-    result = AuthService_hash_password(password, password_hash, sizeof(password_hash));
+    /* Always compute hash to prevent timing side-channel */
+    result = AuthService_hash_password(password, extracted_salt, password_hash, sizeof(password_hash));
     if (result.success == 0) {
         return result;
+    }
+
+    if (user_found == 0) {
+        return Result_make_failure("invalid credentials");
     }
 
     if (strcmp(loaded_user.password_hash, password_hash) != 0) {

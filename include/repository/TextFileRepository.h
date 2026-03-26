@@ -8,6 +8,7 @@
 
 typedef struct TextFileRepository {
     char path[TEXT_FILE_REPOSITORY_PATH_CAPACITY];
+    int initialized;
 } TextFileRepository;
 
 typedef Result (*TextFileRepositoryLineHandler)(const char *line, void *context);
@@ -27,6 +28,10 @@ Result TextFileRepository_for_each_data_line(
 Result TextFileRepository_append_line(
     const TextFileRepository *repository,
     const char *line
+);
+Result TextFileRepository_save_file(
+    const TextFileRepository *repository,
+    const char *content
 );
 
 #endif
