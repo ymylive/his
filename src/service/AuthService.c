@@ -145,6 +145,76 @@ static Result AuthService_hash_password(
     return Result_make_success("password hashed");
 }
 
+static Result AuthService_hash_password_legacy(
+    const char *password,
+    char *out_hash,
+    size_t out_hash_capacity
+) {
+    uint64_t h1 = UINT64_C(1469598103934665603);
+    uint64_t h2 = UINT64_C(1099511628211);
+    uint64_t h3 = UINT64_C(7809847782465536322);
+    uint64_t h4 = UINT64_C(9650029242287828579);
+    size_t index = 0;
+    int written = 0;
+    Result result = AuthService_validate_text(password, "password");
+
+    if (result.success == 0) {
+        return result;
+    }
+
+    if (out_hash == 0 || out_hash_capacity < HIS_USER_PASSWORD_HASH_CAPACITY) {
+        return Result_make_failure("password hash buffer too small");
+    }
+
+    while (password[index] != '\0') {
+        unsigned char value = (unsigned char)password[index];
+
+        h1 ^= (uint64_t)(value + 17U);
+        h1 *= UINT64_C(1099511628211);
+
+        h2 ^= (uint64_t)(value + 37U);
+        h2 *= UINT64_C(1469598103934665603);
+
+        h3 ^= (uint64_t)(value + 73U);
+        h3 *= UINT64_C(1099511628211);
+
+        h4 ^= (uint64_t)(value + 131U);
+        h4 *= UINT64_C(1469598103934665603);
+
+        index++;
+    }
+
+    written = snprintf(
+        out_hash,
+        out_hash_capacity,
+        "%016llx%016llx%016llx%016llx",
+        (unsigned long long)h1,
+        (unsigned long long)h2,
+        (unsigned long long)h3,
+        (unsigned long long)h4
+    );
+    if (written != 64) {
+        return Result_make_failure("password hash formatting failed");
+    }
+
+    return Result_make_success("password hashed");
+}
+
+static int AuthService_is_salted_password_hash(const char *stored_hash) {
+    const char *dollar_pos = 0;
+
+    if (stored_hash == 0) {
+        return 0;
+    }
+
+    dollar_pos = strchr(stored_hash, '$');
+    return dollar_pos != 0 && (dollar_pos - stored_hash) == 32;
+}
+
+static int AuthService_is_legacy_password_hash(const char *stored_hash) {
+    return stored_hash != 0 && strchr(stored_hash, '$') == 0 && strlen(stored_hash) == 64;
+}
+
 static int AuthService_is_path_provided(const char *path) {
     return path != 0 && path[0] != '\0';
 }
@@ -245,10 +315,8 @@ Result AuthService_authenticate(
 ) {
     User loaded_user;
     char password_hash[HIS_USER_PASSWORD_HASH_CAPACITY];
-    char extracted_salt[33];
-    const char *dummy_salt = "00000000000000000000000000000000";
-    const char *dollar_pos = 0;
-    int user_found = 0;
+    char extracted_salt[33] = "00000000000000000000000000000000";
+    int user_hash_format_known = 0;
     Result result;
     Result find_result;
 
@@ -272,33 +340,27 @@ Result AuthService_authenticate(
 
     memset(&loaded_user, 0, sizeof(loaded_user));
     find_result = UserRepository_find_by_user_id(&service->user_repository, user_id, &loaded_user);
-    user_found = find_result.success;
-
-    /* Extract salt from stored hash, or use dummy salt for timing protection */
-    memset(extracted_salt, 0, sizeof(extracted_salt));
-    if (user_found != 0) {
-        dollar_pos = strchr(loaded_user.password_hash, '$');
-        if (dollar_pos != 0 && (dollar_pos - loaded_user.password_hash) == 32) {
+    memset(password_hash, 0, sizeof(password_hash));
+    if (find_result.success != 0) {
+        if (AuthService_is_salted_password_hash(loaded_user.password_hash)) {
             memcpy(extracted_salt, loaded_user.password_hash, 32);
             extracted_salt[32] = '\0';
+            result = AuthService_hash_password(password, extracted_salt, password_hash, sizeof(password_hash));
+            user_hash_format_known = 1;
+        } else if (AuthService_is_legacy_password_hash(loaded_user.password_hash)) {
+            result = AuthService_hash_password_legacy(password, password_hash, sizeof(password_hash));
+            user_hash_format_known = 1;
         } else {
-            /* Malformed stored hash -- treat as not found */
-            user_found = 0;
-            strncpy(extracted_salt, dummy_salt, 32);
-            extracted_salt[32] = '\0';
+            result = AuthService_hash_password(password, extracted_salt, password_hash, sizeof(password_hash));
         }
     } else {
-        strncpy(extracted_salt, dummy_salt, 32);
-        extracted_salt[32] = '\0';
+        result = AuthService_hash_password(password, extracted_salt, password_hash, sizeof(password_hash));
     }
-
-    /* Always compute hash to prevent timing side-channel */
-    result = AuthService_hash_password(password, extracted_salt, password_hash, sizeof(password_hash));
     if (result.success == 0) {
         return result;
     }
 
-    if (user_found == 0) {
+    if (find_result.success == 0 || user_hash_format_known == 0) {
         return Result_make_failure("invalid credentials");
     }
 
