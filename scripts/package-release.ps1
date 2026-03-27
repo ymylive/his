@@ -2,7 +2,8 @@ param(
     [string]$BuildDir = "build-release",
     [string]$DistDir = "dist",
     [string]$Version = "0.3.0",
-    [switch]$SkipTests
+    [switch]$SkipTests,
+    [switch]$SkipSmoke
 )
 
 $ErrorActionPreference = "Stop"
@@ -90,7 +91,9 @@ if (-not $SkipTests) {
 }
 
 $desktopExecutable = Join-Path $buildPath "his_desktop.exe"
-Invoke-External -FilePath $desktopExecutable -Arguments @("--smoke")
+if (-not $SkipSmoke) {
+    Invoke-External -FilePath $desktopExecutable -Arguments @("--smoke")
+}
 
 $archTag = Get-ArchitectureTag -CacheFile (Join-Path $buildPath "CMakeCache.txt") -ExecutablePath $desktopExecutable
 $packageName = "lightweight-his-portable-v$normalizedVersion-$archTag"

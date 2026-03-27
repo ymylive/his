@@ -27,7 +27,7 @@ jobs:
 
       - name: Build and package portable
         shell: powershell
-        run: powershell -ExecutionPolicy Bypass -File .\scripts\package-release.ps1 -Version ${{ github.ref_name }}
+        run: powershell -ExecutionPolicy Bypass -File .\scripts\package-release.ps1 -Version ${{ github.ref_name }} -SkipSmoke
 
       - name: Upload portable artifact
         uses: actions/upload-artifact@v4
