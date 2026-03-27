@@ -49,32 +49,27 @@ static void draw_home(DesktopApp *app, Rectangle panel) {
     const WorkbenchDef *wb = Workbench_get(USER_ROLE_INPATIENT_REGISTRAR);
     const char *labels[4] = { "今日入院", "今日出院", "待办理入院", "待办理出院" };
     const char *values[4] = { "--", "--", "--", "--" };
-    int clicked = 0;
+    WorkbenchButtonGroupLayout actions;
+    int index = 0;
 
     Workbench_draw_home_cards(app, panel, labels, values, wb->accent);
 
     Workbench_draw_section_header(app, (int)panel.x, (int)panel.y + 110, "快捷操作");
-
-    Workbench_draw_quick_action_btn(
-        app,
-        (Rectangle){ panel.x, panel.y + 148, 160, 40 },
-        "入院登记", wb->accent, &clicked
+    actions = Workbench_compute_button_group_layout(
+        (Rectangle){ panel.x, panel.y + 148.0f, panel.width, 40.0f },
+        3,
+        160.0f,
+        40.0f,
+        14.0f
     );
-    if (clicked) { app->state.workbench_page = 1; }
-
-    Workbench_draw_quick_action_btn(
-        app,
-        (Rectangle){ panel.x + 178, panel.y + 148, 160, 40 },
-        "出院办理", wb->accent, &clicked
-    );
-    if (clicked) { app->state.workbench_page = 2; }
-
-    Workbench_draw_quick_action_btn(
-        app,
-        (Rectangle){ panel.x + 356, panel.y + 148, 160, 40 },
-        "住院查询", wb->accent, &clicked
-    );
-    if (clicked) { app->state.workbench_page = 3; }
+    for (index = 0; index < actions.count; index++) {
+        int clicked = 0;
+        const char *label = index == 0 ? "入院登记" : index == 1 ? "出院办理" : "住院查询";
+        Workbench_draw_quick_action_btn(app, actions.buttons[index], label, wb->accent, &clicked);
+        if (clicked) {
+            app->state.workbench_page = index + 1;
+        }
+    }
 }
 
 /* ── Page 1: Admit ── */

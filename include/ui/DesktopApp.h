@@ -18,8 +18,15 @@ typedef enum DesktopPage {
     DESKTOP_PAGE_SYSTEM = 5,
     DESKTOP_PAGE_DOCTOR = 6,
     DESKTOP_PAGE_INPATIENT = 7,
-    DESKTOP_PAGE_PHARMACY = 8
+    DESKTOP_PAGE_PHARMACY = 8,
+    DESKTOP_PAGE_COUNT = 9
 } DesktopPage;
+
+typedef enum DesktopPageFreshness {
+    DESKTOP_FRESHNESS_CLEAN = 0,
+    DESKTOP_FRESHNESS_DIRTY = 1,
+    DESKTOP_FRESHNESS_STALE = 2
+} DesktopPageFreshness;
 
 typedef enum DesktopMessageKind {
     DESKTOP_MESSAGE_NONE = 0,
@@ -153,6 +160,8 @@ typedef struct DesktopAppState {
     int logged_in;
     int should_close;
     int workbench_page;
+    DesktopPageFreshness page_freshness[DESKTOP_PAGE_COUNT];
+    unsigned char page_snapshots[DESKTOP_PAGE_COUNT];
 } DesktopAppState;
 
 typedef struct DesktopApp {
@@ -199,6 +208,14 @@ int DesktopApp_resolve_data_path(
     char *out_path,
     size_t out_path_size
 );
+int DesktopApp_min_width(void);
+int DesktopApp_min_height(void);
+void DesktopApp_mark_dirty(DesktopAppState *state, DesktopPage page);
+void DesktopApp_mark_stale(DesktopAppState *state, DesktopPage page);
+void DesktopApp_mark_clean(DesktopAppState *state, DesktopPage page);
+void DesktopApp_mark_reload_failed(DesktopAppState *state, DesktopPage page);
+void DesktopApp_record_page_snapshot(DesktopAppState *state, DesktopPage page);
+int DesktopApp_page_has_snapshot(const DesktopAppState *state, DesktopPage page);
 int DesktopApp_run(const DesktopAppConfig *config);
 
 #endif

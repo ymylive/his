@@ -362,6 +362,141 @@ static void test_clerk_flow_add_query_patient_and_registration(void) {
     assert(strstr(output, "DOC0001") != 0);
 }
 
+static void test_patient_self_registration_requires_session_and_tracks_duplicates(void) {
+    MenuApplicationTestContext context;
+    MenuApplication application;
+    Registration first_registration;
+    Registration second_registration;
+    char output[1024];
+    Result result;
+
+    setup_context(&context, "self_registration");
+    seed_department_and_doctor(&context);
+    seed_patient(&context, "PAT5101", "SelfRegistered", 0);
+    seed_patient(&context, "PAT5102", "OtherPatient", 0);
+    seed_user_account(&context, "PAT5101", "self-pass", USER_ROLE_PATIENT);
+
+    result = MenuApplication_init(&application, &context.paths);
+    assert(result.success == 1);
+
+    memset(&first_registration, 0, sizeof(first_registration));
+    result = MenuApplication_create_self_registration(
+        &application,
+        "DOC0001",
+        "DEP0001",
+        "2026-03-21T08:00",
+        &first_registration
+    );
+    assert(result.success == 0);
+    assert(strstr(result.message, "session") != 0);
+
+    result = MenuApplication_login(&application, "PAT5101", "self-pass", USER_ROLE_PATIENT);
+    assert(result.success == 1);
+
+    result = MenuApplication_create_self_registration(
+        &application,
+        "DOC0001",
+        "DEP0001",
+        "2026-03-21T08:05",
+        &first_registration
+    );
+    assert(result.success == 1);
+    assert(strcmp(first_registration.registration_id, "REG0001") == 0);
+    assert(strcmp(first_registration.patient_id, "PAT5101") == 0);
+
+    memset(&second_registration, 0, sizeof(second_registration));
+    result = MenuApplication_create_self_registration(
+        &application,
+        "DOC0001",
+        "DEP0001",
+        "2026-03-21T08:10",
+        &second_registration
+    );
+    assert(result.success == 1);
+    assert(strcmp(second_registration.registration_id, "REG0002") == 0);
+    assert(strcmp(second_registration.patient_id, "PAT5101") == 0);
+
+    memset(output, 0, sizeof(output));
+    result = MenuApplication_query_registrations_by_patient(
+        &application,
+        "PAT5101",
+        output,
+        sizeof(output)
+    );
+    assert(result.success == 1);
+    assert(strstr(output, "count=2") != 0);
+    assert(strstr(output, "REG0001") != 0);
+    assert(strstr(output, "REG0002") != 0);
+}
+
+static void test_menu_application_lists_departments_and_creates_visit_handoff(void) {
+    MenuApplicationTestContext context;
+    MenuApplication application;
+    MenuApplicationVisitHandoff handoff;
+    char output[1024];
+    Result result;
+
+    setup_context(&context, "department_and_handoff");
+    seed_department_and_doctor(&context);
+    seed_patient(&context, "PAT5201", "VisitPatient", 0);
+
+    result = MenuApplication_init(&application, &context.paths);
+    assert(result.success == 1);
+
+    memset(output, 0, sizeof(output));
+    result = MenuApplication_list_departments(&application, output, sizeof(output));
+    assert(result.success == 1);
+    assert(strstr(output, "DEP0001") != 0);
+    assert(strstr(output, "Internal") != 0);
+
+    memset(output, 0, sizeof(output));
+    result = MenuApplication_list_doctors_by_department(
+        &application,
+        "DEP0001",
+        output,
+        sizeof(output)
+    );
+    assert(result.success == 1);
+    assert(strstr(output, "DOC0001") != 0);
+    assert(strstr(output, "Dr.Alice") != 0);
+
+    result = MenuApplication_create_registration(
+        &application,
+        "PAT5201",
+        "DOC0001",
+        "DEP0001",
+        "2026-03-21T09:00",
+        output,
+        sizeof(output)
+    );
+    assert(result.success == 1);
+
+    memset(&handoff, 0, sizeof(handoff));
+    result = MenuApplication_create_visit_record_handoff(
+        &application,
+        "REG0001",
+        "Fever",
+        "Influenza",
+        "Admit and dispense",
+        1,
+        1,
+        1,
+        "2026-03-21T09:20",
+        &handoff
+    );
+    assert(result.success == 1);
+    assert(strcmp(handoff.visit_id, "VIS0001") == 0);
+    assert(strcmp(handoff.registration_id, "REG0001") == 0);
+    assert(strcmp(handoff.patient_id, "PAT5201") == 0);
+    assert(strcmp(handoff.doctor_id, "DOC0001") == 0);
+    assert(strcmp(handoff.department_id, "DEP0001") == 0);
+    assert(strcmp(handoff.diagnosis, "Influenza") == 0);
+    assert(strcmp(handoff.advice, "Admit and dispense") == 0);
+    assert(handoff.need_exam == 1);
+    assert(handoff.need_admission == 1);
+    assert(handoff.need_medicine == 1);
+}
+
 static void test_doctor_flow_create_visit_and_query_history(void) {
     MenuApplicationTestContext context;
     MenuApplication application;
@@ -1720,6 +1855,8 @@ static void test_execute_action_ward_discharge_check_reports_ready_status(void) 
 
 int main(void) {
     test_clerk_flow_add_query_patient_and_registration();
+    test_patient_self_registration_requires_session_and_tracks_duplicates();
+    test_menu_application_lists_departments_and_creates_visit_handoff();
     test_doctor_flow_create_visit_and_query_history();
     test_inpatient_flow_list_admit_and_discharge();
     test_pharmacy_flow_add_restock_dispense_and_low_stock();

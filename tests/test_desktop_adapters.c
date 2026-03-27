@@ -584,9 +584,190 @@ static void test_business_helpers_wrap_menu_application_apis(void) {
     assert(strstr(output, "MEDD010") != 0);
 }
 
+static void test_self_registration_listing_and_handoff_bridges(void) {
+    DesktopAdapterTestContext context;
+    MenuApplication application;
+    User user;
+    Registration first_registration;
+    Registration second_registration;
+    MenuApplicationVisitHandoff handoff;
+    char output[1024];
+    Result result;
+
+    setup_context(&context, "desktop_self_registration");
+    seed_patient(&context, "PATD020", "SelfDesktopPatient");
+    seed_department_and_doctor(&context);
+    seed_user_account(&context, "PATD020", "desktop-self-pass", USER_ROLE_PATIENT);
+
+    result = DesktopAdapters_init_application(&application, &context.paths);
+    assert(result.success == 1);
+
+    memset(&first_registration, 0, sizeof(first_registration));
+    result = DesktopAdapters_submit_self_registration(
+        &application,
+        "DOC0001",
+        "DEP0001",
+        "2026-03-21T15:00",
+        &first_registration
+    );
+    assert(result.success == 0);
+    assert(strstr(result.message, "session") != 0);
+
+    result = DesktopAdapters_login(
+        &application,
+        "PATD020",
+        "desktop-self-pass",
+        USER_ROLE_PATIENT,
+        &user
+    );
+    assert(result.success == 1);
+    assert(strcmp(user.user_id, "PATD020") == 0);
+
+    result = DesktopAdapters_submit_self_registration(
+        &application,
+        "DOC0001",
+        "DEP0001",
+        "2026-03-21T15:05",
+        &first_registration
+    );
+    assert(result.success == 1);
+    assert(strcmp(first_registration.registration_id, "REG0001") == 0);
+    assert(strcmp(first_registration.patient_id, "PATD020") == 0);
+
+    memset(&second_registration, 0, sizeof(second_registration));
+    result = DesktopAdapters_submit_self_registration(
+        &application,
+        "DOC0001",
+        "DEP0001",
+        "2026-03-21T15:10",
+        &second_registration
+    );
+    assert(result.success == 1);
+    assert(strcmp(second_registration.registration_id, "REG0002") == 0);
+    assert(strcmp(second_registration.patient_id, "PATD020") == 0);
+
+    memset(output, 0, sizeof(output));
+    result = DesktopAdapters_query_registrations_by_patient(
+        &application,
+        "PATD020",
+        output,
+        sizeof(output)
+    );
+    assert(result.success == 1);
+    assert(strstr(output, "count=2") != 0);
+
+    memset(output, 0, sizeof(output));
+    result = DesktopAdapters_list_departments(&application, output, sizeof(output));
+    assert(result.success == 1);
+    assert(strstr(output, "DEP0001") != 0);
+    assert(strstr(output, "General") != 0);
+
+    memset(output, 0, sizeof(output));
+    result = DesktopAdapters_list_doctors_by_department(
+        &application,
+        "DEP0001",
+        output,
+        sizeof(output)
+    );
+    assert(result.success == 1);
+    assert(strstr(output, "DOC0001") != 0);
+    assert(strstr(output, "DesktopDoctor") != 0);
+
+    memset(&handoff, 0, sizeof(handoff));
+    result = DesktopAdapters_create_visit_record_handoff(
+        &application,
+        "REG0001",
+        "Cough",
+        "Bronchitis",
+        "Dispense and consider admission",
+        1,
+        1,
+        1,
+        "2026-03-21T15:30",
+        &handoff
+    );
+    assert(result.success == 1);
+    assert(strcmp(handoff.visit_id, "VIS0001") == 0);
+    assert(strcmp(handoff.patient_id, "PATD020") == 0);
+    assert(handoff.need_admission == 1);
+    assert(handoff.need_medicine == 1);
+}
+
+static void test_admin_maintenance_bridges(void) {
+    DesktopAdapterTestContext context;
+    MenuApplication application;
+    PatientRepository patient_repository;
+    Patient deleted_patient;
+    Department department = {
+        "DEP9001",
+        "Oncology",
+        "Floor 9",
+        "Cancer care"
+    };
+    Doctor doctor = {
+        "DOC9001",
+        "DesktopAdminDoctor",
+        "Chief",
+        "DEP9001",
+        "Wed AM",
+        DOCTOR_STATUS_ACTIVE
+    };
+    char output[1024];
+    Result result;
+
+    setup_context(&context, "desktop_admin_maintenance");
+    seed_patient(&context, "PATD030", "DeleteTarget");
+
+    result = DesktopAdapters_init_application(&application, &context.paths);
+    assert(result.success == 1);
+
+    result = PatientRepository_init(&patient_repository, context.patient_path);
+    assert(result.success == 1);
+
+    memset(output, 0, sizeof(output));
+    result = DesktopAdapters_add_department(&application, &department, output, sizeof(output));
+    assert(result.success == 1);
+    assert(strstr(output, "DEP9001") != 0);
+
+    strcpy(department.name, "Oncology Center");
+    memset(output, 0, sizeof(output));
+    result = DesktopAdapters_update_department(&application, &department, output, sizeof(output));
+    assert(result.success == 1);
+    assert(strstr(output, "Oncology Center") != 0);
+
+    memset(output, 0, sizeof(output));
+    result = DesktopAdapters_add_doctor(&application, &doctor, output, sizeof(output));
+    assert(result.success == 1);
+    assert(strstr(output, "DOC9001") != 0);
+
+    memset(output, 0, sizeof(output));
+    result = DesktopAdapters_query_doctor(&application, "DOC9001", output, sizeof(output));
+    assert(result.success == 1);
+    assert(strstr(output, "DesktopAdminDoctor") != 0);
+    assert(strstr(output, "DEP9001") != 0);
+
+    memset(output, 0, sizeof(output));
+    result = DesktopAdapters_list_doctors_by_department(
+        &application,
+        "DEP9001",
+        output,
+        sizeof(output)
+    );
+    assert(result.success == 1);
+    assert(strstr(output, "DOC9001") != 0);
+
+    memset(output, 0, sizeof(output));
+    result = DesktopAdapters_delete_patient(&application, "PATD030", output, sizeof(output));
+    assert(result.success == 1);
+    assert(strstr(output, "PATD030") != 0);
+    assert(PatientRepository_find_by_id(&patient_repository, "PATD030", &deleted_patient).success == 0);
+}
+
 int main(void) {
     test_login_and_patient_search();
     test_dashboard_loads_recent_data();
     test_business_helpers_wrap_menu_application_apis();
+    test_self_registration_listing_and_handoff_bridges();
+    test_admin_maintenance_bridges();
     return 0;
 }

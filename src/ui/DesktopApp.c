@@ -8,6 +8,26 @@
 #include "ui/DesktopAdapters.h"
 #include "ui/DesktopPages.h"
 
+static const int DESKTOP_APP_MIN_WIDTH = 1366;
+static const int DESKTOP_APP_MIN_HEIGHT = 768;
+
+static int DesktopApp_page_is_valid(DesktopPage page) {
+    return page >= DESKTOP_PAGE_LOGIN && page < DESKTOP_PAGE_COUNT;
+}
+
+static void DesktopApp_reset_page_tracking(DesktopAppState *state) {
+    int page = 0;
+
+    if (state == 0) {
+        return;
+    }
+
+    for (page = 0; page < DESKTOP_PAGE_COUNT; page++) {
+        state->page_freshness[page] = DESKTOP_FRESHNESS_CLEAN;
+        state->page_snapshots[page] = 0;
+    }
+}
+
 static void DesktopApp_clear_dashboard(DesktopDashboardState *dashboard) {
     if (dashboard == 0) {
         return;
@@ -131,6 +151,59 @@ int DesktopApp_resolve_data_path(
     );
 }
 
+int DesktopApp_min_width(void) {
+    return DESKTOP_APP_MIN_WIDTH;
+}
+
+int DesktopApp_min_height(void) {
+    return DESKTOP_APP_MIN_HEIGHT;
+}
+
+void DesktopApp_mark_dirty(DesktopAppState *state, DesktopPage page) {
+    if (state == 0 || DesktopApp_page_is_valid(page) == 0) {
+        return;
+    }
+
+    state->page_freshness[page] = DESKTOP_FRESHNESS_DIRTY;
+}
+
+void DesktopApp_mark_stale(DesktopAppState *state, DesktopPage page) {
+    if (state == 0 || DesktopApp_page_is_valid(page) == 0) {
+        return;
+    }
+
+    state->page_freshness[page] = DESKTOP_FRESHNESS_STALE;
+}
+
+void DesktopApp_mark_clean(DesktopAppState *state, DesktopPage page) {
+    if (state == 0 || DesktopApp_page_is_valid(page) == 0) {
+        return;
+    }
+
+    state->page_freshness[page] = DESKTOP_FRESHNESS_CLEAN;
+}
+
+void DesktopApp_mark_reload_failed(DesktopAppState *state, DesktopPage page) {
+    DesktopApp_mark_stale(state, page);
+}
+
+void DesktopApp_record_page_snapshot(DesktopAppState *state, DesktopPage page) {
+    if (state == 0 || DesktopApp_page_is_valid(page) == 0) {
+        return;
+    }
+
+    state->page_snapshots[page] = 1;
+    state->page_freshness[page] = DESKTOP_FRESHNESS_CLEAN;
+}
+
+int DesktopApp_page_has_snapshot(const DesktopAppState *state, DesktopPage page) {
+    if (state == 0 || DesktopApp_page_is_valid(page) == 0) {
+        return 0;
+    }
+
+    return state->page_snapshots[page] != 0 ? 1 : 0;
+}
+
 void DesktopAppState_init(DesktopAppState *state) {
     if (state == 0) {
         return;
@@ -144,6 +217,7 @@ void DesktopAppState_init(DesktopAppState *state) {
     LinkedList_init(&state->dashboard.recent_dispensations);
     LinkedList_init(&state->patient_page.results);
     LinkedList_init(&state->dispense_page.results);
+    DesktopApp_reset_page_tracking(state);
 }
 
 void DesktopAppState_dispose(DesktopAppState *state) {
@@ -169,6 +243,7 @@ void DesktopAppState_login_success(DesktopAppState *state, const User *user) {
     state->logged_in = 1;
     state->workbench_page = 0;
     state->current_page = DesktopApp_home_page_for_role(user->role);
+    DesktopApp_reset_page_tracking(state);
     memset(state->login_form.password, 0, sizeof(state->login_form.password));
     state->dashboard.loaded = 0;
     DesktopApp_clear_patient_page(&state->patient_page);
@@ -196,10 +271,11 @@ void DesktopAppState_logout(DesktopAppState *state) {
     state->current_page = DESKTOP_PAGE_LOGIN;
     state->should_close = 0;
     memset(state->login_form.password, 0, sizeof(state->login_form.password));
+    DesktopApp_reset_page_tracking(state);
 }
 
 void DesktopAppState_set_page(DesktopAppState *state, DesktopPage page) {
-    if (state == 0) {
+    if (state == 0 || DesktopApp_page_is_valid(page) == 0) {
         return;
     }
 
@@ -334,6 +410,8 @@ int DesktopApp_run(const DesktopAppConfig *config) {
     DesktopApp app;
     Result result;
     char loaded_font_path[260];
+    int window_width = 0;
+    int window_height = 0;
 
     if (config == 0 || config->paths == 0) {
         return 1;
@@ -352,11 +430,14 @@ int DesktopApp_run(const DesktopAppConfig *config) {
     }
 
     SetConfigFlags(FLAG_WINDOW_RESIZABLE | FLAG_VSYNC_HINT | FLAG_WINDOW_HIGHDPI | FLAG_MSAA_4X_HINT);
+    window_width = config->width > DesktopApp_min_width() ? config->width : DesktopApp_min_width();
+    window_height = config->height > DesktopApp_min_height() ? config->height : DesktopApp_min_height();
     InitWindow(
-        config->width > 0 ? config->width : 1600,
-        config->height > 0 ? config->height : 960,
+        window_width,
+        window_height,
         config->title != 0 ? config->title : "Lightweight HIS Desktop"
     );
+    SetWindowMinSize(DesktopApp_min_width(), DesktopApp_min_height());
     SetTargetFPS(60);
     DesktopTheme_apply_raygui_style(&app.theme);
     if (DesktopTheme_enable_cjk_font(40, loaded_font_path, sizeof(loaded_font_path)) == 0) {

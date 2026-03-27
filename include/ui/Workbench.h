@@ -26,6 +26,41 @@ typedef struct WorkbenchDef {
     WorkbenchDrawFn draw;
 } WorkbenchDef;
 
+typedef enum WorkbenchActionLayoutMode {
+    WORKBENCH_ACTION_LAYOUT_ROW = 0,
+    WORKBENCH_ACTION_LAYOUT_STACK = 1
+} WorkbenchActionLayoutMode;
+
+#define WORKBENCH_LAYOUT_BUTTON_MAX 8
+
+typedef struct WorkbenchButtonGroupLayout {
+    Rectangle buttons[WORKBENCH_LAYOUT_BUTTON_MAX];
+    int count;
+    float gap;
+    WorkbenchActionLayoutMode mode;
+} WorkbenchButtonGroupLayout;
+
+typedef struct WorkbenchInfoRowLayout {
+    Rectangle label_bounds;
+    Rectangle value_bounds;
+    float gap;
+    int wrap_lines;
+} WorkbenchInfoRowLayout;
+
+typedef struct WorkbenchTextPanelLayout {
+    Rectangle title_bounds;
+    Rectangle content_bounds;
+    float wrap_width;
+    float gap;
+} WorkbenchTextPanelLayout;
+
+typedef struct WorkbenchListDetailLayout {
+    Rectangle list_bounds;
+    Rectangle detail_bounds;
+    float gap;
+    int is_stacked;
+} WorkbenchListDetailLayout;
+
 /* Registry */
 const WorkbenchDef *Workbench_get(UserRole role);
 
@@ -54,6 +89,30 @@ void Workbench_draw_info_row(
 void Workbench_draw_home_cards(
     const DesktopApp *app, Rectangle panel,
     const char *labels[4], const char *values[4], Color accent
+);
+WorkbenchButtonGroupLayout Workbench_compute_button_group_layout(
+    Rectangle bounds,
+    int button_count,
+    float min_button_width,
+    float button_height,
+    float preferred_gap
+);
+WorkbenchInfoRowLayout Workbench_compute_info_row_layout(
+    Rectangle bounds,
+    float label_width,
+    float preferred_gap
+);
+WorkbenchTextPanelLayout Workbench_compute_text_panel_layout(
+    Rectangle bounds,
+    float padding,
+    float title_height,
+    float content_gap
+);
+WorkbenchListDetailLayout Workbench_compute_list_detail_layout(
+    Rectangle bounds,
+    float list_ratio,
+    float preferred_gap,
+    float min_column_width
 );
 
 /* PLACEHOLDER_WORKBENCH_DECLS */

@@ -78,6 +78,7 @@ function Write-Launcher {
 $projectRoot = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
 $buildPath = Join-Path $projectRoot $BuildDir
 $distPath = Join-Path $projectRoot $DistDir
+$normalizedVersion = if ($Version.StartsWith("v")) { $Version.Substring(1) } else { $Version }
 
 New-Item -ItemType Directory -Force -Path $distPath | Out-Null
 
@@ -92,7 +93,7 @@ $desktopExecutable = Join-Path $buildPath "his_desktop.exe"
 Invoke-External -FilePath $desktopExecutable -Arguments @("--smoke")
 
 $archTag = Get-ArchitectureTag -CacheFile (Join-Path $buildPath "CMakeCache.txt") -ExecutablePath $desktopExecutable
-$packageName = "lightweight-his-portable-v$Version-$archTag"
+$packageName = "lightweight-his-portable-v$normalizedVersion-$archTag"
 $stagePath = Join-Path $distPath $packageName
 $zipPath = Join-Path $distPath "$packageName.zip"
 
@@ -124,7 +125,7 @@ Write-Launcher -Path (Join-Path $stagePath "run_console.bat") -Lines @(
 )
 
 $startHere = @"
-Lightweight HIS Portable v$Version
+Lightweight HIS Portable v$normalizedVersion
 
 Start desktop:
   run_desktop.bat

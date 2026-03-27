@@ -39,6 +39,24 @@ static Result MenuApplication_validate_required_text(
     return Result_make_success("text valid");
 }
 
+static void MenuApplication_copy_text(
+    char *destination,
+    size_t capacity,
+    const char *source
+) {
+    if (destination == 0 || capacity == 0) {
+        return;
+    }
+
+    if (source == 0) {
+        destination[0] = '\0';
+        return;
+    }
+
+    strncpy(destination, source, capacity - 1);
+    destination[capacity - 1] = '\0';
+}
+
 static void MenuApplication_clear_patient_session_state(MenuApplication *application) {
     if (application == 0) {
         return;
@@ -214,6 +232,56 @@ static const char *MenuApplication_admission_status_label(AdmissionStatus status
         default:
             return "未知";
     }
+}
+
+static void MenuApplication_fill_visit_handoff(
+    const VisitRecord *record,
+    MenuApplicationVisitHandoff *out_handoff
+) {
+    if (record == 0 || out_handoff == 0) {
+        return;
+    }
+
+    memset(out_handoff, 0, sizeof(*out_handoff));
+    MenuApplication_copy_text(out_handoff->visit_id, sizeof(out_handoff->visit_id), record->visit_id);
+    MenuApplication_copy_text(
+        out_handoff->registration_id,
+        sizeof(out_handoff->registration_id),
+        record->registration_id
+    );
+    MenuApplication_copy_text(
+        out_handoff->patient_id,
+        sizeof(out_handoff->patient_id),
+        record->patient_id
+    );
+    MenuApplication_copy_text(
+        out_handoff->doctor_id,
+        sizeof(out_handoff->doctor_id),
+        record->doctor_id
+    );
+    MenuApplication_copy_text(
+        out_handoff->department_id,
+        sizeof(out_handoff->department_id),
+        record->department_id
+    );
+    MenuApplication_copy_text(
+        out_handoff->diagnosis,
+        sizeof(out_handoff->diagnosis),
+        record->diagnosis
+    );
+    MenuApplication_copy_text(
+        out_handoff->advice,
+        sizeof(out_handoff->advice),
+        record->advice
+    );
+    out_handoff->need_exam = record->need_exam;
+    out_handoff->need_admission = record->need_admission;
+    out_handoff->need_medicine = record->need_medicine;
+    MenuApplication_copy_text(
+        out_handoff->visit_time,
+        sizeof(out_handoff->visit_time),
+        record->visit_time
+    );
 }
 
 Result MenuApplication_init(MenuApplication *application, const MenuApplicationPaths *paths) {
@@ -562,6 +630,33 @@ Result MenuApplication_create_registration(
     );
 }
 
+Result MenuApplication_create_self_registration(
+    MenuApplication *application,
+    const char *doctor_id,
+    const char *department_id,
+    const char *registered_at,
+    Registration *out_registration
+) {
+    Result result = MenuApplication_require_patient_session(application);
+
+    if (out_registration == 0) {
+        return Result_make_failure("self registration output missing");
+    }
+
+    if (result.success == 0) {
+        return result;
+    }
+
+    return RegistrationService_create(
+        &application->registration_service,
+        application->bound_patient_id,
+        doctor_id,
+        department_id,
+        registered_at,
+        out_registration
+    );
+}
+
 Result MenuApplication_query_registration(
     MenuApplication *application,
     const char *registration_id,
@@ -764,8 +859,55 @@ Result MenuApplication_create_visit_record(
     char *buffer,
     size_t capacity
 ) {
+    MenuApplicationVisitHandoff handoff;
+    Result result = MenuApplication_create_visit_record_handoff(
+        application,
+        registration_id,
+        chief_complaint,
+        diagnosis,
+        advice,
+        need_exam,
+        need_admission,
+        need_medicine,
+        visit_time,
+        &handoff
+    );
+
+    if (result.success == 0) {
+        return MenuApplication_write_failure(result.message, buffer, capacity);
+    }
+
+    return MenuApplication_write_text(
+        buffer,
+        capacity,
+        "看诊记录已创建: %s | 挂号=%s | 患者=%s | 诊断=%s",
+        handoff.visit_id,
+        handoff.registration_id,
+        handoff.patient_id,
+        handoff.diagnosis
+    );
+}
+
+Result MenuApplication_create_visit_record_handoff(
+    MenuApplication *application,
+    const char *registration_id,
+    const char *chief_complaint,
+    const char *diagnosis,
+    const char *advice,
+    int need_exam,
+    int need_admission,
+    int need_medicine,
+    const char *visit_time,
+    MenuApplicationVisitHandoff *out_handoff
+) {
     VisitRecord record;
-    Result result = MedicalRecordService_create_visit_record(
+    Result result;
+
+    if (application == 0 || out_handoff == 0) {
+        return Result_make_failure("visit handoff arguments missing");
+    }
+
+    result = MedicalRecordService_create_visit_record(
         &application->medical_record_service,
         registration_id,
         chief_complaint,
@@ -777,20 +919,12 @@ Result MenuApplication_create_visit_record(
         visit_time,
         &record
     );
-
     if (result.success == 0) {
-        return MenuApplication_write_failure(result.message, buffer, capacity);
+        return result;
     }
 
-    return MenuApplication_write_text(
-        buffer,
-        capacity,
-        "看诊记录已创建: %s | 挂号=%s | 患者=%s | 诊断=%s",
-        record.visit_id,
-        record.registration_id,
-        record.patient_id,
-        record.diagnosis
-    );
+    MenuApplication_fill_visit_handoff(&record, out_handoff);
+    return Result_make_success("visit handoff ready");
 }
 
 Result MenuApplication_query_patient_history(
@@ -1826,7 +1960,7 @@ static Result MenuApplication_prompt_doctor_form(
     return Result_make_success("doctor form ready");
 }
 
-static Result MenuApplication_delete_patient(
+Result MenuApplication_delete_patient(
     MenuApplication *application,
     const char *patient_id,
     char *buffer,
@@ -1841,7 +1975,67 @@ static Result MenuApplication_delete_patient(
     return MenuApplication_write_text(buffer, capacity, "患者已删除: %s", patient_id);
 }
 
-static Result MenuApplication_add_department(
+Result MenuApplication_list_departments(
+    MenuApplication *application,
+    char *buffer,
+    size_t capacity
+) {
+    LinkedList departments;
+    const LinkedListNode *current = 0;
+    size_t used = 0;
+    Result result;
+
+    if (application == 0) {
+        return Result_make_failure("menu application missing");
+    }
+
+    result = DepartmentRepository_load_all(
+        &application->doctor_service.department_repository,
+        &departments
+    );
+    if (result.success == 0) {
+        return MenuApplication_write_failure(result.message, buffer, capacity);
+    }
+
+    result = MenuApplication_write_text(
+        buffer,
+        capacity,
+        "科室列表(%zu)",
+        LinkedList_count(&departments)
+    );
+    if (result.success == 0) {
+        DepartmentRepository_clear_list(&departments);
+        return result;
+    }
+
+    used = strlen(buffer);
+    current = departments.head;
+    while (current != 0) {
+        const Department *department = (const Department *)current->data;
+
+        result = MenuApplication_append_text(
+            buffer,
+            capacity,
+            &used,
+            "\n%s | %s | 位置=%s | 描述=%s",
+            department->department_id,
+            department->name,
+            department->location,
+            department->description
+        );
+        if (result.success == 0) {
+            DepartmentRepository_clear_list(&departments);
+            return result;
+        }
+
+        current = current->next;
+    }
+
+    DepartmentRepository_clear_list(&departments);
+    return Result_make_success("department list ready");
+}
+
+Result MenuApplication_add_department(
     MenuApplication *application,
     const Department *department,
     char *buffer,
@@ -1869,7 +2063,7 @@ static Result MenuApplication_add_department(
     );
 }
 
-static Result MenuApplication_update_department(
+Result MenuApplication_update_department(
     MenuApplication *application,
     const Department *department,
     char *buffer,
@@ -1897,7 +2091,7 @@ static Result MenuApplication_update_department(
     );
 }
 
-static Result MenuApplication_add_doctor(
+Result MenuApplication_add_doctor(
     MenuApplication *application,
     const Doctor *doctor,
     char *buffer,
@@ -1919,7 +2113,7 @@ static Result MenuApplication_add_doctor(
     );
 }
 
-static Result MenuApplication_query_doctor(
+Result MenuApplication_query_doctor(
     MenuApplication *application,
     const char *doctor_id,
     char *buffer,
@@ -1944,7 +2138,7 @@ static Result MenuApplication_query_doctor(
     );
 }
 
-static Result MenuApplication_list_doctors_by_department(
+Result MenuApplication_list_doctors_by_department(
     MenuApplication *application,
     const char *department_id,
     char *buffer,

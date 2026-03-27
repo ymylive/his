@@ -5,6 +5,8 @@
 #include <stdio.h>
 
 #include "common/Result.h"
+#include "domain/Department.h"
+#include "domain/Doctor.h"
 #include "domain/Medicine.h"
 #include "domain/Patient.h"
 #include "domain/User.h"
@@ -49,6 +51,20 @@ typedef struct MenuApplication {
     int has_bound_patient_session;
 } MenuApplication;
 
+typedef struct MenuApplicationVisitHandoff {
+    char visit_id[HIS_DOMAIN_ID_CAPACITY];
+    char registration_id[HIS_DOMAIN_ID_CAPACITY];
+    char patient_id[HIS_DOMAIN_ID_CAPACITY];
+    char doctor_id[HIS_DOMAIN_ID_CAPACITY];
+    char department_id[HIS_DOMAIN_ID_CAPACITY];
+    char diagnosis[HIS_DOMAIN_TEXT_CAPACITY];
+    char advice[HIS_DOMAIN_TEXT_CAPACITY];
+    int need_exam;
+    int need_admission;
+    int need_medicine;
+    char visit_time[HIS_DOMAIN_TIME_CAPACITY];
+} MenuApplicationVisitHandoff;
+
 Result MenuApplication_init(MenuApplication *application, const MenuApplicationPaths *paths);
 Result MenuApplication_login(
     MenuApplication *application,
@@ -80,6 +96,47 @@ Result MenuApplication_query_patient(
     char *buffer,
     size_t capacity
 );
+Result MenuApplication_delete_patient(
+    MenuApplication *application,
+    const char *patient_id,
+    char *buffer,
+    size_t capacity
+);
+Result MenuApplication_list_departments(
+    MenuApplication *application,
+    char *buffer,
+    size_t capacity
+);
+Result MenuApplication_add_department(
+    MenuApplication *application,
+    const Department *department,
+    char *buffer,
+    size_t capacity
+);
+Result MenuApplication_update_department(
+    MenuApplication *application,
+    const Department *department,
+    char *buffer,
+    size_t capacity
+);
+Result MenuApplication_add_doctor(
+    MenuApplication *application,
+    const Doctor *doctor,
+    char *buffer,
+    size_t capacity
+);
+Result MenuApplication_query_doctor(
+    MenuApplication *application,
+    const char *doctor_id,
+    char *buffer,
+    size_t capacity
+);
+Result MenuApplication_list_doctors_by_department(
+    MenuApplication *application,
+    const char *department_id,
+    char *buffer,
+    size_t capacity
+);
 Result MenuApplication_create_registration(
     MenuApplication *application,
     const char *patient_id,
@@ -88,6 +145,13 @@ Result MenuApplication_create_registration(
     const char *registered_at,
     char *buffer,
     size_t capacity
+);
+Result MenuApplication_create_self_registration(
+    MenuApplication *application,
+    const char *doctor_id,
+    const char *department_id,
+    const char *registered_at,
+    Registration *out_registration
 );
 Result MenuApplication_query_registration(
     MenuApplication *application,
@@ -133,6 +197,18 @@ Result MenuApplication_create_visit_record(
     const char *visit_time,
     char *buffer,
     size_t capacity
+);
+Result MenuApplication_create_visit_record_handoff(
+    MenuApplication *application,
+    const char *registration_id,
+    const char *chief_complaint,
+    const char *diagnosis,
+    const char *advice,
+    int need_exam,
+    int need_admission,
+    int need_medicine,
+    const char *visit_time,
+    MenuApplicationVisitHandoff *out_handoff
 );
 Result MenuApplication_query_patient_history(
     MenuApplication *application,

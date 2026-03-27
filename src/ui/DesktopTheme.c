@@ -10,10 +10,16 @@ static int g_desktop_font_loaded = 0;
 
 static const char *DESKTOP_CJK_FONT_CANDIDATES[] = {
     "C:/Windows/Fonts/NotoSansSC-VF.ttf",
+    "C:/Windows/Fonts/msyhl.ttc",
+    "C:/Windows/Fonts/msyhbd.ttc",
+    "C:/Windows/Fonts/Deng.ttf",
+    "C:/Windows/Fonts/Dengb.ttf",
     "C:/Windows/Fonts/simhei.ttf",
+    "C:/Windows/Fonts/simfang.ttf",
     "C:/Windows/Fonts/simkai.ttf",
     "C:/Windows/Fonts/msyh.ttc",
-    "C:/Windows/Fonts/simsun.ttc"
+    "C:/Windows/Fonts/simsun.ttc",
+    "C:/Windows/Fonts/simsunb.ttf"
 };
 
 static const char *DESKTOP_CJK_UI_TEXT =
@@ -41,6 +47,18 @@ static const char *DESKTOP_CJK_UI_TEXT =
     "住院首页入院登记出院办理住院查询病区首页病房总览床位状态转床调度出院检查"
     "药房首页药品建档入库补货发药处理库存查询低库存预警"
     "暂无数据请先完成相关操作后查看此处内容";
+
+const char *DesktopTheme_cjk_glyph_seed_text(void) {
+    return DESKTOP_CJK_UI_TEXT;
+}
+
+int DesktopTheme_candidate_font_count(void) {
+    return (int)(sizeof(DESKTOP_CJK_FONT_CANDIDATES) / sizeof(DESKTOP_CJK_FONT_CANDIDATES[0]));
+}
+
+int DesktopTheme_has_cjk_seed_text(void) {
+    return DESKTOP_CJK_UI_TEXT[0] != '\0' ? 1 : 0;
+}
 
 static int DesktopTheme_file_exists_raylib(const char *path) {
     return FileExists(path) ? 1 : 0;
@@ -93,7 +111,7 @@ static int DesktopTheme_build_font_charset(int **chars_out) {
         codepoint_count = DesktopTheme_append_unique_codepoint(chars, codepoint_count, i);
     }
 
-    text_codepoints = LoadCodepoints(DESKTOP_CJK_UI_TEXT, &text_count);
+    text_codepoints = LoadCodepoints(DesktopTheme_cjk_glyph_seed_text(), &text_count);
     if (text_codepoints != 0) {
         for (i = 0; i < text_count; i++) {
             if (codepoint_count >= max_capacity) {
@@ -134,7 +152,7 @@ DesktopTheme DesktopTheme_make_default(void) {
 
 const char *DesktopTheme_resolve_cjk_font_path(DesktopThemeFileExistsFn file_exists) {
     int i = 0;
-    const int candidate_count = (int)(sizeof(DESKTOP_CJK_FONT_CANDIDATES) / sizeof(DESKTOP_CJK_FONT_CANDIDATES[0]));
+    const int candidate_count = DesktopTheme_candidate_font_count();
 
     if (file_exists == 0) {
         return 0;

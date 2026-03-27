@@ -1,1 +1,5 @@
 examination_id|visit_id|patient_id|doctor_id|exam_item|exam_type|status|result|requested_at|completed_at
+EXM0001|VIS0001|PAT0001|DOC0001|BloodTest|Lab|1|WBC slightly high|2026-03-26 09:05|2026-03-26 09:40
+EXM0002|VIS0002|PAT0004|DOC0004|ChestCT|Imaging|1|pulmonary inflammation|2026-03-26 10:50|2026-03-26 11:40
+EXM0003|VIS0004|PAT0007|DOC0006|InfluenzaPanel|Lab|1|negative|2026-03-26 15:35|2026-03-26 16:05
+EXM0004|VIS0005|PAT0008|DOC0004|OxygenAssessment|Ward|0||2026-03-27 09:30|

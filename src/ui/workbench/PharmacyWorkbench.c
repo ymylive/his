@@ -69,43 +69,47 @@ static void draw_home(DesktopApp *app, Rectangle panel) {
     const WorkbenchDef *wb = Workbench_get(USER_ROLE_PHARMACY);
     const char *labels[4] = { "药品总数", "低库存数", "今日入库", "今日发药" };
     const char *values[4] = { "--", "--", "--", "--" };
-    int clicked = 0;
+    WorkbenchButtonGroupLayout first_row;
+    WorkbenchButtonGroupLayout second_row;
+    int index = 0;
 
     auto_bind_pharmacist(app);
 
     Workbench_draw_home_cards(app, panel, labels, values, wb->accent);
 
     Workbench_draw_section_header(app, (int)panel.x, (int)panel.y + 110, "快捷操作");
-
-    Workbench_draw_quick_action_btn(
-        app, (Rectangle){ panel.x, panel.y + 148, 130, 40 },
-        "药品建档", wb->accent, &clicked
+    first_row = Workbench_compute_button_group_layout(
+        (Rectangle){ panel.x, panel.y + 148.0f, panel.width, 40.0f },
+        4,
+        130.0f,
+        40.0f,
+        14.0f
     );
-    if (clicked) { app->state.workbench_page = 1; }
-
-    Workbench_draw_quick_action_btn(
-        app, (Rectangle){ panel.x + 148, panel.y + 148, 130, 40 },
-        "入库补货", wb->accent, &clicked
+    for (index = 0; index < first_row.count; index++) {
+        int clicked = 0;
+        const char *label = index == 0 ? "药品建档" :
+                            index == 1 ? "入库补货" :
+                            index == 2 ? "发药处理" :
+                                         "库存查询";
+        Workbench_draw_quick_action_btn(app, first_row.buttons[index], label, wb->accent, &clicked);
+        if (clicked) {
+            app->state.workbench_page = index + 1;
+        }
+    }
+    second_row = Workbench_compute_button_group_layout(
+        (Rectangle){ panel.x, panel.y + 202.0f, panel.width * 0.38f, 40.0f },
+        1,
+        160.0f,
+        40.0f,
+        0.0f
     );
-    if (clicked) { app->state.workbench_page = 2; }
-
-    Workbench_draw_quick_action_btn(
-        app, (Rectangle){ panel.x + 296, panel.y + 148, 130, 40 },
-        "发药处理", wb->accent, &clicked
-    );
-    if (clicked) { app->state.workbench_page = 3; }
-
-    Workbench_draw_quick_action_btn(
-        app, (Rectangle){ panel.x + 444, panel.y + 148, 130, 40 },
-        "库存查询", wb->accent, &clicked
-    );
-    if (clicked) { app->state.workbench_page = 4; }
-
-    Workbench_draw_quick_action_btn(
-        app, (Rectangle){ panel.x, panel.y + 200, 160, 40 },
-        "低库存预警", wb->accent, &clicked
-    );
-    if (clicked) { app->state.workbench_page = 5; }
+    for (index = 0; index < second_row.count; index++) {
+        int clicked = 0;
+        Workbench_draw_quick_action_btn(app, second_row.buttons[index], "低库存预警", wb->accent, &clicked);
+        if (clicked) {
+            app->state.workbench_page = 5;
+        }
+    }
 }
 
 /* ── Page 1: Add Medicine ── */

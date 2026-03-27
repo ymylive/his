@@ -49,39 +49,30 @@ static void draw_home(DesktopApp *app, Rectangle panel) {
     const WorkbenchDef *wb = Workbench_get(USER_ROLE_WARD_MANAGER);
     const char *labels[4] = { "病房总数", "已占用床位", "可用床位", "待出院检查" };
     const char *values[4] = { "--", "--", "--", "--" };
-    int clicked = 0;
+    WorkbenchButtonGroupLayout actions;
+    int index = 0;
 
     Workbench_draw_home_cards(app, panel, labels, values, wb->accent);
 
     Workbench_draw_section_header(app, (int)panel.x, (int)panel.y + 110, "快捷操作");
-
-    Workbench_draw_quick_action_btn(
-        app,
-        (Rectangle){ panel.x, panel.y + 148, 140, 40 },
-        "病房总览", wb->accent, &clicked
+    actions = Workbench_compute_button_group_layout(
+        (Rectangle){ panel.x, panel.y + 148.0f, panel.width, 40.0f },
+        4,
+        140.0f,
+        40.0f,
+        14.0f
     );
-    if (clicked) { app->state.workbench_page = 1; }
-
-    Workbench_draw_quick_action_btn(
-        app,
-        (Rectangle){ panel.x + 158, panel.y + 148, 140, 40 },
-        "床位状态", wb->accent, &clicked
-    );
-    if (clicked) { app->state.workbench_page = 2; }
-
-    Workbench_draw_quick_action_btn(
-        app,
-        (Rectangle){ panel.x + 316, panel.y + 148, 140, 40 },
-        "转床调度", wb->accent, &clicked
-    );
-    if (clicked) { app->state.workbench_page = 3; }
-
-    Workbench_draw_quick_action_btn(
-        app,
-        (Rectangle){ panel.x + 474, panel.y + 148, 140, 40 },
-        "出院检查", wb->accent, &clicked
-    );
-    if (clicked) { app->state.workbench_page = 4; }
+    for (index = 0; index < actions.count; index++) {
+        int clicked = 0;
+        const char *label = index == 0 ? "病房总览" :
+                            index == 1 ? "床位状态" :
+                            index == 2 ? "转床调度" :
+                                         "出院检查";
+        Workbench_draw_quick_action_btn(app, actions.buttons[index], label, wb->accent, &clicked);
+        if (clicked) {
+            app->state.workbench_page = index + 1;
+        }
+    }
 }
 
 /* ── Page 1: Ward List ── */

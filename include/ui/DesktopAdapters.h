@@ -37,6 +37,13 @@ Result DesktopAdapters_get_patient_by_id(
     const char *patient_id,
     Patient *out_patient
 );
+Result DesktopAdapters_submit_self_registration(
+    MenuApplication *application,
+    const char *doctor_id,
+    const char *department_id,
+    const char *registered_at,
+    Registration *out_registration
+);
 Result DesktopAdapters_submit_registration(
     MenuApplication *application,
     const char *patient_id,
@@ -71,6 +78,41 @@ Result DesktopAdapters_query_records_by_time_range(
     char *buffer,
     size_t capacity
 );
+Result DesktopAdapters_list_departments(
+    MenuApplication *application,
+    char *buffer,
+    size_t capacity
+);
+Result DesktopAdapters_add_department(
+    MenuApplication *application,
+    const Department *department,
+    char *buffer,
+    size_t capacity
+);
+Result DesktopAdapters_update_department(
+    MenuApplication *application,
+    const Department *department,
+    char *buffer,
+    size_t capacity
+);
+Result DesktopAdapters_add_doctor(
+    MenuApplication *application,
+    const Doctor *doctor,
+    char *buffer,
+    size_t capacity
+);
+Result DesktopAdapters_query_doctor(
+    MenuApplication *application,
+    const char *doctor_id,
+    char *buffer,
+    size_t capacity
+);
+Result DesktopAdapters_list_doctors_by_department(
+    MenuApplication *application,
+    const char *department_id,
+    char *buffer,
+    size_t capacity
+);
 Result DesktopAdapters_query_pending_registrations_by_doctor(
     MenuApplication *application,
     const char *doctor_id,
@@ -89,6 +131,18 @@ Result DesktopAdapters_create_visit_record(
     const char *visit_time,
     char *buffer,
     size_t capacity
+);
+Result DesktopAdapters_create_visit_record_handoff(
+    MenuApplication *application,
+    const char *registration_id,
+    const char *chief_complaint,
+    const char *diagnosis,
+    const char *advice,
+    int need_exam,
+    int need_admission,
+    int need_medicine,
+    const char *visit_time,
+    MenuApplicationVisitHandoff *out_handoff
 );
 Result DesktopAdapters_query_patient_history(
     MenuApplication *application,
@@ -214,6 +268,12 @@ Result DesktopAdapters_load_dispense_history(
     MenuApplication *application,
     const char *patient_id,
     LinkedList *out_records
+);
+Result DesktopAdapters_delete_patient(
+    MenuApplication *application,
+    const char *patient_id,
+    char *buffer,
+    size_t capacity
 );
 
 #endif

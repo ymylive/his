@@ -1,2 +1,5 @@
 department_id|name|location|description
-DEP0001|General|Floor 1|General clinic
+DEP0001|General|Outpatient F1|General clinic
+DEP0002|Surgery|Outpatient F2|General surgery
+DEP0003|Pediatrics|Outpatient F3|Pediatric clinic
+DEP0004|Respiratory|Ward Tower F2|Respiratory medicine

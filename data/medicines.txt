@@ -1,1 +1,7 @@
 medicine_id|name|price|stock|department_id|low_stock_threshold
+MED0001|Ibuprofen|18.50|24|DEP0001|6
+MED0002|Azithromycin|26.80|3|DEP0004|5
+MED0003|Cefuroxime|32.00|18|DEP0002|5
+MED0004|Oseltamivir|29.00|7|DEP0003|4
+MED0005|Salbutamol|22.50|2|DEP0004|4
+MED0006|VitaminC|9.90|30|DEP0001|8

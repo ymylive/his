@@ -29,6 +29,9 @@ typedef int (*DesktopThemeFileExistsFn)(const char *path);
 
 DesktopTheme DesktopTheme_make_default(void);
 const char *DesktopTheme_resolve_cjk_font_path(DesktopThemeFileExistsFn file_exists);
+const char *DesktopTheme_cjk_glyph_seed_text(void);
+int DesktopTheme_candidate_font_count(void);
+int DesktopTheme_has_cjk_seed_text(void);
 int DesktopTheme_enable_cjk_font(int font_size, char *loaded_path, size_t loaded_path_size);
 void DesktopTheme_shutdown_fonts(void);
 void DesktopTheme_apply_raygui_style(const DesktopTheme *theme);

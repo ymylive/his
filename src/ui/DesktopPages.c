@@ -15,6 +15,18 @@
 static const char *DESKTOP_ROLE_OPTIONS =
     "患者;医生;系统管理员;挂号员;住院登记员;病区管理员;药房人员";
 
+static float DesktopPages_maxf(float a, float b) {
+    return a > b ? a : b;
+}
+
+static float DesktopPages_minf(float a, float b) {
+    return a < b ? a : b;
+}
+
+static float DesktopPages_clampf(float value, float min_value, float max_value) {
+    return DesktopPages_maxf(min_value, DesktopPages_minf(value, max_value));
+}
+
 static const char *DesktopPages_role_name_from_index(int index) {
     return DesktopApp_user_role_label(DesktopApp_role_from_index(index));
 }
@@ -77,6 +89,142 @@ static Rectangle DesktopPages_main_panel(const DesktopApp *app) {
         (float)(GetScreenWidth() - app->theme.sidebar_width - app->theme.margin * 2),
         (float)(GetScreenHeight() - app->theme.topbar_height - app->theme.margin * 2)
     };
+}
+
+DesktopTopbarLayout DesktopPages_compute_topbar_layout(
+    int screen_width,
+    const DesktopTheme *theme,
+    float title_width,
+    float session_width,
+    float time_width
+) {
+    DesktopTopbarLayout layout;
+    float padding = 24.0f;
+    float topbar_height = 84.0f;
+    float gap = 18.0f;
+    float title_x = 24.0f;
+    float title_max_width = title_width > 0.0f ? title_width : 280.0f;
+    float session_max_width = session_width > 0.0f ? session_width : 360.0f;
+    float time_actual_width = time_width > 0.0f ? time_width : 148.0f;
+    float logout_width = 88.0f;
+    float logout_height = 34.0f;
+    float title_min_width = 180.0f;
+    float title_available = 0.0f;
+    float session_x = 0.0f;
+    float session_available = 0.0f;
+
+    memset(&layout, 0, sizeof(layout));
+    if (theme != 0) {
+        padding = (float)(theme->margin > 0 ? theme->margin : 24);
+        topbar_height = (float)(theme->topbar_height > 0 ? theme->topbar_height : 84);
+        gap = (float)(theme->spacing > 0 ? theme->spacing : 18);
+    }
+
+    layout.gap = gap;
+    layout.bar_bounds = (Rectangle){ 0.0f, 0.0f, (float)screen_width, topbar_height };
+    layout.logout_bounds = (Rectangle){
+        (float)screen_width - padding - logout_width,
+        (topbar_height - logout_height) * 0.5f,
+        logout_width,
+        logout_height
+    };
+    layout.time_bounds = (Rectangle){
+        layout.logout_bounds.x - gap - time_actual_width,
+        (topbar_height - 18.0f) * 0.5f,
+        time_actual_width,
+        18.0f
+    };
+
+    title_available = layout.time_bounds.x - gap - title_x - 120.0f;
+    if (title_available < title_min_width) {
+        title_available = title_min_width;
+    }
+    title_max_width = DesktopPages_minf(title_max_width, title_available);
+    layout.title_bounds = (Rectangle){
+        title_x,
+        (topbar_height - 28.0f) * 0.5f,
+        title_max_width,
+        28.0f
+    };
+
+    session_x = layout.title_bounds.x + layout.title_bounds.width + gap;
+    session_available = layout.time_bounds.x - gap - session_x;
+    if (session_available < 0.0f) {
+        session_available = 0.0f;
+    }
+    layout.session_bounds = (Rectangle){
+        session_x,
+        (topbar_height - 18.0f) * 0.5f,
+        DesktopPages_minf(session_max_width, session_available),
+        18.0f
+    };
+
+    return layout;
+}
+
+DesktopLoginLayout DesktopPages_compute_login_layout(
+    int screen_width,
+    int screen_height,
+    const DesktopTheme *theme
+) {
+    DesktopLoginLayout layout;
+    float margin = 32.0f;
+    float gap = 18.0f;
+    float card_width = 620.0f;
+    float padding = 36.0f;
+    float field_height = 44.0f;
+    float role_button_width = 42.0f;
+    float card_x = 0.0f;
+    float card_y = 0.0f;
+    float user_y = 0.0f;
+    float password_y = 0.0f;
+    float role_y = 0.0f;
+    float login_y = 0.0f;
+    float card_height = 0.0f;
+    float role_value_width = 0.0f;
+
+    memset(&layout, 0, sizeof(layout));
+    if (theme != 0) {
+        margin = (float)(theme->margin > 0 ? theme->margin : 32);
+        gap = (float)(theme->spacing > 0 ? theme->spacing : 18);
+    }
+
+    card_width = DesktopPages_clampf((float)screen_width - margin * 2.0f, 460.0f, 620.0f);
+    padding = screen_width <= 1440 ? 32.0f : 36.0f;
+    user_y = 132.0f;
+    password_y = user_y + field_height + 38.0f;
+    role_y = password_y + field_height + 38.0f;
+    login_y = role_y + field_height + 32.0f;
+    card_height = login_y + 48.0f + 36.0f;
+    card_height = DesktopPages_clampf(card_height, 440.0f, (float)screen_height - margin * 2.0f);
+    card_x = ((float)screen_width - card_width) * 0.5f;
+    card_y = ((float)screen_height - card_height) * 0.5f;
+    role_value_width = card_width - padding * 2.0f - role_button_width * 2.0f - gap * 2.0f;
+
+    layout.gap = gap;
+    layout.card_bounds = (Rectangle){ card_x, card_y, card_width, card_height };
+    layout.user_box = (Rectangle){ card_x + padding, card_y + user_y, card_width - padding * 2.0f, field_height };
+    layout.password_box = (Rectangle){ card_x + padding, card_y + password_y, card_width - padding * 2.0f, field_height };
+    layout.role_prev_bounds = (Rectangle){ card_x + padding, card_y + role_y, role_button_width, field_height };
+    layout.role_value_bounds = (Rectangle){
+        layout.role_prev_bounds.x + layout.role_prev_bounds.width + gap,
+        card_y + role_y,
+        role_value_width,
+        field_height
+    };
+    layout.role_next_bounds = (Rectangle){
+        layout.role_value_bounds.x + layout.role_value_bounds.width + gap,
+        card_y + role_y,
+        role_button_width,
+        field_height
+    };
+    layout.login_button_bounds = (Rectangle){
+        card_x + padding,
+        card_y + login_y,
+        card_width - padding * 2.0f,
+        48.0f
+    };
+    return layout;
 }
 
 static void DesktopPages_draw_card(
@@ -171,21 +319,34 @@ static void DesktopPages_draw_output_panel(
     const char *content,
     const char *empty_text
 ) {
+    WorkbenchTextPanelLayout layout = Workbench_compute_text_panel_layout(rect, 14.0f, 20.0f, 16.0f);
+
     DrawRectangleRounded(rect, 0.12f, 8, app->theme.panel);
     DrawRectangleRoundedLinesEx(rect, 0.12f, 8, 1.0f, Fade(app->theme.border, 0.85f));
-    DrawText(title, (int)rect.x + 14, (int)rect.y + 12, 20, app->theme.text_primary);
+    DrawText(title, (int)layout.title_bounds.x, (int)layout.title_bounds.y, 20, app->theme.text_primary);
 
     if (content == 0 || content[0] == '\0') {
         DesktopPages_draw_empty_state(
             app,
-            (Rectangle){ rect.x + 12, rect.y + 46, rect.width - 24, 84 },
+            (Rectangle){
+                layout.content_bounds.x,
+                layout.content_bounds.y,
+                layout.content_bounds.width,
+                DesktopPages_minf(layout.content_bounds.height, 84.0f)
+            },
             "暂无输出",
             empty_text
         );
         return;
     }
 
-    DrawText(content, (int)rect.x + 14, (int)rect.y + 48, 17, app->theme.text_secondary);
+    DrawText(
+        content,
+        (int)layout.content_bounds.x,
+        (int)layout.content_bounds.y,
+        17,
+        app->theme.text_secondary
+    );
 }
 
 static void DesktopPages_release_focus_on_click(
@@ -231,19 +392,19 @@ static void DesktopPages_draw_text_input(
 }
 
 static void DesktopPages_draw_login(DesktopApp *app) {
-    Rectangle card = {
-        (float)(GetScreenWidth() / 2 - 310),
-        (float)(GetScreenHeight() / 2 - 240),
-        620.0f,
-        480.0f
-    };
-    Rectangle user_box = { card.x + 36, card.y + 132, card.width - 72, 44 };
-    Rectangle password_box = { card.x + 36, card.y + 214, card.width - 72, 44 };
-    Rectangle role_box = { card.x + 90, card.y + 296, card.width - 180, 44 };
-    Rectangle role_prev = { card.x + 36, card.y + 296, 42, 44 };
-    Rectangle role_next = { card.x + card.width - 78, card.y + 296, 42, 44 };
-    Rectangle login_button = { card.x + 36, card.y + 372, card.width - 72, 48 };
-    Rectangle input_fields[] = { user_box, password_box };
+    DesktopLoginLayout layout = DesktopPages_compute_login_layout(
+        GetScreenWidth(),
+        GetScreenHeight(),
+        &app->theme
+    );
+    Rectangle card = layout.card_bounds;
+    Rectangle user_box = layout.user_box;
+    Rectangle password_box = layout.password_box;
+    Rectangle role_box = layout.role_value_bounds;
+    Rectangle role_prev = layout.role_prev_bounds;
+    Rectangle role_next = layout.role_next_bounds;
+    Rectangle login_button = layout.login_button_bounds;
+    Rectangle input_fields[] = { layout.user_box, layout.password_box };
     User user;
     Result result;
 
@@ -330,42 +491,49 @@ static void DesktopPages_draw_login(DesktopApp *app) {
 
 static void DesktopPages_draw_topbar(DesktopApp *app) {
     const WorkbenchDef *wb = Workbench_get(app->state.current_user.role);
-    Rectangle rect = { 0.0f, 0.0f, (float)GetScreenWidth(), (float)app->theme.topbar_height };
-    Rectangle logout_button = {
-        (float)(GetScreenWidth() - 110),
-        18.0f,
-        88.0f,
-        34.0f
-    };
+    const char *title = "Lightweight HIS Desktop";
+    char session_text[128];
     char time_text[64];
+    DesktopTopbarLayout layout;
     time_t now = time(0);
     struct tm *local = localtime(&now);
 
+    snprintf(
+        session_text,
+        sizeof(session_text),
+        "%s | %s",
+        app->state.current_user.user_id,
+        DesktopApp_user_role_label(app->state.current_user.role)
+    );
     if (local != 0) {
         strftime(time_text, sizeof(time_text), "%Y-%m-%d %H:%M", local);
     } else {
         strcpy(time_text, "--:--");
     }
 
-    DrawRectangleRec(rect, app->theme.panel_alt);
+    layout = DesktopPages_compute_topbar_layout(
+        GetScreenWidth(),
+        &app->theme,
+        (float)MeasureText(title, 28),
+        (float)MeasureText(session_text, 18),
+        (float)MeasureText(time_text, 18)
+    );
+
+    DrawRectangleRec(layout.bar_bounds, app->theme.panel_alt);
     /* Accent bar at top */
     DrawRectangle(0, 0, GetScreenWidth(), 3, wb != 0 ? wb->accent : app->theme.nav_active);
     DrawLine(0, app->theme.topbar_height - 1, GetScreenWidth(), app->theme.topbar_height - 1, app->theme.border);
-    DrawText("Lightweight HIS Desktop", 24, 22, 28, app->theme.text_primary);
+    DrawText(title, (int)layout.title_bounds.x, (int)layout.title_bounds.y, 28, app->theme.text_primary);
     DrawText(
-        TextFormat(
-            "%s | %s",
-            app->state.current_user.user_id,
-            DesktopApp_user_role_label(app->state.current_user.role)
-        ),
-        420,
-        28,
+        session_text,
+        (int)layout.session_bounds.x,
+        (int)layout.session_bounds.y,
         18,
         app->theme.text_secondary
     );
-    DrawText(time_text, GetScreenWidth() - 290, 28, 18, app->theme.text_secondary);
+    DrawText(time_text, (int)layout.time_bounds.x, (int)layout.time_bounds.y, 18, app->theme.text_secondary);
 
-    if (GuiButton(logout_button, "退出")) {
+    if (GuiButton(layout.logout_bounds, "退出")) {
         MenuApplication_logout(&app->application);
         DesktopAppState_logout(&app->state);
         DesktopAppState_show_message(&app->state, DESKTOP_MESSAGE_INFO, "已退出登录");
@@ -479,14 +647,17 @@ static void DesktopPages_draw_dashboard(DesktopApp *app, Rectangle panel) {
 static void DesktopPages_draw_patients(DesktopApp *app, Rectangle panel) {
     Rectangle search_box = { panel.x, panel.y, panel.width - 150, 36 };
     Rectangle search_button = { panel.x + panel.width - 132, panel.y, 132, 36 };
-    Rectangle list_rect = { panel.x, panel.y + 52, panel.width * 0.48f, panel.height - 52 };
-    Rectangle detail_rect = { panel.x + panel.width * 0.52f, panel.y + 52, panel.width * 0.48f, panel.height - 52 };
+    Rectangle content_bounds;
+    Rectangle list_rect;
+    Rectangle detail_rect;
     Rectangle input_fields[] = { search_box };
+    WorkbenchListDetailLayout split_layout;
+    const int is_patient = app->state.current_user.role == USER_ROLE_PATIENT;
     Result result;
     const LinkedListNode *current = 0;
     int index = 0;
 
-    if (app->state.current_user.role == USER_ROLE_PATIENT) {
+    if (is_patient) {
         strncpy(
             app->state.patient_page.query,
             app->state.current_user.user_id,
@@ -503,7 +674,7 @@ static void DesktopPages_draw_patients(DesktopApp *app, Rectangle panel) {
     );
 
     GuiLabel((Rectangle){ panel.x, panel.y - 22, 180, 20 }, "患者查询");
-    if (app->state.current_user.role != USER_ROLE_PATIENT) {
+    if (is_patient == 0) {
         app->state.patient_page.search_mode = (DesktopPatientSearchMode)GuiToggleGroup(
             (Rectangle){ panel.x, panel.y + 40, 220, 28 },
             "按编号;按姓名",
@@ -518,6 +689,15 @@ static void DesktopPages_draw_patients(DesktopApp *app, Rectangle panel) {
         &app->state.patient_page.active_field,
         1
     );
+    content_bounds = (Rectangle){
+        panel.x,
+        panel.y + (is_patient != 0 ? 52.0f : 84.0f),
+        panel.width,
+        panel.height - (is_patient != 0 ? 52.0f : 84.0f)
+    };
+    split_layout = Workbench_compute_list_detail_layout(content_bounds, 0.48f, 20.0f, 260.0f);
+    list_rect = split_layout.list_bounds;
+    detail_rect = split_layout.detail_bounds;
 
     if (GuiButton(search_button, "查询")) {
         LinkedList_clear(&app->state.patient_page.results, free);
@@ -582,17 +762,55 @@ static void DesktopPages_draw_patients(DesktopApp *app, Rectangle panel) {
 
     if (app->state.patient_page.has_selected_patient != 0) {
         const Patient *patient = &app->state.patient_page.selected_patient;
-        DrawText(TextFormat("编号: %s", patient->patient_id), (int)detail_rect.x + 16, (int)detail_rect.y + 54, 18, app->theme.text_secondary);
-        DrawText(TextFormat("姓名: %s", patient->name), (int)detail_rect.x + 16, (int)detail_rect.y + 86, 18, app->theme.text_secondary);
-        DrawText(TextFormat("年龄: %d", patient->age), (int)detail_rect.x + 16, (int)detail_rect.y + 118, 18, app->theme.text_secondary);
-        DrawText(TextFormat("联系方式: %s", patient->contact), (int)detail_rect.x + 16, (int)detail_rect.y + 150, 18, app->theme.text_secondary);
-        DrawText(TextFormat("过敏史: %s", patient->allergy), (int)detail_rect.x + 16, (int)detail_rect.y + 182, 18, app->theme.text_secondary);
-        DrawText(TextFormat("病史: %s", patient->medical_history), (int)detail_rect.x + 16, (int)detail_rect.y + 214, 18, app->theme.text_secondary);
-        DrawText(TextFormat("住院状态: %s", patient->is_inpatient ? "是" : "否"), (int)detail_rect.x + 16, (int)detail_rect.y + 246, 18, app->theme.text_secondary);
+        const char *detail_labels[] = {
+            "编号", "姓名", "年龄", "联系方式", "过敏史", "病史", "住院状态"
+        };
+        const char *detail_values[] = {
+            patient->patient_id,
+            patient->name,
+            TextFormat("%d", patient->age),
+            patient->contact,
+            patient->allergy,
+            patient->medical_history,
+            patient->is_inpatient ? "是" : "否"
+        };
+        int row = 0;
+
+        for (row = 0; row < 7; row++) {
+            WorkbenchInfoRowLayout info_layout = Workbench_compute_info_row_layout(
+                (Rectangle){
+                    detail_rect.x + 16.0f,
+                    detail_rect.y + 54.0f + (float)row * 32.0f,
+                    detail_rect.width - 32.0f,
+                    28.0f
+                },
+                96.0f,
+                14.0f
+            );
+            DrawText(
+                detail_labels[row],
+                (int)info_layout.label_bounds.x,
+                (int)info_layout.label_bounds.y,
+                18,
+                app->theme.text_secondary
+            );
+            DrawText(
+                detail_values[row] != 0 ? detail_values[row] : "--",
+                (int)info_layout.value_bounds.x,
+                (int)info_layout.value_bounds.y,
+                18,
+                app->theme.text_primary
+            );
+        }
     } else {
         DesktopPages_draw_empty_state(
             app,
-            (Rectangle){ detail_rect.x + 12, detail_rect.y + 48, detail_rect.width - 24, 84 },
+            (Rectangle){
+                detail_rect.x + 12,
+                detail_rect.y + 48,
+                detail_rect.width - 24,
+                DesktopPages_minf(detail_rect.height - 60.0f, 84.0f)
+            },
             "等待选择患者",
             "点击左侧患者行后可查看详情信息。"
         );

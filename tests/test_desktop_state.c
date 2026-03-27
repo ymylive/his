@@ -6,11 +6,17 @@
 
 static void test_default_state_and_message(void) {
     DesktopAppState state;
+    int page = 0;
 
     DesktopAppState_init(&state);
     assert(state.current_page == DESKTOP_PAGE_LOGIN);
     assert(state.logged_in == 0);
     assert(state.login_form.role_index == 0);
+    assert(state.page_freshness[DESKTOP_PAGE_DASHBOARD] == DESKTOP_FRESHNESS_CLEAN);
+    for (page = 0; page < DESKTOP_PAGE_COUNT; page++) {
+        assert(state.page_freshness[page] == DESKTOP_FRESHNESS_CLEAN);
+        assert(DesktopApp_page_has_snapshot(&state, (DesktopPage)page) == 0);
+    }
 
     DesktopAppState_show_message(&state, DESKTOP_MESSAGE_INFO, "ready");
     assert(state.message.visible == 1);
@@ -86,6 +92,33 @@ static void test_role_mapping(void) {
     assert(strcmp(DesktopApp_page_label(DESKTOP_PAGE_PHARMACY), "药房工作台") == 0);
 }
 
+static void test_freshness_helpers_and_window_guards(void) {
+    DesktopAppState state;
+
+    DesktopAppState_init(&state);
+    assert(DesktopApp_min_width() >= 1366);
+    assert(DesktopApp_min_height() >= 768);
+
+    DesktopApp_mark_dirty(&state, DESKTOP_PAGE_DASHBOARD);
+    assert(state.page_freshness[DESKTOP_PAGE_DASHBOARD] == DESKTOP_FRESHNESS_DIRTY);
+
+    DesktopApp_mark_stale(&state, DESKTOP_PAGE_DASHBOARD);
+    assert(state.page_freshness[DESKTOP_PAGE_DASHBOARD] == DESKTOP_FRESHNESS_STALE);
+
+    DesktopApp_mark_clean(&state, DESKTOP_PAGE_DASHBOARD);
+    assert(state.page_freshness[DESKTOP_PAGE_DASHBOARD] == DESKTOP_FRESHNESS_CLEAN);
+
+    DesktopApp_record_page_snapshot(&state, DESKTOP_PAGE_DASHBOARD);
+    assert(DesktopApp_page_has_snapshot(&state, DESKTOP_PAGE_DASHBOARD) == 1);
+
+    DesktopApp_mark_dirty(&state, DESKTOP_PAGE_DASHBOARD);
+    DesktopApp_mark_reload_failed(&state, DESKTOP_PAGE_DASHBOARD);
+    assert(state.page_freshness[DESKTOP_PAGE_DASHBOARD] == DESKTOP_FRESHNESS_STALE);
+    assert(DesktopApp_page_has_snapshot(&state, DESKTOP_PAGE_DASHBOARD) == 1);
+
+    DesktopAppState_dispose(&state);
+}
+
 static int test_font_exists_for_noto(const char *path) {
     if (path == 0) {
         return 0;
@@ -111,6 +144,8 @@ static void test_cjk_font_path_resolution(void) {
     const char *picked = DesktopTheme_resolve_cjk_font_path(test_font_exists_for_noto);
     const char *missing = DesktopTheme_resolve_cjk_font_path(test_font_exists_for_none);
 
+    assert(DesktopTheme_candidate_font_count() >= 3);
+    assert(DesktopTheme_has_cjk_seed_text() == 1);
     assert(picked != 0);
     assert(strcmp(picked, "C:/Windows/Fonts/NotoSansSC-VF.ttf") == 0);
     assert(missing == 0);
@@ -135,6 +170,7 @@ int main(void) {
     test_login_page_switch_and_logout();
     test_role_home_pages_on_login();
     test_role_mapping();
+    test_freshness_helpers_and_window_guards();
     test_cjk_font_path_resolution();
     test_data_path_resolution_prefers_project_root_over_build_data();
     return 0;

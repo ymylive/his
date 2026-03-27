@@ -451,6 +451,26 @@ Result DesktopAdapters_get_patient_by_id(
     );
 }
 
+Result DesktopAdapters_submit_self_registration(
+    MenuApplication *application,
+    const char *doctor_id,
+    const char *department_id,
+    const char *registered_at,
+    Registration *out_registration
+) {
+    if (application == 0 || out_registration == 0) {
+        return Result_make_failure("self registration adapter arguments missing");
+    }
+
+    return MenuApplication_create_self_registration(
+        application,
+        doctor_id,
+        department_id,
+        registered_at,
+        out_registration
+    );
+}
+
 Result DesktopAdapters_submit_registration(
     MenuApplication *application,
     const char *patient_id,
@@ -572,6 +592,139 @@ Result DesktopAdapters_query_records_by_time_range(
     );
 }
 
+Result DesktopAdapters_list_departments(
+    MenuApplication *application,
+    char *buffer,
+    size_t capacity
+) {
+    Result result = DesktopAdapters_require_output_buffer(
+        application,
+        buffer,
+        capacity,
+        "department list adapter arguments missing"
+    );
+
+    if (result.success == 0) {
+        return result;
+    }
+
+    return MenuApplication_list_departments(application, buffer, capacity);
+}
+
+Result DesktopAdapters_add_department(
+    MenuApplication *application,
+    const Department *department,
+    char *buffer,
+    size_t capacity
+) {
+    Result result = DesktopAdapters_require_output_buffer(
+        application,
+        buffer,
+        capacity,
+        "department add adapter arguments missing"
+    );
+
+    if (result.success == 0 || department == 0) {
+        if (department == 0) {
+            return Result_make_failure("department add adapter department missing");
+        }
+        return result;
+    }
+
+    return MenuApplication_add_department(application, department, buffer, capacity);
+}
+
+Result DesktopAdapters_update_department(
+    MenuApplication *application,
+    const Department *department,
+    char *buffer,
+    size_t capacity
+) {
+    Result result = DesktopAdapters_require_output_buffer(
+        application,
+        buffer,
+        capacity,
+        "department update adapter arguments missing"
+    );
+
+    if (result.success == 0 || department == 0) {
+        if (department == 0) {
+            return Result_make_failure("department update adapter department missing");
+        }
+        return result;
+    }
+
+    return MenuApplication_update_department(application, department, buffer, capacity);
+}
+
+Result DesktopAdapters_add_doctor(
+    MenuApplication *application,
+    const Doctor *doctor,
+    char *buffer,
+    size_t capacity
+) {
+    Result result = DesktopAdapters_require_output_buffer(
+        application,
+        buffer,
+        capacity,
+        "doctor add adapter arguments missing"
+    );
+
+    if (result.success == 0 || doctor == 0) {
+        if (doctor == 0) {
+            return Result_make_failure("doctor add adapter doctor missing");
+        }
+        return result;
+    }
+
+    return MenuApplication_add_doctor(application, doctor, buffer, capacity);
+}
+
+Result DesktopAdapters_query_doctor(
+    MenuApplication *application,
+    const char *doctor_id,
+    char *buffer,
+    size_t capacity
+) {
+    Result result = DesktopAdapters_require_output_buffer(
+        application,
+        buffer,
+        capacity,
+        "doctor query adapter arguments missing"
+    );
+
+    if (result.success == 0) {
+        return result;
+    }
+
+    return MenuApplication_query_doctor(application, doctor_id, buffer, capacity);
+}
+
+Result DesktopAdapters_list_doctors_by_department(
+    MenuApplication *application,
+    const char *department_id,
+    char *buffer,
+    size_t capacity
+) {
+    Result result = DesktopAdapters_require_output_buffer(
+        application,
+        buffer,
+        capacity,
+        "doctor department list adapter arguments missing"
+    );
+
+    if (result.success == 0) {
+        return result;
+    }
+
+    return MenuApplication_list_doctors_by_department(
+        application,
+        department_id,
+        buffer,
+        capacity
+    );
+}
+
 Result DesktopAdapters_query_pending_registrations_by_doctor(
     MenuApplication *application,
     const char *doctor_id,
@@ -633,6 +786,36 @@ Result DesktopAdapters_create_visit_record(
         visit_time,
         buffer,
         capacity
+    );
+}
+
+Result DesktopAdapters_create_visit_record_handoff(
+    MenuApplication *application,
+    const char *registration_id,
+    const char *chief_complaint,
+    const char *diagnosis,
+    const char *advice,
+    int need_exam,
+    int need_admission,
+    int need_medicine,
+    const char *visit_time,
+    MenuApplicationVisitHandoff *out_handoff
+) {
+    if (application == 0 || out_handoff == 0) {
+        return Result_make_failure("doctor visit handoff adapter arguments missing");
+    }
+
+    return MenuApplication_create_visit_record_handoff(
+        application,
+        registration_id,
+        chief_complaint,
+        diagnosis,
+        advice,
+        need_exam,
+        need_admission,
+        need_medicine,
+        visit_time,
+        out_handoff
     );
 }
 
@@ -1129,4 +1312,24 @@ Result DesktopAdapters_load_dispense_history(
     }
 
     return Result_make_success("dispense history loaded");
+}
+
+Result DesktopAdapters_delete_patient(
+    MenuApplication *application,
+    const char *patient_id,
+    char *buffer,
+    size_t capacity
+) {
+    Result result = DesktopAdapters_require_output_buffer(
+        application,
+        buffer,
+        capacity,
+        "patient delete adapter arguments missing"
+    );
+
+    if (result.success == 0) {
+        return result;
+    }
+
+    return MenuApplication_delete_patient(application, patient_id, buffer, capacity);
 }

@@ -90,6 +90,18 @@ static const WorkbenchDef g_workbenches[] = {
 
 static const int g_workbench_count = (int)(sizeof(g_workbenches) / sizeof(g_workbenches[0]));
 
+static float Workbench_maxf(float a, float b) {
+    return a > b ? a : b;
+}
+
+static float Workbench_minf(float a, float b) {
+    return a < b ? a : b;
+}
+
+static float Workbench_clampf(float value, float min_value, float max_value) {
+    return Workbench_maxf(min_value, Workbench_minf(value, max_value));
+}
+
 const WorkbenchDef *Workbench_get(UserRole role) {
     int i = 0;
     for (i = 0; i < g_workbench_count; i++) {
@@ -98,6 +110,176 @@ const WorkbenchDef *Workbench_get(UserRole role) {
         }
     }
     return &g_workbenches[0];
+}
+
+WorkbenchButtonGroupLayout Workbench_compute_button_group_layout(
+    Rectangle bounds,
+    int button_count,
+    float min_button_width,
+    float button_height,
+    float preferred_gap
+) {
+    WorkbenchButtonGroupLayout layout;
+    int index = 0;
+    float gap = preferred_gap > 0.0f ? preferred_gap : 12.0f;
+    float height = button_height > 0.0f ? button_height : bounds.height;
+    float usable_width = 0.0f;
+    float button_width = 0.0f;
+
+    memset(&layout, 0, sizeof(layout));
+    layout.count = button_count > 0 ? button_count : 0;
+    if (layout.count > WORKBENCH_LAYOUT_BUTTON_MAX) {
+        layout.count = WORKBENCH_LAYOUT_BUTTON_MAX;
+    }
+    if (layout.count <= 0) {
+        return layout;
+    }
+
+    usable_width = bounds.width - gap * (float)(layout.count - 1);
+    button_width = usable_width / (float)layout.count;
+    layout.gap = gap;
+    layout.mode = button_width >= min_button_width ? WORKBENCH_ACTION_LAYOUT_ROW : WORKBENCH_ACTION_LAYOUT_STACK;
+
+    if (layout.mode == WORKBENCH_ACTION_LAYOUT_ROW) {
+        for (index = 0; index < layout.count; index++) {
+            layout.buttons[index] = (Rectangle){
+                bounds.x + (button_width + gap) * (float)index,
+                bounds.y,
+                button_width,
+                height
+            };
+        }
+        return layout;
+    }
+
+    button_width = bounds.width;
+    for (index = 0; index < layout.count; index++) {
+        layout.buttons[index] = (Rectangle){
+            bounds.x,
+            bounds.y + (height + gap) * (float)index,
+            button_width,
+            height
+        };
+    }
+    return layout;
+}
+
+WorkbenchInfoRowLayout Workbench_compute_info_row_layout(
+    Rectangle bounds,
+    float label_width,
+    float preferred_gap
+) {
+    WorkbenchInfoRowLayout layout;
+    float gap = preferred_gap > 0.0f ? preferred_gap : 12.0f;
+    float clamped_label_width = Workbench_clampf(label_width, 72.0f, bounds.width);
+    float value_width = bounds.width - clamped_label_width - gap;
+
+    memset(&layout, 0, sizeof(layout));
+    layout.gap = gap;
+    layout.label_bounds = (Rectangle){
+        bounds.x,
+        bounds.y,
+        clamped_label_width,
+        bounds.height
+    };
+    if (value_width < 0.0f) {
+        value_width = 0.0f;
+    }
+    layout.value_bounds = (Rectangle){
+        bounds.x + clamped_label_width + gap,
+        bounds.y,
+        value_width,
+        bounds.height
+    };
+    layout.wrap_lines = 1;
+    if (value_width <= 240.0f && bounds.height >= 60.0f) {
+        layout.wrap_lines = 2;
+    }
+    if (value_width <= 160.0f && bounds.height >= 90.0f) {
+        layout.wrap_lines = 3;
+    }
+    return layout;
+}
+
+WorkbenchTextPanelLayout Workbench_compute_text_panel_layout(
+    Rectangle bounds,
+    float padding,
+    float title_height,
+    float content_gap
+) {
+    WorkbenchTextPanelLayout layout;
+    float inset = padding > 0.0f ? padding : 12.0f;
+    float header_height = title_height > 0.0f ? title_height : 24.0f;
+    float gap = content_gap > 0.0f ? content_gap : 16.0f;
+    float content_top = bounds.y + inset + header_height + gap;
+    float content_height = bounds.height - (content_top - bounds.y) - inset;
+
+    memset(&layout, 0, sizeof(layout));
+    layout.gap = gap;
+    layout.title_bounds = (Rectangle){
+        bounds.x + inset,
+        bounds.y + inset,
+        bounds.width - inset * 2.0f,
+        header_height
+    };
+    if (content_height < 0.0f) {
+        content_height = 0.0f;
+    }
+    layout.content_bounds = (Rectangle){
+        bounds.x + inset,
+        content_top,
+        bounds.width - inset * 2.0f,
+        content_height
+    };
+    layout.wrap_width = layout.content_bounds.width;
+    return layout;
+}
+
+WorkbenchListDetailLayout Workbench_compute_list_detail_layout(
+    Rectangle bounds,
+    float list_ratio,
+    float preferred_gap,
+    float min_column_width
+) {
+    WorkbenchListDetailLayout layout;
+    float gap = preferred_gap > 0.0f ? preferred_gap : 20.0f;
+    float min_width = min_column_width > 0.0f ? min_column_width : 240.0f;
+    float available_width = bounds.width - gap;
+    float left_width = 0.0f;
+    float top_height = 0.0f;
+
+    memset(&layout, 0, sizeof(layout));
+    layout.gap = gap;
+
+    if (available_width >= min_width * 2.0f) {
+        left_width = available_width * Workbench_clampf(list_ratio, 0.35f, 0.65f);
+        if (left_width < min_width) {
+            left_width = min_width;
+        }
+        if ((available_width - left_width) < min_width) {
+            left_width = available_width - min_width;
+        }
+        layout.list_bounds = (Rectangle){ bounds.x, bounds.y, left_width, bounds.height };
+        layout.detail_bounds = (Rectangle){
+            bounds.x + left_width + gap,
+            bounds.y,
+            bounds.width - left_width - gap,
+            bounds.height
+        };
+        layout.is_stacked = 0;
+        return layout;
+    }
+
+    top_height = (bounds.height - gap) * 0.46f;
+    layout.list_bounds = (Rectangle){ bounds.x, bounds.y, bounds.width, top_height };
+    layout.detail_bounds = (Rectangle){
+        bounds.x,
+        bounds.y + top_height + gap,
+        bounds.width,
+        bounds.height - top_height - gap
+    };
+    layout.is_stacked = 1;
+    return layout;
 }
 
 /* ── Sidebar with role-specific nav ── */
@@ -186,9 +368,22 @@ void Workbench_draw_info_row(
     const DesktopApp *app, int x, int y,
     const char *label, const char *value
 ) {
+    WorkbenchInfoRowLayout layout;
+
     if (app == 0) return;
-    DrawText(label, x, y, 18, app->theme.text_secondary);
-    DrawText(value != 0 ? value : "--", x + 120, y, 18, app->theme.text_primary);
+    layout = Workbench_compute_info_row_layout(
+        (Rectangle){ (float)x, (float)y, (float)(GetScreenWidth() - x - 32), 28.0f },
+        110.0f,
+        10.0f
+    );
+    DrawText(label, (int)layout.label_bounds.x, (int)layout.label_bounds.y, 18, app->theme.text_secondary);
+    DrawText(
+        value != 0 ? value : "--",
+        (int)layout.value_bounds.x,
+        (int)layout.value_bounds.y,
+        18,
+        app->theme.text_primary
+    );
 }
 
 /* ── Home page 4-card row ── */

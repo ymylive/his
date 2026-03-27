@@ -1,12 +1,37 @@
 #include "ui/Workbench.h"
-#include "ui/DesktopApp.h"
-#include "ui/DesktopAdapters.h"
-#include "raygui.h"
-#include <string.h>
+
+#include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 
-/* ── Local helpers ── */
+#include "domain/Department.h"
+#include "domain/Doctor.h"
+#include "raygui.h"
+#include "ui/DesktopAdapters.h"
+#include "ui/DesktopApp.h"
+
+typedef struct ClerkPatientFormState {
+    char patient_id[HIS_DOMAIN_ID_CAPACITY];
+    char name[HIS_DOMAIN_NAME_CAPACITY];
+    char age_text[16];
+    char contact[HIS_DOMAIN_CONTACT_CAPACITY];
+    char id_card[HIS_DOMAIN_CONTACT_CAPACITY];
+    char allergy[HIS_DOMAIN_TEXT_CAPACITY];
+    char medical_history[HIS_DOMAIN_LARGE_TEXT_CAPACITY];
+    char remarks[HIS_DOMAIN_TEXT_CAPACITY];
+    int gender_index;
+    char output[WORKBENCH_OUTPUT_CAPACITY];
+} ClerkPatientFormState;
+
+typedef struct ClerkRegistrationViewState {
+    char departments[WORKBENCH_OUTPUT_CAPACITY];
+    char doctors[WORKBENCH_OUTPUT_CAPACITY];
+    char output[WORKBENCH_OUTPUT_CAPACITY];
+} ClerkRegistrationViewState;
+
+static ClerkPatientFormState g_clerk_patient_form;
+static ClerkRegistrationViewState g_clerk_registration_view;
 
 static void show_result(DesktopApp *app, Result result) {
     DesktopAppState_show_message(
@@ -16,47 +41,85 @@ static void show_result(DesktopApp *app, Result result) {
     );
 }
 
-static void draw_text_input(Rectangle bounds, char *text, int text_size,
-                            int editable, int *active_field, int field_id) {
+static void draw_text_input(
+    Rectangle bounds,
+    char *text,
+    int text_size,
+    int editable,
+    int *active_field,
+    int field_id
+) {
     bool edit_mode = false;
+
     if (editable == 0 || active_field == 0) {
         GuiTextBox(bounds, text, text_size, false);
         return;
     }
+
     edit_mode = (*active_field == field_id);
     if (GuiTextBox(bounds, text, text_size, edit_mode)) {
         *active_field = edit_mode ? 0 : field_id;
     }
 }
 
-static void draw_empty_state(const DesktopApp *app, Rectangle rect,
-                             const char *title, const char *desc) {
-    DrawRectangleRounded(rect, 0.12f, 8, Fade(app->theme.panel_alt, 0.88f));
+static void draw_output_panel(
+    const DesktopApp *app,
+    Rectangle rect,
+    const char *title,
+    const char *content,
+    const char *empty_text
+) {
+    WorkbenchTextPanelLayout layout = Workbench_compute_text_panel_layout(rect, 14.0f, 22.0f, 14.0f);
+
+    DrawRectangleRounded(rect, 0.12f, 8, app->theme.panel);
     DrawRectangleRoundedLinesEx(rect, 0.12f, 8, 1.0f, Fade(app->theme.border, 0.85f));
-    DrawText(title, (int)rect.x + 18, (int)rect.y + 16, 20, app->theme.text_primary);
-    DrawText(desc, (int)rect.x + 18, (int)rect.y + 46, 18, app->theme.text_secondary);
+    DrawText(title, (int)layout.title_bounds.x, (int)layout.title_bounds.y, 20, app->theme.text_primary);
+    DrawText(
+        (content != 0 && content[0] != '\0') ? content : empty_text,
+        (int)layout.content_bounds.x,
+        (int)layout.content_bounds.y,
+        17,
+        app->theme.text_secondary
+    );
 }
 
-static void release_focus(int *active_field, const Rectangle *fields, int count) {
-    Vector2 mouse = GetMousePosition();
-    if (active_field == 0 || fields == 0 || count <= 0) return;
-    if (*active_field <= 0 || *active_field > count) return;
-    if (IsMouseButtonPressed(MOUSE_LEFT_BUTTON) &&
-        !CheckCollisionPointRec(mouse, fields[*active_field - 1])) {
-        *active_field = 0;
+static int parse_age(const char *text) {
+    char *end = 0;
+    long value = strtol(text, &end, 10);
+
+    if (text == 0 || text[0] == '\0' || end == text || (end != 0 && *end != '\0')) {
+        return -1;
     }
+    return (int)value;
 }
 
-/* ── Page 0: Reception home ── */
+static void fill_form_from_selected_patient(const DesktopPatientPageState *page_state) {
+    const Patient *patient = &page_state->selected_patient;
+
+    if (page_state->has_selected_patient == 0) {
+        return;
+    }
+
+    strncpy(g_clerk_patient_form.patient_id, patient->patient_id, sizeof(g_clerk_patient_form.patient_id) - 1);
+    strncpy(g_clerk_patient_form.name, patient->name, sizeof(g_clerk_patient_form.name) - 1);
+    snprintf(g_clerk_patient_form.age_text, sizeof(g_clerk_patient_form.age_text), "%d", patient->age);
+    strncpy(g_clerk_patient_form.contact, patient->contact, sizeof(g_clerk_patient_form.contact) - 1);
+    strncpy(g_clerk_patient_form.id_card, patient->id_card, sizeof(g_clerk_patient_form.id_card) - 1);
+    strncpy(g_clerk_patient_form.allergy, patient->allergy, sizeof(g_clerk_patient_form.allergy) - 1);
+    strncpy(g_clerk_patient_form.medical_history, patient->medical_history, sizeof(g_clerk_patient_form.medical_history) - 1);
+    strncpy(g_clerk_patient_form.remarks, patient->remarks, sizeof(g_clerk_patient_form.remarks) - 1);
+    g_clerk_patient_form.gender_index = patient->gender == PATIENT_GENDER_MALE ? 0 : 1;
+}
 
 static void clerk_draw_home(DesktopApp *app, Rectangle panel) {
-    const WorkbenchDef *wb = Workbench_get(app->state.current_user.role);
-    const char *labels[4] = { "今日挂号", "待接待", "可取消", "新建患者" };
-    char v0[16], v1[16], v2[16], v3[16];
+    const WorkbenchDef *wb = Workbench_get(USER_ROLE_REGISTRATION_CLERK);
+    const char *labels[4] = { "今日挂号", "患者档案", "待接待", "最近成功" };
+    char registrations[16];
+    char patients[16];
     const char *values[4];
-    float section_y = 0;
-    int clicked = 0;
+    WorkbenchButtonGroupLayout actions;
     Result result;
+    int index = 0;
 
     if (app->state.dashboard.loaded == 0) {
         result = DesktopAdapters_load_dashboard(&app->application, &app->state.dashboard);
@@ -64,284 +127,355 @@ static void clerk_draw_home(DesktopApp *app, Rectangle panel) {
         app->state.dashboard.loaded = result.success ? 1 : -1;
     }
 
-    snprintf(v0, sizeof(v0), "%d", app->state.dashboard.registration_count);
-    snprintf(v1, sizeof(v1), "%d", app->state.dashboard.patient_count);
-    snprintf(v2, sizeof(v2), "--");
-    snprintf(v3, sizeof(v3), "--");
-    values[0] = v0; values[1] = v1; values[2] = v2; values[3] = v3;
+    snprintf(registrations, sizeof(registrations), "%d", app->state.dashboard.registration_count);
+    snprintf(patients, sizeof(patients), "%d", app->state.dashboard.patient_count);
+    values[0] = registrations;
+    values[1] = patients;
+    values[2] = app->state.registration_page.patient_id[0] != '\0' ? app->state.registration_page.patient_id : "--";
+    values[3] = app->state.registration_page.last_registration_id[0] != '\0'
+        ? app->state.registration_page.last_registration_id : "--";
 
     Workbench_draw_home_cards(app, panel, labels, values, wb->accent);
-
-    section_y = panel.y + 98;
-    Workbench_draw_section_header(app, (int)panel.x, (int)section_y, "快捷操作");
-    section_y += 36;
-
-    Workbench_draw_quick_action_btn(app,
-        (Rectangle){ panel.x, section_y, 140, 36 },
-        "刷新数据", wb->accent, &clicked);
-    if (clicked) { app->state.dashboard.loaded = 0; }
-
-    Workbench_draw_quick_action_btn(app,
-        (Rectangle){ panel.x + 158, section_y, 140, 36 },
-        "患者查询", wb->accent, &clicked);
-    if (clicked) { app->state.workbench_page = 2; }
-
-    Workbench_draw_quick_action_btn(app,
-        (Rectangle){ panel.x + 316, section_y, 140, 36 },
-        "挂号办理", wb->accent, &clicked);
-    if (clicked) { app->state.workbench_page = 3; }
-
-    Workbench_draw_quick_action_btn(app,
-        (Rectangle){ panel.x + 474, section_y, 140, 36 },
-        "挂号查询", wb->accent, &clicked);
-    if (clicked) { app->state.workbench_page = 4; }
-
-    /* Recent registrations summary */
-    section_y += 54;
-    Workbench_draw_section_header(app, (int)panel.x, (int)section_y, "最近挂号");
-    section_y += 36;
-
-    {
-        const LinkedListNode *cur = app->state.dashboard.recent_registrations.head;
-        int i = 0;
-        DrawRectangleRounded(
-            (Rectangle){ panel.x, section_y, panel.width, 180 },
-            0.12f, 8, app->theme.panel);
-        while (cur != 0 && i < 5) {
-            const Registration *r = (const Registration *)cur->data;
-            DrawText(
-                TextFormat("%s | %s | %s", r->registration_id, r->patient_id, r->registered_at),
-                (int)panel.x + 16, (int)(section_y + 14 + i * 28), 17, app->theme.text_secondary);
-            cur = cur->next;
-            i++;
-        }
-        if (i == 0) {
-            draw_empty_state(app,
-                (Rectangle){ panel.x + 10, section_y + 10, panel.width - 20, 80 },
-                "暂无挂号记录", "点击刷新数据重新获取。");
+    Workbench_draw_section_header(app, (int)panel.x, (int)panel.y + 104, "接待台快捷入口");
+    actions = Workbench_compute_button_group_layout(
+        (Rectangle){ panel.x, panel.y + 144.0f, panel.width, 40.0f },
+        4,
+        150.0f,
+        40.0f,
+        14.0f
+    );
+    for (index = 0; index < actions.count; index++) {
+        int clicked = 0;
+        const char *label = index == 0 ? "患者建档" :
+                            index == 1 ? "患者查询" :
+                            index == 2 ? "挂号办理" :
+                                         "挂号查询";
+        Workbench_draw_quick_action_btn(app, actions.buttons[index], label, wb->accent, &clicked);
+        if (clicked) {
+            app->state.workbench_page = index + 1;
         }
     }
+    draw_output_panel(
+        app,
+        (Rectangle){ panel.x, panel.y + 214.0f, panel.width, panel.height - 214.0f },
+        "接待说明",
+        "挂号员工作台已接通患者建档/修改、患者查询、挂号办理、挂号查询与取消。",
+        "暂无说明"
+    );
 }
-
-/* ── Page 1: Patient creation (placeholder) ── */
 
 static void clerk_draw_patient_create(DesktopApp *app, Rectangle panel) {
-    DrawRectangleRounded(panel, 0.12f, 8, app->theme.panel);
-    DrawText("患者建档", (int)panel.x + 16, (int)panel.y + 16, 24, app->theme.text_primary);
+    DesktopPatientPageState *page_state = &app->state.patient_page;
+    Rectangle form_bounds = { panel.x, panel.y, panel.width * 0.56f, panel.height };
+    Rectangle output_bounds = { panel.x + panel.width * 0.60f, panel.y, panel.width * 0.40f, panel.height };
+    int age = 0;
+    Patient patient;
+    Result result;
 
-    draw_empty_state(app,
-        (Rectangle){ panel.x + 16, panel.y + 60, panel.width - 32, 100 },
-        "功能开发中",
-        "患者建档功能尚未接入后端适配器，敬请期待。");
+    if (page_state->has_selected_patient != 0 &&
+        strcmp(g_clerk_patient_form.patient_id, page_state->selected_patient.patient_id) != 0) {
+        fill_form_from_selected_patient(page_state);
+    }
+
+    DrawRectangleRounded(form_bounds, 0.12f, 8, app->theme.panel);
+    DrawRectangleRoundedLinesEx(form_bounds, 0.12f, 8, 1.0f, Fade(app->theme.border, 0.85f));
+    DrawText("患者建档与修改", (int)form_bounds.x + 16, (int)form_bounds.y + 14, 24, app->theme.text_primary);
+
+    GuiLabel((Rectangle){ form_bounds.x + 16, form_bounds.y + 50, 120, 20 }, "患者编号");
+    draw_text_input((Rectangle){ form_bounds.x + 16, form_bounds.y + 74, 220, 34 }, g_clerk_patient_form.patient_id, sizeof(g_clerk_patient_form.patient_id), 1, &page_state->active_field, 1);
+    GuiLabel((Rectangle){ form_bounds.x + 252, form_bounds.y + 50, 120, 20 }, "姓名");
+    draw_text_input((Rectangle){ form_bounds.x + 252, form_bounds.y + 74, 220, 34 }, g_clerk_patient_form.name, sizeof(g_clerk_patient_form.name), 1, &page_state->active_field, 2);
+
+    GuiLabel((Rectangle){ form_bounds.x + 16, form_bounds.y + 122, 120, 20 }, "年龄");
+    draw_text_input((Rectangle){ form_bounds.x + 16, form_bounds.y + 146, 100, 34 }, g_clerk_patient_form.age_text, sizeof(g_clerk_patient_form.age_text), 1, &page_state->active_field, 3);
+    GuiLabel((Rectangle){ form_bounds.x + 132, form_bounds.y + 122, 120, 20 }, "性别");
+    GuiToggleGroup(
+        (Rectangle){ form_bounds.x + 132, form_bounds.y + 146, 180, 30 },
+        "男;女",
+        &g_clerk_patient_form.gender_index
+    );
+    GuiLabel((Rectangle){ form_bounds.x + 328, form_bounds.y + 122, 120, 20 }, "联系方式");
+    draw_text_input((Rectangle){ form_bounds.x + 328, form_bounds.y + 146, 220, 34 }, g_clerk_patient_form.contact, sizeof(g_clerk_patient_form.contact), 1, &page_state->active_field, 4);
+
+    GuiLabel((Rectangle){ form_bounds.x + 16, form_bounds.y + 194, 120, 20 }, "身份证");
+    draw_text_input((Rectangle){ form_bounds.x + 16, form_bounds.y + 218, form_bounds.width - 32, 34 }, g_clerk_patient_form.id_card, sizeof(g_clerk_patient_form.id_card), 1, &page_state->active_field, 5);
+    GuiLabel((Rectangle){ form_bounds.x + 16, form_bounds.y + 266, 120, 20 }, "过敏史");
+    draw_text_input((Rectangle){ form_bounds.x + 16, form_bounds.y + 290, form_bounds.width - 32, 34 }, g_clerk_patient_form.allergy, sizeof(g_clerk_patient_form.allergy), 1, &page_state->active_field, 6);
+    GuiLabel((Rectangle){ form_bounds.x + 16, form_bounds.y + 338, 120, 20 }, "病史");
+    draw_text_input((Rectangle){ form_bounds.x + 16, form_bounds.y + 362, form_bounds.width - 32, 34 }, g_clerk_patient_form.medical_history, sizeof(g_clerk_patient_form.medical_history), 1, &page_state->active_field, 7);
+    GuiLabel((Rectangle){ form_bounds.x + 16, form_bounds.y + 410, 120, 20 }, "备注");
+    draw_text_input((Rectangle){ form_bounds.x + 16, form_bounds.y + 434, form_bounds.width - 32, 34 }, g_clerk_patient_form.remarks, sizeof(g_clerk_patient_form.remarks), 1, &page_state->active_field, 8);
+
+    if (GuiButton((Rectangle){ form_bounds.x + 16, form_bounds.y + 490, 150, 38 }, "新增患者")) {
+        age = parse_age(g_clerk_patient_form.age_text);
+        if (age < 0) {
+            DesktopAppState_show_message(&app->state, DESKTOP_MESSAGE_ERROR, "年龄格式无效");
+        } else {
+            memset(&patient, 0, sizeof(patient));
+            strncpy(patient.patient_id, g_clerk_patient_form.patient_id, sizeof(patient.patient_id) - 1);
+            strncpy(patient.name, g_clerk_patient_form.name, sizeof(patient.name) - 1);
+            patient.gender = g_clerk_patient_form.gender_index == 0 ? PATIENT_GENDER_MALE : PATIENT_GENDER_FEMALE;
+            patient.age = age;
+            strncpy(patient.contact, g_clerk_patient_form.contact, sizeof(patient.contact) - 1);
+            strncpy(patient.id_card, g_clerk_patient_form.id_card, sizeof(patient.id_card) - 1);
+            strncpy(patient.allergy, g_clerk_patient_form.allergy, sizeof(patient.allergy) - 1);
+            strncpy(patient.medical_history, g_clerk_patient_form.medical_history, sizeof(patient.medical_history) - 1);
+            strncpy(patient.remarks, g_clerk_patient_form.remarks, sizeof(patient.remarks) - 1);
+            result = MenuApplication_add_patient(&app->application, &patient, g_clerk_patient_form.output, sizeof(g_clerk_patient_form.output));
+            show_result(app, result);
+            if (result.success) {
+                DesktopApp_mark_dirty(&app->state, DESKTOP_PAGE_DASHBOARD);
+            }
+        }
+    }
+    if (GuiButton((Rectangle){ form_bounds.x + 184, form_bounds.y + 490, 150, 38 }, "更新患者")) {
+        age = parse_age(g_clerk_patient_form.age_text);
+        if (age < 0) {
+            DesktopAppState_show_message(&app->state, DESKTOP_MESSAGE_ERROR, "年龄格式无效");
+        } else {
+            memset(&patient, 0, sizeof(patient));
+            strncpy(patient.patient_id, g_clerk_patient_form.patient_id, sizeof(patient.patient_id) - 1);
+            strncpy(patient.name, g_clerk_patient_form.name, sizeof(patient.name) - 1);
+            patient.gender = g_clerk_patient_form.gender_index == 0 ? PATIENT_GENDER_MALE : PATIENT_GENDER_FEMALE;
+            patient.age = age;
+            strncpy(patient.contact, g_clerk_patient_form.contact, sizeof(patient.contact) - 1);
+            strncpy(patient.id_card, g_clerk_patient_form.id_card, sizeof(patient.id_card) - 1);
+            strncpy(patient.allergy, g_clerk_patient_form.allergy, sizeof(patient.allergy) - 1);
+            strncpy(patient.medical_history, g_clerk_patient_form.medical_history, sizeof(patient.medical_history) - 1);
+            strncpy(patient.remarks, g_clerk_patient_form.remarks, sizeof(patient.remarks) - 1);
+            result = MenuApplication_update_patient(&app->application, &patient, g_clerk_patient_form.output, sizeof(g_clerk_patient_form.output));
+            show_result(app, result);
+        }
+    }
+
+    draw_output_panel(
+        app,
+        output_bounds,
+        "建档结果",
+        g_clerk_patient_form.output,
+        "可以先去“患者查询”选中患者，再回到本页快速修改。"
+    );
 }
-
-/* ── Page 2: Patient search ── */
 
 static void clerk_draw_patient_search(DesktopApp *app, Rectangle panel) {
-    DesktopPatientPageState *ps = &app->state.patient_page;
-    Rectangle search_box = { panel.x, panel.y, panel.width - 150, 36 };
-    Rectangle search_btn = { panel.x + panel.width - 132, panel.y, 132, 36 };
-    Rectangle list_rect = { panel.x, panel.y + 52, panel.width * 0.48f, panel.height - 52 };
-    Rectangle detail_rect = { panel.x + panel.width * 0.52f, panel.y + 52, panel.width * 0.48f, panel.height - 52 };
-    Rectangle input_fields[] = { search_box };
+    DesktopPatientPageState *state = &app->state.patient_page;
+    WorkbenchListDetailLayout split = Workbench_compute_list_detail_layout(
+        (Rectangle){ panel.x, panel.y + 56.0f, panel.width, panel.height - 56.0f },
+        0.46f,
+        18.0f,
+        260.0f
+    );
+    const LinkedListNode *current = 0;
     Result result;
-    const LinkedListNode *cur = 0;
-    int idx = 0;
+    int row = 0;
 
-    release_focus(&ps->active_field, input_fields, 1);
-
-    ps->search_mode = (DesktopPatientSearchMode)GuiToggleGroup(
-        (Rectangle){ panel.x, panel.y + 40, 220, 28 }, "按编号;按姓名",
-        (int *)&ps->search_mode);
-
-    draw_text_input(search_box, ps->query, sizeof(ps->query), 1, &ps->active_field, 1);
-
-    if (GuiButton(search_btn, "查询")) {
-        LinkedList_clear(&ps->results, free);
-        LinkedList_init(&ps->results);
-        ps->selected_index = -1;
-        ps->has_selected_patient = 0;
-        result = DesktopAdapters_search_patients(
-            &app->application, ps->search_mode, ps->query, &ps->results);
+    {
+        int active_mode = (int)state->search_mode;
+        GuiToggleGroup((Rectangle){ panel.x, panel.y, 220, 30 }, "按编号;按姓名", &active_mode);
+        state->search_mode = (DesktopPatientSearchMode)active_mode;
+    }
+    draw_text_input((Rectangle){ panel.x + 236, panel.y, panel.width - 360, 34 }, state->query, sizeof(state->query), 1, &state->active_field, 1);
+    if (GuiButton((Rectangle){ panel.x + panel.width - 110, panel.y, 110, 34 }, "查询")) {
+        LinkedList_clear(&state->results, free);
+        LinkedList_init(&state->results);
+        result = DesktopAdapters_search_patients(&app->application, state->search_mode, state->query, &state->results);
         show_result(app, result);
-        if (result.success && ps->results.head != 0) {
-            ps->selected_patient = *(const Patient *)ps->results.head->data;
-            ps->selected_index = 0;
-            ps->has_selected_patient = 1;
-        }
+        state->selected_index = -1;
+        state->has_selected_patient = 0;
     }
 
-    DrawRectangleRounded(list_rect, 0.12f, 8, app->theme.panel);
-    DrawRectangleRounded(detail_rect, 0.12f, 8, app->theme.panel);
-    DrawRectangleRoundedLinesEx(list_rect, 0.12f, 8, 1.0f, Fade(app->theme.border, 0.85f));
-    DrawRectangleRoundedLinesEx(detail_rect, 0.12f, 8, 1.0f, Fade(app->theme.border, 0.85f));
-    DrawText("患者列表", (int)list_rect.x + 14, (int)list_rect.y + 12, 20, app->theme.text_primary);
-    DrawText("详情面板", (int)detail_rect.x + 14, (int)detail_rect.y + 12, 20, app->theme.text_primary);
+    DrawRectangleRounded(split.list_bounds, 0.12f, 8, app->theme.panel);
+    DrawRectangleRoundedLinesEx(split.list_bounds, 0.12f, 8, 1.0f, Fade(app->theme.border, 0.85f));
+    DrawRectangleRounded(split.detail_bounds, 0.12f, 8, app->theme.panel);
+    DrawRectangleRoundedLinesEx(split.detail_bounds, 0.12f, 8, 1.0f, Fade(app->theme.border, 0.85f));
+    DrawText("患者列表", (int)split.list_bounds.x + 16, (int)split.list_bounds.y + 14, 20, app->theme.text_primary);
+    DrawText("患者详情", (int)split.detail_bounds.x + 16, (int)split.detail_bounds.y + 14, 20, app->theme.text_primary);
 
-    cur = ps->results.head;
-    while (cur != 0 && idx < 10) {
-        const Patient *p = (const Patient *)cur->data;
-        Rectangle row = { list_rect.x + 12, list_rect.y + 48 + idx * 40, list_rect.width - 24, 32 };
-        if (ps->selected_index == idx) {
-            DrawRectangleRounded(row, 0.16f, 8, Fade(app->theme.nav_active, 0.15f));
+    current = state->results.head;
+    while (current != 0 && row < 9) {
+        const Patient *patient = (const Patient *)current->data;
+        Rectangle row_bounds = {
+            split.list_bounds.x + 14,
+            split.list_bounds.y + 48 + row * 38.0f,
+            split.list_bounds.width - 28,
+            30
+        };
+        if (GuiButton(row_bounds, TextFormat("%s | %s", patient->patient_id, patient->name))) {
+            state->selected_index = row;
+            state->selected_patient = *patient;
+            state->has_selected_patient = 1;
         }
-        if (GuiButton(row, TextFormat("%s | %s", p->patient_id, p->name))) {
-            ps->selected_index = idx;
-            ps->selected_patient = *p;
-            ps->has_selected_patient = 1;
+        current = current->next;
+        row++;
+    }
+    if (state->has_selected_patient) {
+        Workbench_draw_info_row(app, (int)split.detail_bounds.x + 16, (int)split.detail_bounds.y + 56, "编号", state->selected_patient.patient_id);
+        Workbench_draw_info_row(app, (int)split.detail_bounds.x + 16, (int)split.detail_bounds.y + 84, "姓名", state->selected_patient.name);
+        Workbench_draw_info_row(app, (int)split.detail_bounds.x + 16, (int)split.detail_bounds.y + 112, "联系方式", state->selected_patient.contact);
+        Workbench_draw_info_row(app, (int)split.detail_bounds.x + 16, (int)split.detail_bounds.y + 140, "过敏史", state->selected_patient.allergy);
+        if (GuiButton((Rectangle){ split.detail_bounds.x + 16, split.detail_bounds.y + 188, 150, 36 }, "带入建档表单")) {
+            fill_form_from_selected_patient(state);
+            app->state.workbench_page = 1;
         }
-        cur = cur->next;
-        idx++;
-    }
-    if (idx == 0) {
-        draw_empty_state(app,
-            (Rectangle){ list_rect.x + 12, list_rect.y + 48, list_rect.width - 24, 84 },
-            "暂无患者结果", "请调整查询条件后重试。");
-    }
-
-    if (ps->has_selected_patient) {
-        const Patient *p = &ps->selected_patient;
-        Workbench_draw_info_row(app, (int)detail_rect.x + 16, (int)detail_rect.y + 54, "编号", p->patient_id);
-        Workbench_draw_info_row(app, (int)detail_rect.x + 16, (int)detail_rect.y + 82, "姓名", p->name);
-        Workbench_draw_info_row(app, (int)detail_rect.x + 16, (int)detail_rect.y + 110, "年龄", TextFormat("%d", p->age));
-        Workbench_draw_info_row(app, (int)detail_rect.x + 16, (int)detail_rect.y + 138, "联系方式", p->contact);
-        Workbench_draw_info_row(app, (int)detail_rect.x + 16, (int)detail_rect.y + 166, "过敏史", p->allergy);
     } else {
-        draw_empty_state(app,
-            (Rectangle){ detail_rect.x + 12, detail_rect.y + 48, detail_rect.width - 24, 84 },
-            "等待选择患者", "点击左侧患者行后可查看详情信息。");
+        DrawText("查询后选择一名患者，可带入建档表单继续修改。", (int)split.detail_bounds.x + 16, (int)split.detail_bounds.y + 56, 17, app->theme.text_secondary);
     }
 }
-
-/* ── Page 3: Registration form ── */
 
 static void clerk_draw_registration(DesktopApp *app, Rectangle panel) {
-    DesktopRegistrationPageState *rp = &app->state.registration_page;
-    Rectangle patient_box = { panel.x + 16, panel.y + 82, 260, 34 };
-    Rectangle doctor_box = { panel.x + 16, panel.y + 152, 260, 34 };
-    Rectangle dept_box = { panel.x + 16, panel.y + 222, 260, 34 };
-    Rectangle time_box = { panel.x + 16, panel.y + 292, 260, 34 };
-    Rectangle input_fields[] = { patient_box, doctor_box, dept_box, time_box };
+    DesktopRegistrationPageState *state = &app->state.registration_page;
+    WorkbenchListDetailLayout split = Workbench_compute_list_detail_layout(panel, 0.46f, 18.0f, 280.0f);
+    WorkbenchButtonGroupLayout actions;
     Result result;
-    Registration registration;
+    int index = 0;
 
-    DrawRectangleRounded(panel, 0.12f, 8, app->theme.panel);
-    DrawText("挂号办理", (int)panel.x + 16, (int)panel.y + 16, 24, app->theme.text_primary);
+    DrawRectangleRounded(split.list_bounds, 0.12f, 8, app->theme.panel);
+    DrawRectangleRoundedLinesEx(split.list_bounds, 0.12f, 8, 1.0f, Fade(app->theme.border, 0.85f));
+    DrawText("挂号办理", (int)split.list_bounds.x + 16, (int)split.list_bounds.y + 14, 24, app->theme.text_primary);
 
-    release_focus(&rp->active_field, input_fields, 4);
+    GuiLabel((Rectangle){ split.list_bounds.x + 16, split.list_bounds.y + 54, 120, 20 }, "患者编号");
+    draw_text_input((Rectangle){ split.list_bounds.x + 16, split.list_bounds.y + 78, split.list_bounds.width - 32, 34 }, state->patient_id, sizeof(state->patient_id), 1, &state->active_field, 1);
+    GuiLabel((Rectangle){ split.list_bounds.x + 16, split.list_bounds.y + 126, 120, 20 }, "科室编号");
+    draw_text_input((Rectangle){ split.list_bounds.x + 16, split.list_bounds.y + 150, split.list_bounds.width - 32, 34 }, state->department_id, sizeof(state->department_id), 1, &state->active_field, 2);
+    GuiLabel((Rectangle){ split.list_bounds.x + 16, split.list_bounds.y + 198, 120, 20 }, "医生编号");
+    draw_text_input((Rectangle){ split.list_bounds.x + 16, split.list_bounds.y + 222, split.list_bounds.width - 32, 34 }, state->doctor_id, sizeof(state->doctor_id), 1, &state->active_field, 3);
+    GuiLabel((Rectangle){ split.list_bounds.x + 16, split.list_bounds.y + 270, 120, 20 }, "挂号时间");
+    draw_text_input((Rectangle){ split.list_bounds.x + 16, split.list_bounds.y + 294, split.list_bounds.width - 32, 34 }, state->registered_at, sizeof(state->registered_at), 1, &state->active_field, 4);
 
-    GuiLabel((Rectangle){ panel.x + 16, panel.y + 58, 120, 20 }, "患者编号");
-    draw_text_input(patient_box, rp->patient_id, sizeof(rp->patient_id), 1, &rp->active_field, 1);
-
-    GuiLabel((Rectangle){ panel.x + 16, panel.y + 128, 120, 20 }, "医生编号");
-    draw_text_input(doctor_box, rp->doctor_id, sizeof(rp->doctor_id), 1, &rp->active_field, 2);
-
-    GuiLabel((Rectangle){ panel.x + 16, panel.y + 198, 120, 20 }, "科室编号");
-    draw_text_input(dept_box, rp->department_id, sizeof(rp->department_id), 1, &rp->active_field, 3);
-
-    GuiLabel((Rectangle){ panel.x + 16, panel.y + 268, 120, 20 }, "挂号时间");
-    draw_text_input(time_box, rp->registered_at, sizeof(rp->registered_at), 1, &rp->active_field, 4);
-
-    if (GuiButton((Rectangle){ panel.x + 16, panel.y + 342, 160, 38 }, "提交挂号")) {
-        memset(&registration, 0, sizeof(registration));
-        result = DesktopAdapters_submit_registration(
-            &app->application,
-            rp->patient_id, rp->doctor_id,
-            rp->department_id, rp->registered_at,
-            &registration);
-        show_result(app, result);
-        if (result.success) {
-            strncpy(rp->last_registration_id, registration.registration_id,
-                sizeof(rp->last_registration_id) - 1);
-            rp->last_registration_id[sizeof(rp->last_registration_id) - 1] = '\0';
-            app->state.dashboard.loaded = 0;
+    actions = Workbench_compute_button_group_layout(
+        (Rectangle){ split.list_bounds.x + 16, split.list_bounds.y + 350.0f, split.list_bounds.width - 32, 36.0f },
+        3,
+        110.0f,
+        36.0f,
+        12.0f
+    );
+    for (index = 0; index < actions.count; index++) {
+        int clicked = 0;
+        const char *label = index == 0 ? "科室列表" : index == 1 ? "医生列表" : "提交挂号";
+        Workbench_draw_quick_action_btn(app, actions.buttons[index], label, app->theme.nav_active, &clicked);
+        if (!clicked) {
+            continue;
+        }
+        if (index == 0) {
+            result = DesktopAdapters_list_departments(&app->application, g_clerk_registration_view.departments, sizeof(g_clerk_registration_view.departments));
+            show_result(app, result);
+        } else if (index == 1) {
+            result = DesktopAdapters_list_doctors_by_department(&app->application, state->department_id, g_clerk_registration_view.doctors, sizeof(g_clerk_registration_view.doctors));
+            show_result(app, result);
+        } else {
+            Registration registration;
+            memset(&registration, 0, sizeof(registration));
+            result = DesktopAdapters_submit_registration(
+                &app->application,
+                state->patient_id,
+                state->doctor_id,
+                state->department_id,
+                state->registered_at,
+                &registration
+            );
+            show_result(app, result);
+            if (result.success) {
+                strncpy(state->last_registration_id, registration.registration_id, sizeof(state->last_registration_id) - 1);
+                DesktopAdapters_query_registrations_by_patient(
+                    &app->application,
+                    state->patient_id,
+                    g_clerk_registration_view.output,
+                    sizeof(g_clerk_registration_view.output)
+                );
+                DesktopApp_mark_dirty(&app->state, DESKTOP_PAGE_DASHBOARD);
+            }
         }
     }
 
-    DrawText(
-        TextFormat("最近成功挂号编号: %s",
-            rp->last_registration_id[0] != '\0' ? rp->last_registration_id : "--"),
-        (int)panel.x + 320, (int)panel.y + 90, 20, app->theme.text_secondary);
+    DrawRectangleRounded(split.detail_bounds, 0.12f, 8, app->theme.panel);
+    DrawRectangleRoundedLinesEx(split.detail_bounds, 0.12f, 8, 1.0f, Fade(app->theme.border, 0.85f));
+    draw_output_panel(
+        app,
+        (Rectangle){ split.detail_bounds.x + 12, split.detail_bounds.y + 12, split.detail_bounds.width - 24, (split.detail_bounds.height - 40) / 3.0f },
+        "科室列表",
+        g_clerk_registration_view.departments,
+        "用于前台向患者展示科室。"
+    );
+    draw_output_panel(
+        app,
+        (Rectangle){ split.detail_bounds.x + 12, split.detail_bounds.y + 18 + (split.detail_bounds.height - 40) / 3.0f, split.detail_bounds.width - 24, (split.detail_bounds.height - 40) / 3.0f },
+        "医生列表",
+        g_clerk_registration_view.doctors,
+        "先输入科室编号，再查询该科医生。"
+    );
+    draw_output_panel(
+        app,
+        (Rectangle){ split.detail_bounds.x + 12, split.detail_bounds.y + 24 + (split.detail_bounds.height - 40) / 3.0f * 2.0f, split.detail_bounds.width - 24, (split.detail_bounds.height - 40) / 3.0f },
+        "挂号结果",
+        g_clerk_registration_view.output,
+        "成功挂号后，这里会刷新当前患者的挂号记录。"
+    );
 }
-
-/* ── Page 4: Registration query & cancel ── */
 
 static void clerk_draw_reg_query(DesktopApp *app, Rectangle panel) {
-    static char output[8192] = {0};
-    static char query_reg_id[64] = {0};
-    static char cancel_reg_id[64] = {0};
-    static char cancel_time[64] = {0};
-    static char query_patient_id[64] = {0};
+    static char query_registration_id[HIS_DOMAIN_ID_CAPACITY];
+    static char cancel_registration_id[HIS_DOMAIN_ID_CAPACITY];
+    static char cancel_time[HIS_DOMAIN_TIME_CAPACITY];
+    static char query_patient_id[HIS_DOMAIN_ID_CAPACITY];
+    static char output[WORKBENCH_OUTPUT_CAPACITY];
     static int active_field = 0;
-    Rectangle reg_id_box = { panel.x + 16, panel.y + 82, 220, 34 };
-    Rectangle cancel_id_box = { panel.x + 16, panel.y + 182, 220, 34 };
-    Rectangle cancel_time_box = { panel.x + 248, panel.y + 182, 200, 34 };
-    Rectangle patient_id_box = { panel.x + 16, panel.y + 282, 220, 34 };
-    Rectangle input_fields[] = { reg_id_box, cancel_id_box, cancel_time_box, patient_id_box };
-    Rectangle left = { panel.x, panel.y, panel.width * 0.52f, panel.height };
-    Rectangle right = { panel.x + panel.width * 0.56f, panel.y, panel.width * 0.44f, panel.height };
+    WorkbenchListDetailLayout split = Workbench_compute_list_detail_layout(panel, 0.48f, 18.0f, 280.0f);
     Result result;
 
-    release_focus(&active_field, input_fields, 4);
+    DrawRectangleRounded(split.list_bounds, 0.12f, 8, app->theme.panel);
+    DrawRectangleRoundedLinesEx(split.list_bounds, 0.12f, 8, 1.0f, Fade(app->theme.border, 0.85f));
+    DrawText("挂号查询与取消", (int)split.list_bounds.x + 16, (int)split.list_bounds.y + 14, 24, app->theme.text_primary);
 
-    DrawRectangleRounded(left, 0.12f, 8, app->theme.panel);
-    DrawRectangleRoundedLinesEx(left, 0.12f, 8, 1.0f, Fade(app->theme.border, 0.85f));
-    DrawText("挂号查询与取消", (int)left.x + 16, (int)left.y + 16, 24, app->theme.text_primary);
-
-    /* Query by registration ID */
-    Workbench_draw_section_header(app, (int)left.x + 16, (int)left.y + 56, "按挂号编号查询");
-    draw_text_input(reg_id_box, query_reg_id, sizeof(query_reg_id), 1, &active_field, 1);
-    if (GuiButton((Rectangle){ left.x + 248, left.y + 82, 120, 34 }, "查询")) {
-        result = DesktopAdapters_query_registration(
-            &app->application, query_reg_id, output, sizeof(output));
+    GuiLabel((Rectangle){ split.list_bounds.x + 16, split.list_bounds.y + 54, 120, 20 }, "挂号编号查询");
+    draw_text_input((Rectangle){ split.list_bounds.x + 16, split.list_bounds.y + 78, split.list_bounds.width - 156, 34 }, query_registration_id, sizeof(query_registration_id), 1, &active_field, 1);
+    if (GuiButton((Rectangle){ split.list_bounds.x + split.list_bounds.width - 124, split.list_bounds.y + 78, 108, 34 }, "查询")) {
+        result = DesktopAdapters_query_registration(&app->application, query_registration_id, output, sizeof(output));
         show_result(app, result);
     }
 
-    /* Cancel registration */
-    Workbench_draw_section_header(app, (int)left.x + 16, (int)left.y + 136, "取消挂号");
-    GuiLabel((Rectangle){ left.x + 16, left.y + 164, 120, 18 }, "挂号编号 / 取消时间");
-    draw_text_input(cancel_id_box, cancel_reg_id, sizeof(cancel_reg_id), 1, &active_field, 2);
-    draw_text_input(cancel_time_box, cancel_time, sizeof(cancel_time), 1, &active_field, 3);
-    if (GuiButton((Rectangle){ left.x + 16, left.y + 224, 120, 34 }, "取消挂号")) {
-        result = DesktopAdapters_cancel_registration(
-            &app->application, cancel_reg_id, cancel_time, output, sizeof(output));
-        show_result(app, result);
-        if (result.success) { app->state.dashboard.loaded = 0; }
-    }
-
-    /* Query by patient ID */
-    Workbench_draw_section_header(app, (int)left.x + 16, (int)left.y + 276, "按患者编号查询");
-    draw_text_input(patient_id_box, query_patient_id, sizeof(query_patient_id), 1, &active_field, 4);
-    if (GuiButton((Rectangle){ left.x + 248, left.y + 282, 120, 34 }, "查询")) {
-        result = DesktopAdapters_query_registrations_by_patient(
-            &app->application, query_patient_id, output, sizeof(output));
+    GuiLabel((Rectangle){ split.list_bounds.x + 16, split.list_bounds.y + 136, 120, 20 }, "按患者查询");
+    draw_text_input((Rectangle){ split.list_bounds.x + 16, split.list_bounds.y + 160, split.list_bounds.width - 156, 34 }, query_patient_id, sizeof(query_patient_id), 1, &active_field, 2);
+    if (GuiButton((Rectangle){ split.list_bounds.x + split.list_bounds.width - 124, split.list_bounds.y + 160, 108, 34 }, "查询")) {
+        result = DesktopAdapters_query_registrations_by_patient(&app->application, query_patient_id, output, sizeof(output));
         show_result(app, result);
     }
 
-    /* Output panel */
-    DrawRectangleRounded(right, 0.12f, 8, app->theme.panel);
-    DrawRectangleRoundedLinesEx(right, 0.12f, 8, 1.0f, Fade(app->theme.border, 0.85f));
-    DrawText("查询结果", (int)right.x + 14, (int)right.y + 12, 20, app->theme.text_primary);
-    if (output[0] != '\0') {
-        DrawText(output, (int)right.x + 14, (int)right.y + 48, 17, app->theme.text_secondary);
-    } else {
-        draw_empty_state(app,
-            (Rectangle){ right.x + 12, right.y + 46, right.width - 24, 84 },
-            "暂无输出", "左侧提交查询或取消操作后，这里显示返回结果。");
+    GuiLabel((Rectangle){ split.list_bounds.x + 16, split.list_bounds.y + 218, 140, 20 }, "取消挂号");
+    draw_text_input((Rectangle){ split.list_bounds.x + 16, split.list_bounds.y + 242, split.list_bounds.width - 32, 34 }, cancel_registration_id, sizeof(cancel_registration_id), 1, &active_field, 3);
+    draw_text_input((Rectangle){ split.list_bounds.x + 16, split.list_bounds.y + 288, split.list_bounds.width - 32, 34 }, cancel_time, sizeof(cancel_time), 1, &active_field, 4);
+    if (GuiButton((Rectangle){ split.list_bounds.x + 16, split.list_bounds.y + 336, 120, 36 }, "取消挂号")) {
+        result = DesktopAdapters_cancel_registration(&app->application, cancel_registration_id, cancel_time, output, sizeof(output));
+        show_result(app, result);
     }
+
+    draw_output_panel(
+        app,
+        split.detail_bounds,
+        "挂号查询结果",
+        output,
+        "可按挂号编号查询，也可按患者编号查询并执行取消。"
+    );
 }
 
-/* ── Main entry point ── */
-
 void ClerkWorkbench_draw(DesktopApp *app, Rectangle panel, int page) {
-    if (app == 0) return;
-
     switch (page) {
-        case 0: clerk_draw_home(app, panel); break;
-        case 1: clerk_draw_patient_create(app, panel); break;
-        case 2: clerk_draw_patient_search(app, panel); break;
-        case 3: clerk_draw_registration(app, panel); break;
-        case 4: clerk_draw_reg_query(app, panel); break;
-        default: clerk_draw_home(app, panel); break;
+        case 0:
+            clerk_draw_home(app, panel);
+            break;
+        case 1:
+            clerk_draw_patient_create(app, panel);
+            break;
+        case 2:
+            clerk_draw_patient_search(app, panel);
+            break;
+        case 3:
+            clerk_draw_registration(app, panel);
+            break;
+        case 4:
+            clerk_draw_reg_query(app, panel);
+            break;
+        default:
+            clerk_draw_home(app, panel);
+            break;
     }
 }
