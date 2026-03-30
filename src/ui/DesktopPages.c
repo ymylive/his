@@ -630,7 +630,7 @@ static void DesktopPages_draw_dashboard(DesktopApp *app, Rectangle panel) {
             app,
             (Rectangle){ panel.x + 10, section_top + 12, panel.width / 2 - 28, 92 },
             "暂无挂号记录",
-            "可点击右上角"刷新"重新获取。"
+            "可点击右上角【刷新】重新获取。"
         );
     }
 
@@ -1407,7 +1407,7 @@ static void DesktopPages_draw_dispense(DesktopApp *app, Rectangle panel) {
             app,
             (Rectangle){ panel.x + 12, panel.y + 66, panel.width - 24, 84 },
             "暂无发药记录",
-            "请确认患者编号后点击"查询"。"
+            "请确认患者编号后点击【查询】。"
         );
     }
 }
