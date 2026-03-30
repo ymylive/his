@@ -131,7 +131,7 @@ static void patient_draw_home(DesktopApp *app, Rectangle panel) {
         admission_status = "住院中";
     }
     snprintf(dispense_count, sizeof(dispense_count), "%d条",
-             app->state.dispense_page.loaded > 0 ? LinkedList_size(&app->state.dispense_page.results) : 0);
+             app->state.dispense_page.loaded > 0 ? (int)LinkedList_count(&app->state.dispense_page.results) : 0);
 
     values[0] = patient_id_value;
     values[1] = registration_count;
