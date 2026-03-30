@@ -1,10 +1,11 @@
 #!/bin/bash
-set -e
+set -euo pipefail
 
 # macOS Release Package Script
 # Usage: ./scripts/package-release-macos.sh [version]
 
 VERSION="${1:-2.0.0}"
+NORMALIZED_VERSION="${VERSION#v}"
 BUILD_DIR="build-release"
 DIST_DIR="dist"
 PROJECT_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -40,7 +41,7 @@ else
 fi
 
 # Package name
-PACKAGE_NAME="lightweight-his-portable-v${VERSION}-${ARCH_TAG}"
+PACKAGE_NAME="lightweight-his-portable-v${NORMALIZED_VERSION}-${ARCH_TAG}"
 STAGE_PATH="$DIST_DIR/$PACKAGE_NAME"
 ZIP_PATH="$DIST_DIR/${PACKAGE_NAME}.zip"
 
@@ -85,7 +86,7 @@ chmod +x "$STAGE_PATH/run_console.sh"
 
 # Create START_HERE.txt
 cat > "$STAGE_PATH/START_HERE.txt" << EOF
-Lightweight HIS Portable v${VERSION} for macOS
+Lightweight HIS Portable v${NORMALIZED_VERSION} for macOS
 
 ⚠️  首次运行前必读 ⚠️
 

@@ -30,7 +30,9 @@ jobs:
 
       - name: Build and package portable
         shell: powershell
-        run: powershell -ExecutionPolicy Bypass -File .\scripts\package-release.ps1 -Version ${{ github.ref_name }} -SkipSmoke
+        run: |
+          python .\scripts\sync-desktop-glyph-seed.py --check
+          powershell -ExecutionPolicy Bypass -File .\scripts\package-release.ps1 -Version ${{ github.ref_name }} -SkipSmoke
 
       - name: Upload Windows artifact
         uses: actions/upload-artifact@v4
@@ -57,8 +59,9 @@ jobs:
 
       - name: Build and package portable
         run: |
-          chmod +x ./scripts/package-release-macos.sh
-          ./scripts/package-release-macos.sh ${{ github.ref_name }}
+          python3 ./scripts/sync-desktop-glyph-seed.py --check
+          chmod +x ./scripts/package-release-macos.sh ./scripts/test-package-release-macos.sh
+          ./scripts/test-package-release-macos.sh ${{ github.ref_name }}
 
       - name: Upload macOS artifact
         uses: actions/upload-artifact@v4

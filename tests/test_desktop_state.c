@@ -171,6 +171,51 @@ static void test_cjk_font_path_resolution(void) {
     assert(missing == 0);
 }
 
+static int test_seed_contains_codepoint(const int *seed_codepoints, int seed_count, int codepoint) {
+    int index = 0;
+    for (index = 0; index < seed_count; index++) {
+        if (seed_codepoints[index] == codepoint) {
+            return 1;
+        }
+    }
+    return 0;
+}
+
+static void test_cjk_seed_covers_recent_ui_copy(void) {
+    const char *seed = DesktopTheme_cjk_glyph_seed_text();
+    const char *samples[] = {
+        "步骤 1: 选择科室",
+        "点击【查询】",
+        "填写转床时间（可选）",
+        "• 当前住院记录",
+        "欢迎使用患者自助服务台。"
+    };
+    int sample_index = 0;
+    int seed_count = 0;
+    int *seed_codepoints = LoadCodepoints(seed, &seed_count);
+
+    assert(seed_codepoints != 0);
+    assert(seed_count > 0);
+
+    for (sample_index = 0; sample_index < (int)(sizeof(samples) / sizeof(samples[0])); sample_index++) {
+        int text_count = 0;
+        int text_index = 0;
+        int *text_codepoints = LoadCodepoints(samples[sample_index], &text_count);
+
+        assert(text_codepoints != 0);
+        for (text_index = 0; text_index < text_count; text_index++) {
+            if (text_codepoints[text_index] <= 126) {
+                continue;
+            }
+            assert(test_seed_contains_codepoint(seed_codepoints, seed_count, text_codepoints[text_index]) == 1);
+        }
+
+        UnloadCodepoints(text_codepoints);
+    }
+
+    UnloadCodepoints(seed_codepoints);
+}
+
 static void test_data_path_resolution_prefers_project_root_over_build_data(void) {
     char resolved[512];
     int found = DesktopApp_resolve_data_path_for_base_dir(
@@ -192,6 +237,7 @@ int main(void) {
     test_role_mapping();
     test_freshness_helpers_and_window_guards();
     test_cjk_font_path_resolution();
+    test_cjk_seed_covers_recent_ui_copy();
     test_data_path_resolution_prefers_project_root_over_build_data();
     return 0;
 }
