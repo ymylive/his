@@ -4,6 +4,35 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## [2.0.2] - 2026-03-30
+
+### Fixed - 修复 macOS 中文字体显示
+
+- **字体加载问题** - 修复 macOS 中文显示乱码
+  - 添加平台特定的字体候选列表
+  - Windows: 微软雅黑、宋体、黑体等 11 个字体
+  - macOS: STHeiti、Arial Unicode、Hiragino 等 13 个字体
+  - Linux: Noto CJK、WenQuanYi 等 7 个字体
+- 使用预处理器宏区分平台 (`#ifdef _WIN32`, `__APPLE__`)
+- macOS 优先使用系统自带的 STHeiti Light.ttc
+
+### Added
+
+- **字体检测工具** (`scripts/test-fonts.sh`)
+  - 检查系统中可用的中文字体
+  - 显示将使用的字体文件
+  - 提供字体安装建议
+- **字体加载文档** (`docs/FONT_LOADING.md`)
+  - 详细的字体加载逻辑说明
+  - 平台特定的字体列表
+  - 故障排查指南
+  - 技术细节和优化说明
+
+### Changed
+
+- 优化字体加载优先级
+- 支持用户安装和 Homebrew 安装的字体
+
 ## [2.0.1] - 2026-03-30
 
 ### Added - macOS 安全配置改进

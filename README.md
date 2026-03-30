@@ -133,6 +133,7 @@ ctest --test-dir build --output-on-failure
 
 - [安装依赖](docs/INSTALL.md)
 - [构建与运行](docs/BUILD_AND_RUN.md)
+- [字体加载说明](docs/FONT_LOADING.md) 🆕 中文显示必读
 - [macOS 支持](docs/MACOS_SUPPORT.md) ✨ 新增
 - [macOS 安全配置](docs/MACOS_SECURITY.md) ⚠️ 必读
 - [AI 使用](docs/AI_USAGE.md)
