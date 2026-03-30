@@ -1,7 +1,7 @@
 param(
     [string]$BuildDir = "build-release",
     [string]$DistDir = "dist",
-    [string]$Version = "0.3.0",
+    [string]$Version = "2.0.0",
     [switch]$SkipTests,
     [switch]$SkipSmoke
 )
