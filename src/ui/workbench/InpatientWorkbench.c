@@ -33,14 +33,18 @@ static void draw_text_input(Rectangle bounds, char *text, int text_size,
 static void draw_output_panel(const DesktopApp *app, Rectangle rect,
                               const char *title, const char *content,
                               const char *empty_text) {
+    WorkbenchTextPanelLayout layout = Workbench_compute_text_panel_layout(rect, 14.0f, 22.0f, 14.0f);
+
     DrawRectangleRounded(rect, 0.12f, 8, app->theme.panel);
     DrawRectangleRoundedLinesEx(rect, 0.12f, 8, 1.0f, Fade(app->theme.border, 0.85f));
-    DrawText(title, (int)rect.x + 14, (int)rect.y + 12, 20, app->theme.text_primary);
-    if (content == 0 || content[0] == '\0') {
-        DrawText(empty_text, (int)rect.x + 14, (int)rect.y + 48, 17, app->theme.text_secondary);
-        return;
-    }
-    DrawText(content, (int)rect.x + 14, (int)rect.y + 48, 17, app->theme.text_secondary);
+    DrawText(title, (int)layout.title_bounds.x, (int)layout.title_bounds.y, 20, app->theme.text_primary);
+    DrawText(
+        (content != 0 && content[0] != '\0') ? content : empty_text,
+        (int)layout.content_bounds.x,
+        (int)layout.content_bounds.y,
+        17,
+        app->theme.text_secondary
+    );
 }
 
 /* ── Page 0: Home ── */
@@ -76,32 +80,37 @@ static void draw_home(DesktopApp *app, Rectangle panel) {
 
 static void draw_admit(DesktopApp *app, Rectangle panel) {
     DesktopInpatientPageState *st = &app->state.inpatient_page;
-    Rectangle left = { panel.x, panel.y, panel.width * 0.52f, panel.height };
-    Rectangle right = { panel.x + panel.width * 0.56f, panel.y, panel.width * 0.44f, panel.height };
-    float lx = left.x + 16;
-    float ly = left.y;
+    WorkbenchListDetailLayout split = Workbench_compute_list_detail_layout(panel, 0.52f, 18.0f, 280.0f);
+    float lx = split.list_bounds.x;
+    float ly = split.list_bounds.y;
     Result result;
 
-    DrawRectangleRounded(left, 0.12f, 8, app->theme.panel);
-    DrawRectangleRoundedLinesEx(left, 0.12f, 8, 1.0f, Fade(app->theme.border, 0.85f));
-    DrawText("入院登记", (int)lx, (int)ly + 14, 24, app->theme.text_primary);
+    DrawRectangleRounded(split.list_bounds, 0.12f, 8, app->theme.panel);
+    DrawRectangleRoundedLinesEx(split.list_bounds, 0.12f, 8, 1.0f, Fade(app->theme.border, 0.85f));
+    DrawText("入院登记", (int)lx + 16, (int)ly + 14, 24, app->theme.text_primary);
 
-    GuiLabel((Rectangle){ lx, ly + 52, 120, 20 }, "患者编号");
-    draw_text_input((Rectangle){ lx, ly + 74, 200, 28 }, st->patient_id, sizeof(st->patient_id), 1, &st->active_field, 1);
+    Workbench_draw_section_header(app, (int)lx + 16, (int)ly + 52, "患者信息");
 
-    GuiLabel((Rectangle){ lx, ly + 112, 120, 20 }, "病区编号");
-    draw_text_input((Rectangle){ lx, ly + 134, 200, 28 }, st->ward_id, sizeof(st->ward_id), 1, &st->active_field, 2);
+    Workbench_draw_form_label(app, (int)lx + 16, (int)ly + 86, "患者编号", 1);
+    draw_text_input((Rectangle){ lx + 16, ly + 108, 200, 34 }, st->patient_id, sizeof(st->patient_id), 1, &st->active_field, 1);
 
-    GuiLabel((Rectangle){ lx, ly + 172, 120, 20 }, "床位编号");
-    draw_text_input((Rectangle){ lx, ly + 194, 200, 28 }, st->bed_id, sizeof(st->bed_id), 1, &st->active_field, 3);
+    Workbench_draw_section_header(app, (int)lx + 16, (int)ly + 158, "床位分配");
 
-    GuiLabel((Rectangle){ lx, ly + 232, 120, 20 }, "入院时间");
-    draw_text_input((Rectangle){ lx, ly + 254, 200, 28 }, st->admitted_at, sizeof(st->admitted_at), 1, &st->active_field, 4);
+    Workbench_draw_form_label(app, (int)lx + 16, (int)ly + 192, "病区编号", 1);
+    draw_text_input((Rectangle){ lx + 16, ly + 214, 200, 34 }, st->ward_id, sizeof(st->ward_id), 1, &st->active_field, 2);
 
-    GuiLabel((Rectangle){ lx, ly + 292, 120, 20 }, "入院摘要");
-    draw_text_input((Rectangle){ lx, ly + 314, 340, 28 }, st->summary, sizeof(st->summary), 1, &st->active_field, 5);
+    Workbench_draw_form_label(app, (int)lx + 232, (int)ly + 192, "床位编号", 1);
+    draw_text_input((Rectangle){ lx + 232, ly + 214, 200, 34 }, st->bed_id, sizeof(st->bed_id), 1, &st->active_field, 3);
 
-    if (GuiButton((Rectangle){ lx, ly + 360, 160, 34 }, "办理入院")) {
+    Workbench_draw_section_header(app, (int)lx + 16, (int)ly + 264, "入院详情");
+
+    Workbench_draw_form_label(app, (int)lx + 16, (int)ly + 298, "入院时间", 1);
+    draw_text_input((Rectangle){ lx + 16, ly + 320, 200, 34 }, st->admitted_at, sizeof(st->admitted_at), 1, &st->active_field, 4);
+
+    Workbench_draw_form_label(app, (int)lx + 16, (int)ly + 364, "入院摘要", 0);
+    draw_text_input((Rectangle){ lx + 16, ly + 386, split.list_bounds.width - 32, 34 }, st->summary, sizeof(st->summary), 1, &st->active_field, 5);
+
+    if (GuiButton((Rectangle){ lx + 16, ly + 440, 160, 36 }, "办理入院")) {
         result = DesktopAdapters_admit_patient(
             &app->application,
             st->patient_id, st->ward_id, st->bed_id,
@@ -111,7 +120,7 @@ static void draw_admit(DesktopApp *app, Rectangle panel) {
         show_result(app, result);
     }
 
-    draw_output_panel(app, right, "入院结果", st->output,
+    draw_output_panel(app, split.detail_bounds, "入院结果", st->output,
                       "填写左侧表单并点击「办理入院」。");
 }
 
@@ -119,26 +128,34 @@ static void draw_admit(DesktopApp *app, Rectangle panel) {
 
 static void draw_discharge(DesktopApp *app, Rectangle panel) {
     DesktopInpatientPageState *st = &app->state.inpatient_page;
-    Rectangle left = { panel.x, panel.y, panel.width * 0.52f, panel.height };
-    Rectangle right = { panel.x + panel.width * 0.56f, panel.y, panel.width * 0.44f, panel.height };
-    float lx = left.x + 16;
-    float ly = left.y;
+    WorkbenchListDetailLayout split = Workbench_compute_list_detail_layout(panel, 0.52f, 18.0f, 280.0f);
+    float lx = split.list_bounds.x;
+    float ly = split.list_bounds.y;
     Result result;
 
-    DrawRectangleRounded(left, 0.12f, 8, app->theme.panel);
-    DrawRectangleRoundedLinesEx(left, 0.12f, 8, 1.0f, Fade(app->theme.border, 0.85f));
-    DrawText("出院办理", (int)lx, (int)ly + 14, 24, app->theme.text_primary);
+    DrawRectangleRounded(split.list_bounds, 0.12f, 8, app->theme.panel);
+    DrawRectangleRoundedLinesEx(split.list_bounds, 0.12f, 8, 1.0f, Fade(app->theme.border, 0.85f));
+    DrawText("出院办理", (int)lx + 16, (int)ly + 14, 24, app->theme.text_primary);
 
-    GuiLabel((Rectangle){ lx, ly + 52, 120, 20 }, "住院编号");
-    draw_text_input((Rectangle){ lx, ly + 74, 200, 28 }, st->admission_id, sizeof(st->admission_id), 1, &st->active_field, 1);
+    Workbench_draw_section_header(app, (int)lx + 16, (int)ly + 52, "出院流程");
 
-    GuiLabel((Rectangle){ lx, ly + 112, 120, 20 }, "出院时间");
-    draw_text_input((Rectangle){ lx, ly + 134, 200, 28 }, st->discharged_at, sizeof(st->discharged_at), 1, &st->active_field, 2);
+    DrawText("步骤 1: 输入住院编号", (int)lx + 16, (int)ly + 86, 17, app->theme.text_secondary);
+    DrawText("步骤 2: 填写出院时间", (int)lx + 16, (int)ly + 106, 17, app->theme.text_secondary);
+    DrawText("步骤 3: 填写出院摘要", (int)lx + 16, (int)ly + 126, 17, app->theme.text_secondary);
+    DrawText("步骤 4: 确认办理出院", (int)lx + 16, (int)ly + 146, 17, app->theme.text_secondary);
 
-    GuiLabel((Rectangle){ lx, ly + 172, 120, 20 }, "出院摘要");
-    draw_text_input((Rectangle){ lx, ly + 194, 340, 28 }, st->summary, sizeof(st->summary), 1, &st->active_field, 3);
+    Workbench_draw_section_header(app, (int)lx + 16, (int)ly + 182, "出院信息");
 
-    if (GuiButton((Rectangle){ lx, ly + 240, 160, 34 }, "办理出院")) {
+    Workbench_draw_form_label(app, (int)lx + 16, (int)ly + 216, "住院编号", 1);
+    draw_text_input((Rectangle){ lx + 16, ly + 238, 200, 34 }, st->admission_id, sizeof(st->admission_id), 1, &st->active_field, 1);
+
+    Workbench_draw_form_label(app, (int)lx + 16, (int)ly + 282, "出院时间", 1);
+    draw_text_input((Rectangle){ lx + 16, ly + 304, 200, 34 }, st->discharged_at, sizeof(st->discharged_at), 1, &st->active_field, 2);
+
+    Workbench_draw_form_label(app, (int)lx + 16, (int)ly + 348, "出院摘要", 0);
+    draw_text_input((Rectangle){ lx + 16, ly + 370, split.list_bounds.width - 32, 34 }, st->summary, sizeof(st->summary), 1, &st->active_field, 3);
+
+    if (GuiButton((Rectangle){ lx + 16, ly + 424, 160, 36 }, "办理出院")) {
         result = DesktopAdapters_discharge_patient(
             &app->application,
             st->admission_id, st->discharged_at, st->summary,
@@ -147,7 +164,7 @@ static void draw_discharge(DesktopApp *app, Rectangle panel) {
         show_result(app, result);
     }
 
-    draw_output_panel(app, right, "出院结果", st->output,
+    draw_output_panel(app, split.detail_bounds, "出院结果", st->output,
                       "填写左侧表单并点击「办理出院」。");
 }
 
@@ -155,20 +172,29 @@ static void draw_discharge(DesktopApp *app, Rectangle panel) {
 
 static void draw_query(DesktopApp *app, Rectangle panel) {
     DesktopInpatientPageState *st = &app->state.inpatient_page;
-    Rectangle left = { panel.x, panel.y, panel.width * 0.52f, panel.height };
-    Rectangle right = { panel.x + panel.width * 0.56f, panel.y, panel.width * 0.44f, panel.height };
-    float lx = left.x + 16;
-    float ly = left.y;
+    WorkbenchListDetailLayout split = Workbench_compute_list_detail_layout(panel, 0.52f, 18.0f, 280.0f);
+    float lx = split.list_bounds.x;
+    float ly = split.list_bounds.y;
     Result result;
+    int search_clicked_patient = 0;
+    int search_clicked_bed = 0;
 
-    DrawRectangleRounded(left, 0.12f, 8, app->theme.panel);
-    DrawRectangleRoundedLinesEx(left, 0.12f, 8, 1.0f, Fade(app->theme.border, 0.85f));
-    DrawText("住院查询", (int)lx, (int)ly + 14, 24, app->theme.text_primary);
+    DrawRectangleRounded(split.list_bounds, 0.12f, 8, app->theme.panel);
+    DrawRectangleRoundedLinesEx(split.list_bounds, 0.12f, 8, 1.0f, Fade(app->theme.border, 0.85f));
+    DrawText("住院查询", (int)lx + 16, (int)ly + 14, 24, app->theme.text_primary);
 
-    Workbench_draw_section_header(app, (int)lx, (int)ly + 52, "按患者查询");
-    GuiLabel((Rectangle){ lx, ly + 84, 120, 20 }, "患者编号");
-    draw_text_input((Rectangle){ lx, ly + 106, 200, 28 }, st->query_patient_id, sizeof(st->query_patient_id), 1, &st->active_field, 1);
-    if (GuiButton((Rectangle){ lx + 216, ly + 106, 140, 30 }, "查当前住院")) {
+    Workbench_draw_section_header(app, (int)lx + 16, (int)ly + 52, "按患者查询");
+
+    Workbench_draw_form_label(app, (int)lx + 16, (int)ly + 86, "患者编号", 1);
+    Workbench_draw_search_box(
+        app,
+        (Rectangle){ lx + 16, ly + 108, split.list_bounds.width - 32, 34 },
+        st->query_patient_id, sizeof(st->query_patient_id),
+        &st->active_field, 1,
+        &search_clicked_patient
+    );
+
+    if (search_clicked_patient) {
         result = DesktopAdapters_query_active_admission_by_patient(
             &app->application, st->query_patient_id,
             st->output, sizeof(st->output)
@@ -176,10 +202,18 @@ static void draw_query(DesktopApp *app, Rectangle panel) {
         show_result(app, result);
     }
 
-    Workbench_draw_section_header(app, (int)lx, (int)ly + 162, "按床位查询");
-    GuiLabel((Rectangle){ lx, ly + 194, 120, 20 }, "床位编号");
-    draw_text_input((Rectangle){ lx, ly + 216, 200, 28 }, st->query_bed_id, sizeof(st->query_bed_id), 1, &st->active_field, 2);
-    if (GuiButton((Rectangle){ lx + 216, ly + 216, 140, 30 }, "查床位患者")) {
+    Workbench_draw_section_header(app, (int)lx + 16, (int)ly + 168, "按床位查询");
+
+    Workbench_draw_form_label(app, (int)lx + 16, (int)ly + 202, "床位编号", 1);
+    Workbench_draw_search_box(
+        app,
+        (Rectangle){ lx + 16, ly + 224, split.list_bounds.width - 32, 34 },
+        st->query_bed_id, sizeof(st->query_bed_id),
+        &st->active_field, 2,
+        &search_clicked_bed
+    );
+
+    if (search_clicked_bed) {
         result = DesktopAdapters_query_current_patient_by_bed(
             &app->application, st->query_bed_id,
             st->output, sizeof(st->output)
@@ -187,7 +221,20 @@ static void draw_query(DesktopApp *app, Rectangle panel) {
         show_result(app, result);
     }
 
-    draw_output_panel(app, right, "查询结果", st->output,
+    Workbench_draw_section_header(app, (int)lx + 16, (int)ly + 284, "筛选选项");
+
+    DrawText("住院状态:", (int)lx + 16, (int)ly + 318, 17, app->theme.text_secondary);
+    Rectangle badge_active = { lx + 110, ly + 314, 70, 26 };
+    Rectangle badge_discharged = { lx + 190, ly + 314, 70, 26 };
+    Workbench_draw_status_badge(app, badge_active, "住院中", (Color){ 34, 197, 94, 255 });
+    Workbench_draw_status_badge(app, badge_discharged, "已出院", (Color){ 156, 163, 175, 255 });
+
+    DrawText("查询范围:", (int)lx + 16, (int)ly + 354, 17, app->theme.text_secondary);
+    DrawText("• 当前住院记录", (int)lx + 16, (int)ly + 378, 16, app->theme.text_secondary);
+    DrawText("• 床位占用情况", (int)lx + 16, (int)ly + 398, 16, app->theme.text_secondary);
+    DrawText("• 病区分布统计", (int)lx + 16, (int)ly + 418, 16, app->theme.text_secondary);
+
+    draw_output_panel(app, split.detail_bounds, "查询结果", st->output,
                       "在左侧输入患者编号或床位编号进行查询。");
 }
 

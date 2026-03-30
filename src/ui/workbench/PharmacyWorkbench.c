@@ -129,25 +129,25 @@ static void draw_add_medicine(DesktopApp *app, Rectangle panel) {
     DrawRectangleRoundedLinesEx(left, 0.12f, 8, 1.0f, Fade(app->theme.border, 0.85f));
     DrawText("药品建档", (int)lx, (int)ly + 14, 24, app->theme.text_primary);
 
-    GuiLabel((Rectangle){ lx, ly + 52, 120, 20 }, "药品编号");
-    draw_text_input((Rectangle){ lx, ly + 74, 200, 28 }, st->medicine_id, sizeof(st->medicine_id), 1, &st->active_field, 1);
+    Workbench_draw_form_label(app, (int)lx, (int)ly + 52, "药品编号", 1);
+    draw_text_input((Rectangle){ lx, ly + 74, 200, 34 }, st->medicine_id, sizeof(st->medicine_id), 1, &st->active_field, 1);
 
-    GuiLabel((Rectangle){ lx + 220, ly + 52, 120, 20 }, "药品名称");
-    draw_text_input((Rectangle){ lx + 220, ly + 74, 200, 28 }, st->medicine_name, sizeof(st->medicine_name), 1, &st->active_field, 2);
+    Workbench_draw_form_label(app, (int)lx + 220, (int)ly + 52, "药品名称", 1);
+    draw_text_input((Rectangle){ lx + 220, ly + 74, 200, 34 }, st->medicine_name, sizeof(st->medicine_name), 1, &st->active_field, 2);
 
-    GuiLabel((Rectangle){ lx, ly + 112, 100, 20 }, "单价");
-    draw_text_input((Rectangle){ lx, ly + 134, 120, 28 }, st->price_text, sizeof(st->price_text), 1, &st->active_field, 3);
+    Workbench_draw_form_label(app, (int)lx, (int)ly + 118, "单价", 1);
+    draw_text_input((Rectangle){ lx, ly + 140, 120, 34 }, st->price_text, sizeof(st->price_text), 1, &st->active_field, 3);
 
-    GuiLabel((Rectangle){ lx + 140, ly + 112, 100, 20 }, "库存");
-    draw_text_input((Rectangle){ lx + 140, ly + 134, 100, 28 }, st->stock_text, sizeof(st->stock_text), 1, &st->active_field, 4);
+    Workbench_draw_form_label(app, (int)lx + 140, (int)ly + 118, "库存", 1);
+    draw_text_input((Rectangle){ lx + 140, ly + 140, 100, 34 }, st->stock_text, sizeof(st->stock_text), 1, &st->active_field, 4);
 
-    GuiLabel((Rectangle){ lx + 260, ly + 112, 100, 20 }, "低库存阈值");
-    draw_text_input((Rectangle){ lx + 260, ly + 134, 100, 28 }, st->low_stock_text, sizeof(st->low_stock_text), 1, &st->active_field, 5);
+    Workbench_draw_form_label(app, (int)lx + 260, (int)ly + 118, "低库存阈值", 1);
+    draw_text_input((Rectangle){ lx + 260, ly + 140, 100, 34 }, st->low_stock_text, sizeof(st->low_stock_text), 1, &st->active_field, 5);
 
-    GuiLabel((Rectangle){ lx, ly + 172, 120, 20 }, "科室编号");
-    draw_text_input((Rectangle){ lx, ly + 194, 200, 28 }, st->department_id, sizeof(st->department_id), 1, &st->active_field, 6);
+    Workbench_draw_form_label(app, (int)lx, (int)ly + 184, "科室编号", 1);
+    draw_text_input((Rectangle){ lx, ly + 206, 200, 34 }, st->department_id, sizeof(st->department_id), 1, &st->active_field, 6);
 
-    if (GuiButton((Rectangle){ lx, ly + 240, 160, 34 }, "添加药品")) {
+    if (GuiButton((Rectangle){ lx, ly + 256, 160, 36 }, "添加药品")) {
         if (parse_int_text(st->stock_text, &stock) == 0 ||
             parse_int_text(st->low_stock_text, &threshold) == 0) {
             DesktopAppState_show_message(&app->state, DESKTOP_MESSAGE_ERROR, "库存或阈值格式无效");
@@ -183,13 +183,13 @@ static void draw_restock(DesktopApp *app, Rectangle panel) {
     DrawRectangleRoundedLinesEx(left, 0.12f, 8, 1.0f, Fade(app->theme.border, 0.85f));
     DrawText("入库补货", (int)lx, (int)ly + 14, 24, app->theme.text_primary);
 
-    GuiLabel((Rectangle){ lx, ly + 52, 120, 20 }, "药品编号");
-    draw_text_input((Rectangle){ lx, ly + 74, 200, 28 }, st->medicine_id, sizeof(st->medicine_id), 1, &st->active_field, 1);
+    Workbench_draw_form_label(app, (int)lx, (int)ly + 52, "药品编号", 1);
+    draw_text_input((Rectangle){ lx, ly + 74, 200, 34 }, st->medicine_id, sizeof(st->medicine_id), 1, &st->active_field, 1);
 
-    GuiLabel((Rectangle){ lx, ly + 112, 120, 20 }, "入库数量");
-    draw_text_input((Rectangle){ lx, ly + 134, 140, 28 }, st->restock_quantity_text, sizeof(st->restock_quantity_text), 1, &st->active_field, 2);
+    Workbench_draw_form_label(app, (int)lx, (int)ly + 118, "入库数量", 1);
+    draw_text_input((Rectangle){ lx, ly + 140, 140, 34 }, st->restock_quantity_text, sizeof(st->restock_quantity_text), 1, &st->active_field, 2);
 
-    if (GuiButton((Rectangle){ lx, ly + 180, 160, 34 }, "执行入库")) {
+    if (GuiButton((Rectangle){ lx, ly + 190, 160, 36 }, "执行入库")) {
         if (parse_int_text(st->restock_quantity_text, &restock_qty) == 0) {
             DesktopAppState_show_message(&app->state, DESKTOP_MESSAGE_ERROR, "入库数量格式无效");
         } else {
@@ -223,25 +223,25 @@ static void draw_dispense(DesktopApp *app, Rectangle panel) {
     DrawRectangleRoundedLinesEx(left, 0.12f, 8, 1.0f, Fade(app->theme.border, 0.85f));
     DrawText("发药处理", (int)lx, (int)ly + 14, 24, app->theme.text_primary);
 
-    GuiLabel((Rectangle){ lx, ly + 52, 120, 20 }, "患者编号");
-    draw_text_input((Rectangle){ lx, ly + 74, 200, 28 }, st->patient_id, sizeof(st->patient_id), 1, &st->active_field, 1);
+    Workbench_draw_form_label(app, (int)lx, (int)ly + 52, "患者编号", 1);
+    draw_text_input((Rectangle){ lx, ly + 74, 200, 34 }, st->patient_id, sizeof(st->patient_id), 1, &st->active_field, 1);
 
-    GuiLabel((Rectangle){ lx + 220, ly + 52, 120, 20 }, "处方编号");
-    draw_text_input((Rectangle){ lx + 220, ly + 74, 200, 28 }, st->prescription_id, sizeof(st->prescription_id), 1, &st->active_field, 2);
+    Workbench_draw_form_label(app, (int)lx + 220, (int)ly + 52, "处方编号", 1);
+    draw_text_input((Rectangle){ lx + 220, ly + 74, 200, 34 }, st->prescription_id, sizeof(st->prescription_id), 1, &st->active_field, 2);
 
-    GuiLabel((Rectangle){ lx, ly + 112, 120, 20 }, "药品编号");
-    draw_text_input((Rectangle){ lx, ly + 134, 200, 28 }, st->medicine_id, sizeof(st->medicine_id), 1, &st->active_field, 3);
+    Workbench_draw_form_label(app, (int)lx, (int)ly + 118, "药品编号", 1);
+    draw_text_input((Rectangle){ lx, ly + 140, 200, 34 }, st->medicine_id, sizeof(st->medicine_id), 1, &st->active_field, 3);
 
-    GuiLabel((Rectangle){ lx + 220, ly + 112, 120, 20 }, "发药数量");
-    draw_text_input((Rectangle){ lx + 220, ly + 134, 100, 28 }, st->dispense_quantity_text, sizeof(st->dispense_quantity_text), 1, &st->active_field, 4);
+    Workbench_draw_form_label(app, (int)lx + 220, (int)ly + 118, "发药数量", 1);
+    draw_text_input((Rectangle){ lx + 220, ly + 140, 100, 34 }, st->dispense_quantity_text, sizeof(st->dispense_quantity_text), 1, &st->active_field, 4);
 
-    GuiLabel((Rectangle){ lx, ly + 172, 120, 20 }, "药剂师编号");
-    draw_text_input((Rectangle){ lx, ly + 194, 200, 28 }, st->pharmacist_id, sizeof(st->pharmacist_id), is_pharmacy ? 0 : 1, &st->active_field, 5);
+    Workbench_draw_form_label(app, (int)lx, (int)ly + 184, "药剂师编号", 1);
+    draw_text_input((Rectangle){ lx, ly + 206, 200, 34 }, st->pharmacist_id, sizeof(st->pharmacist_id), is_pharmacy ? 0 : 1, &st->active_field, 5);
 
-    GuiLabel((Rectangle){ lx + 220, ly + 172, 120, 20 }, "发药时间");
-    draw_text_input((Rectangle){ lx + 220, ly + 194, 200, 28 }, st->dispensed_at, sizeof(st->dispensed_at), 1, &st->active_field, 6);
+    Workbench_draw_form_label(app, (int)lx + 220, (int)ly + 184, "发药时间", 0);
+    draw_text_input((Rectangle){ lx + 220, ly + 206, 200, 34 }, st->dispensed_at, sizeof(st->dispensed_at), 1, &st->active_field, 6);
 
-    if (GuiButton((Rectangle){ lx, ly + 240, 160, 34 }, "执行发药")) {
+    if (GuiButton((Rectangle){ lx, ly + 256, 160, 36 }, "执行发药")) {
         if (parse_int_text(st->dispense_quantity_text, &quantity) == 0) {
             DesktopAppState_show_message(&app->state, DESKTOP_MESSAGE_ERROR, "发药数量格式无效");
         } else {
@@ -270,16 +270,23 @@ static void draw_stock_query(DesktopApp *app, Rectangle panel) {
     Rectangle right = { panel.x + panel.width * 0.56f, panel.y, panel.width * 0.44f, panel.height };
     float lx = left.x + 16;
     float ly = left.y;
+    int search_clicked = 0;
     Result result;
 
     DrawRectangleRounded(left, 0.12f, 8, app->theme.panel);
     DrawRectangleRoundedLinesEx(left, 0.12f, 8, 1.0f, Fade(app->theme.border, 0.85f));
     DrawText("库存查询", (int)lx, (int)ly + 14, 24, app->theme.text_primary);
 
-    GuiLabel((Rectangle){ lx, ly + 52, 120, 20 }, "药品编号");
-    draw_text_input((Rectangle){ lx, ly + 74, 200, 28 }, st->stock_query_medicine_id, sizeof(st->stock_query_medicine_id), 1, &st->active_field, 1);
+    Workbench_draw_form_label(app, (int)lx, (int)ly + 52, "药品编号", 1);
+    Workbench_draw_search_box(
+        app,
+        (Rectangle){ lx, ly + 74, left.width - 32, 34 },
+        st->stock_query_medicine_id, sizeof(st->stock_query_medicine_id),
+        &st->active_field, 1,
+        &search_clicked
+    );
 
-    if (GuiButton((Rectangle){ lx + 216, ly + 74, 140, 30 }, "查询库存")) {
+    if (search_clicked) {
         result = DesktopAdapters_query_medicine_stock(
             &app->application, st->stock_query_medicine_id,
             st->output, sizeof(st->output)
@@ -287,31 +294,177 @@ static void draw_stock_query(DesktopApp *app, Rectangle panel) {
         show_result(app, result);
     }
 
-    draw_output_panel(app, right, "库存信息", st->output,
-                      "输入药品编号并点击「查询库存」。");
+    DrawRectangleRounded(right, 0.12f, 8, app->theme.panel);
+    DrawRectangleRoundedLinesEx(right, 0.12f, 8, 1.0f, Fade(app->theme.border, 0.85f));
+    DrawText("库存信息", (int)right.x + 14, (int)right.y + 12, 20, app->theme.text_primary);
+
+    if (st->output[0] != '\0') {
+        float detail_y = right.y + 56;
+        DrawText(st->output, (int)right.x + 14, (int)detail_y, 17, app->theme.text_secondary);
+
+        /* Parse stock info and display visual indicators if possible */
+        /* Example: if output contains stock numbers, show progress bar */
+        char *stock_str = strstr(st->output, "库存:");
+        if (stock_str != 0) {
+            int current_stock = 0;
+            int threshold = 0;
+            if (sscanf(stock_str, "库存:%d", &current_stock) == 1) {
+                char *threshold_str = strstr(st->output, "阈值:");
+                if (threshold_str != 0 && sscanf(threshold_str, "阈值:%d", &threshold) == 1 && threshold > 0) {
+                    float progress = (float)current_stock / (float)(threshold * 3);
+                    if (progress > 1.0f) progress = 1.0f;
+
+                    Color bar_color;
+                    const char *status_text;
+                    Color status_color;
+
+                    if (current_stock <= threshold) {
+                        bar_color = (Color){ 239, 68, 68, 255 };
+                        status_text = "缺货";
+                        status_color = (Color){ 239, 68, 68, 255 };
+                    } else if (current_stock <= threshold * 2) {
+                        bar_color = (Color){ 245, 158, 11, 255 };
+                        status_text = "低库存";
+                        status_color = (Color){ 245, 158, 11, 255 };
+                    } else {
+                        bar_color = (Color){ 34, 197, 94, 255 };
+                        status_text = "充足";
+                        status_color = (Color){ 34, 197, 94, 255 };
+                    }
+
+                    detail_y += 120;
+                    DrawText("库存状态", (int)right.x + 14, (int)detail_y, 18, app->theme.text_secondary);
+                    detail_y += 28;
+
+                    Rectangle status_badge = { right.x + 14, detail_y, 80, 26 };
+                    Workbench_draw_status_badge(app, status_badge, status_text, status_color);
+
+                    detail_y += 40;
+                    DrawText("库存水平", (int)right.x + 14, (int)detail_y, 18, app->theme.text_secondary);
+                    detail_y += 28;
+
+                    Rectangle progress_rect = { right.x + 14, detail_y, right.width - 28, 24 };
+                    Workbench_draw_progress_bar(app, progress_rect, progress, bar_color);
+                }
+            }
+        }
+    } else {
+        DrawText("输入药品编号并点击搜索按钮。", (int)right.x + 14, (int)right.y + 56, 17, app->theme.text_secondary);
+    }
 }
 
 /* ── Page 5: Low Stock Alert ── */
 
 static void draw_low_stock(DesktopApp *app, Rectangle panel) {
     DesktopPharmacyPageState *st = &app->state.pharmacy_page;
+    const WorkbenchDef *wb = Workbench_get(USER_ROLE_PHARMACY);
     Result result;
+    float y_offset = panel.y + 14;
 
     DrawRectangleRounded(panel, 0.12f, 8, app->theme.panel);
     DrawRectangleRoundedLinesEx(panel, 0.12f, 8, 1.0f, Fade(app->theme.border, 0.85f));
-    DrawText("低库存预警", (int)panel.x + 16, (int)panel.y + 14, 24, app->theme.text_primary);
 
-    if (GuiButton((Rectangle){ panel.x + 16, panel.y + 52, 180, 34 }, "检查低库存药品")) {
+    /* Header with warning badge */
+    DrawText("低库存预警", (int)panel.x + 16, (int)y_offset, 24, app->theme.text_primary);
+    Rectangle warning_badge = { panel.x + 180, y_offset + 2, 80, 26 };
+    Workbench_draw_status_badge(app, warning_badge, "警告", (Color){ 239, 68, 68, 255 });
+
+    y_offset += 48;
+
+    if (GuiButton((Rectangle){ panel.x + 16, y_offset, 180, 36 }, "检查低库存药品")) {
         result = DesktopAdapters_find_low_stock_medicines(
             &app->application, st->output, sizeof(st->output)
         );
         show_result(app, result);
     }
 
+    y_offset += 56;
+
     if (st->output[0] != '\0') {
-        DrawText(st->output, (int)panel.x + 16, (int)panel.y + 100, 17, app->theme.text_secondary);
+        /* Display alert section header */
+        Workbench_draw_section_header(app, (int)panel.x + 16, (int)y_offset, "预警列表");
+        y_offset += 40;
+
+        /* Parse and display low stock items with visual indicators */
+        char *line = st->output;
+        char *next_line = 0;
+        int item_count = 0;
+        const int max_items = 8;
+
+        while (line != 0 && item_count < max_items && y_offset + 80 < panel.y + panel.height) {
+            next_line = strchr(line, '\n');
+            if (next_line != 0) {
+                *next_line = '\0';
+            }
+
+            /* Skip empty lines */
+            if (line[0] != '\0' && strlen(line) > 3) {
+                /* Draw item background */
+                Rectangle item_rect = { panel.x + 16, y_offset, panel.width - 32, 70 };
+                DrawRectangleRounded(item_rect, 0.1f, 8, Fade(app->theme.border, 0.15f));
+                DrawRectangleRoundedLinesEx(item_rect, 0.1f, 8, 1.0f, Fade((Color){ 239, 68, 68, 255 }, 0.3f));
+
+                /* Draw item text */
+                DrawText(line, (int)item_rect.x + 12, (int)item_rect.y + 10, 17, app->theme.text_primary);
+
+                /* Try to parse stock numbers for progress bar */
+                int current_stock = 0;
+                int threshold = 0;
+                char *stock_str = strstr(line, "库存:");
+                char *threshold_str = strstr(line, "阈值:");
+
+                if (stock_str != 0 && threshold_str != 0) {
+                    if (sscanf(stock_str, "库存:%d", &current_stock) == 1 &&
+                        sscanf(threshold_str, "阈值:%d", &threshold) == 1 && threshold > 0) {
+
+                        float progress = (float)current_stock / (float)threshold;
+                        if (progress > 1.0f) progress = 1.0f;
+
+                        Color bar_color;
+                        const char *status_text;
+                        Color status_color;
+
+                        if (current_stock == 0) {
+                            bar_color = (Color){ 239, 68, 68, 255 };
+                            status_text = "缺货";
+                            status_color = (Color){ 239, 68, 68, 255 };
+                        } else if (progress <= 0.5f) {
+                            bar_color = (Color){ 239, 68, 68, 255 };
+                            status_text = "严重";
+                            status_color = (Color){ 239, 68, 68, 255 };
+                        } else {
+                            bar_color = (Color){ 245, 158, 11, 255 };
+                            status_text = "低库存";
+                            status_color = (Color){ 245, 158, 11, 255 };
+                        }
+
+                        /* Status badge */
+                        Rectangle badge_rect = { item_rect.x + item_rect.width - 90, item_rect.y + 10, 76, 24 };
+                        Workbench_draw_status_badge(app, badge_rect, status_text, status_color);
+
+                        /* Progress bar */
+                        Rectangle progress_rect = { item_rect.x + 12, item_rect.y + 42, item_rect.width - 24, 18 };
+                        Workbench_draw_progress_bar(app, progress_rect, progress, bar_color);
+                    }
+                }
+
+                y_offset += 80;
+                item_count++;
+            }
+
+            if (next_line != 0) {
+                *next_line = '\n';
+                line = next_line + 1;
+            } else {
+                line = 0;
+            }
+        }
+
+        if (item_count == 0) {
+            DrawText("未找到低库存药品。", (int)panel.x + 16, (int)y_offset, 17, app->theme.text_secondary);
+        }
     } else {
-        DrawText("点击「检查低库存药品」查看预警列表。", (int)panel.x + 16, (int)panel.y + 100, 17, app->theme.text_secondary);
+        DrawText("点击「检查低库存药品」查看预警列表。", (int)panel.x + 16, (int)y_offset, 17, app->theme.text_secondary);
     }
 }
 

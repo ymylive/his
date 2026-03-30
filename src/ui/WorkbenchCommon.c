@@ -405,3 +405,199 @@ void Workbench_draw_home_cards(
         Workbench_draw_metric_card(app, card, labels[i], values[i], accent);
     }
 }
+
+/* ── Enhanced UI Components ── */
+
+/* Form label with optional required indicator */
+void Workbench_draw_form_label(
+    const DesktopApp *app, int x, int y,
+    const char *label, int required
+) {
+    if (app == 0 || label == 0) return;
+    DrawText(label, x, y, 18, app->theme.text_secondary);
+    if (required) {
+        int label_width = MeasureText(label, 18);
+        DrawText("*", x + label_width + 4, y, 18, (Color){ 239, 68, 68, 255 });
+    }
+}
+
+/* Status badge with background color */
+void Workbench_draw_status_badge(
+    const DesktopApp *app, Rectangle rect,
+    const char *text, Color bg_color
+) {
+    if (app == 0 || text == 0) return;
+    DrawRectangleRounded(rect, 0.35f, 8, bg_color);
+    int text_width = MeasureText(text, 16);
+    DrawText(text, (int)(rect.x + (rect.width - text_width) / 2),
+             (int)(rect.y + (rect.height - 16) / 2), 16, WHITE);
+}
+
+/* Bed grid visualization for ward management */
+void Workbench_draw_bed_grid(
+    const DesktopApp *app, Rectangle panel,
+    const char *ward_name, int bed_count,
+    const int *occupied_beds, int occupied_count
+) {
+    int i = 0;
+    int j = 0;
+    int is_occupied = 0;
+    float bed_width = 68.0f;
+    float bed_height = 48.0f;
+    float gap = 12.0f;
+    int cols = 10;
+    int rows = (bed_count + cols - 1) / cols;
+    Color available_color = { 34, 197, 94, 255 };
+    Color occupied_color = { 239, 68, 68, 255 };
+
+    if (app == 0) return;
+
+    DrawText(ward_name, (int)panel.x, (int)panel.y, 20, app->theme.text_primary);
+
+    for (i = 0; i < bed_count; i++) {
+        int row = i / cols;
+        int col = i % cols;
+        Rectangle bed_rect = {
+            panel.x + col * (bed_width + gap),
+            panel.y + 36 + row * (bed_height + gap),
+            bed_width,
+            bed_height
+        };
+
+        is_occupied = 0;
+        for (j = 0; j < occupied_count; j++) {
+            if (occupied_beds[j] == i + 1) {
+                is_occupied = 1;
+                break;
+            }
+        }
+
+        Color bed_color = is_occupied ? occupied_color : available_color;
+        DrawRectangleRounded(bed_rect, 0.15f, 8, bed_color);
+        DrawRectangleRoundedLinesEx(bed_rect, 0.15f, 8, 1.0f, Fade(bed_color, 0.7f));
+
+        char bed_num[8];
+        snprintf(bed_num, sizeof(bed_num), "%02d", i + 1);
+        int num_width = MeasureText(bed_num, 18);
+        DrawText(bed_num,
+                 (int)(bed_rect.x + (bed_rect.width - num_width) / 2),
+                 (int)(bed_rect.y + (bed_rect.height - 18) / 2),
+                 18, WHITE);
+    }
+}
+
+/* Data table header */
+void Workbench_draw_data_table_header(
+    const DesktopApp *app, Rectangle rect,
+    const char **headers, const float *widths, int column_count
+) {
+    int i = 0;
+    float x_offset = 0.0f;
+
+    if (app == 0 || headers == 0 || widths == 0) return;
+
+    DrawRectangleRec(rect, Fade(app->theme.border, 0.15f));
+    DrawRectangleLinesEx(rect, 1.0f, Fade(app->theme.border, 0.5f));
+
+    for (i = 0; i < column_count; i++) {
+        DrawText(headers[i],
+                 (int)(rect.x + x_offset + 12),
+                 (int)(rect.y + (rect.height - 18) / 2),
+                 18, app->theme.text_primary);
+        x_offset += widths[i];
+    }
+}
+
+/* Data table row */
+void Workbench_draw_data_table_row(
+    DesktopApp *app, Rectangle rect,
+    const char **values, const float *widths, int column_count,
+    int is_selected, int *clicked
+) {
+    int i = 0;
+    float x_offset = 0.0f;
+
+    if (app == 0 || values == 0 || widths == 0 || clicked == 0) return;
+
+    if (is_selected) {
+        DrawRectangleRec(rect, Fade(app->theme.border, 0.25f));
+    }
+
+    *clicked = GuiButton(rect, "");
+
+    for (i = 0; i < column_count; i++) {
+        DrawText(values[i] != 0 ? values[i] : "--",
+                 (int)(rect.x + x_offset + 12),
+                 (int)(rect.y + (rect.height - 17) / 2),
+                 17, app->theme.text_secondary);
+        x_offset += widths[i];
+    }
+}
+
+/* Icon button with label */
+void Workbench_draw_icon_button(
+    DesktopApp *app, Rectangle rect,
+    const char *icon, const char *label, Color accent, int *clicked
+) {
+    if (app == 0 || clicked == 0) return;
+
+    DrawRectangleRounded(rect, 0.22f, 8, Fade(accent, 0.12f));
+    DrawRectangleRoundedLinesEx(rect, 0.22f, 8, 1.5f, Fade(accent, 0.45f));
+
+    if (icon != 0) {
+        DrawText(icon, (int)(rect.x + 12), (int)(rect.y + (rect.height - 20) / 2), 20, accent);
+    }
+
+    if (label != 0) {
+        int x_pos = icon != 0 ? (int)(rect.x + 40) : (int)(rect.x + 12);
+        DrawText(label, x_pos, (int)(rect.y + (rect.height - 18) / 2), 18, app->theme.text_primary);
+    }
+
+    *clicked = GuiButton(rect, "");
+}
+
+/* Progress bar */
+void Workbench_draw_progress_bar(
+    const DesktopApp *app, Rectangle rect,
+    float progress, Color fill_color
+) {
+    float clamped_progress = 0.0f;
+    Rectangle fill_rect;
+
+    if (app == 0) return;
+
+    clamped_progress = Workbench_clampf(progress, 0.0f, 1.0f);
+    fill_rect = rect;
+    fill_rect.width = rect.width * clamped_progress;
+
+    DrawRectangleRounded(rect, 0.25f, 8, Fade(app->theme.border, 0.2f));
+    if (clamped_progress > 0.0f) {
+        DrawRectangleRounded(fill_rect, 0.25f, 8, fill_color);
+    }
+    DrawRectangleRoundedLinesEx(rect, 0.25f, 8, 1.0f, Fade(app->theme.border, 0.6f));
+}
+
+/* Search box with button */
+void Workbench_draw_search_box(
+    DesktopApp *app, Rectangle rect,
+    char *text, int text_size, int *active_field, int field_id,
+    int *search_clicked
+) {
+    Rectangle input_rect;
+    Rectangle button_rect;
+    bool edit_mode = false;
+
+    if (app == 0 || text == 0 || active_field == 0 || search_clicked == 0) return;
+
+    input_rect = rect;
+    input_rect.width = rect.width - 110;
+    button_rect = (Rectangle){ rect.x + rect.width - 100, rect.y, 100, rect.height };
+
+    edit_mode = (*active_field == field_id);
+    if (GuiTextBox(input_rect, text, text_size, edit_mode)) {
+        *active_field = edit_mode ? 0 : field_id;
+    }
+
+    *search_clicked = GuiButton(button_rect, "搜索");
+}
+

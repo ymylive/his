@@ -73,19 +73,32 @@ static void draw_home(DesktopApp *app, Rectangle panel) {
             app->state.workbench_page = index + 1;
         }
     }
+
+    draw_output_panel(
+        app,
+        (Rectangle){ panel.x, panel.y + 214.0f, panel.width, panel.height - 214.0f },
+        "工作台说明",
+        "病区管理工作台提供病房总览、床位状态查询、转床调度和出院检查功能。",
+        "暂无说明"
+    );
 }
 
 /* ── Page 1: Ward List ── */
 
 static void draw_ward_list(DesktopApp *app, Rectangle panel) {
     DesktopInpatientPageState *st = &app->state.inpatient_page;
+    WorkbenchListDetailLayout split = Workbench_compute_list_detail_layout(
+        panel, 0.48f, 18.0f, 280.0f
+    );
     Result result;
+    const WorkbenchDef *wb = Workbench_get(USER_ROLE_WARD_MANAGER);
 
-    DrawRectangleRounded(panel, 0.12f, 8, app->theme.panel);
-    DrawRectangleRoundedLinesEx(panel, 0.12f, 8, 1.0f, Fade(app->theme.border, 0.85f));
-    DrawText("病房总览", (int)panel.x + 16, (int)panel.y + 14, 24, app->theme.text_primary);
+    /* Left panel: Ward list and controls */
+    DrawRectangleRounded(split.list_bounds, 0.12f, 8, app->theme.panel);
+    DrawRectangleRoundedLinesEx(split.list_bounds, 0.12f, 8, 1.0f, Fade(app->theme.border, 0.85f));
+    DrawText("病房总览", (int)split.list_bounds.x + 16, (int)split.list_bounds.y + 14, 24, app->theme.text_primary);
 
-    if (GuiButton((Rectangle){ panel.x + 16, panel.y + 52, 160, 34 }, "刷新病房列表")) {
+    if (GuiButton((Rectangle){ split.list_bounds.x + 16, split.list_bounds.y + 56, 160, 36 }, "刷新病房列表")) {
         result = DesktopAdapters_list_wards(
             &app->application, st->output, sizeof(st->output)
         );
@@ -93,9 +106,26 @@ static void draw_ward_list(DesktopApp *app, Rectangle panel) {
     }
 
     if (st->output[0] != '\0') {
-        DrawText(st->output, (int)panel.x + 16, (int)panel.y + 100, 17, app->theme.text_secondary);
+        DrawText(st->output, (int)split.list_bounds.x + 16, (int)split.list_bounds.y + 108, 17, app->theme.text_secondary);
     } else {
-        DrawText("点击「刷新病房列表」查看所有病房。", (int)panel.x + 16, (int)panel.y + 100, 17, app->theme.text_secondary);
+        DrawText("点击「刷新病房列表」查看所有病房。", (int)split.list_bounds.x + 16, (int)split.list_bounds.y + 108, 17, app->theme.text_secondary);
+    }
+
+    /* Right panel: Bed grid visualization example */
+    DrawRectangleRounded(split.detail_bounds, 0.12f, 8, app->theme.panel);
+    DrawRectangleRoundedLinesEx(split.detail_bounds, 0.12f, 8, 1.0f, Fade(app->theme.border, 0.85f));
+    DrawText("床位可视化示例", (int)split.detail_bounds.x + 16, (int)split.detail_bounds.y + 14, 20, app->theme.text_primary);
+
+    /* Example bed grid - showing a sample ward with 12 beds, 7 occupied */
+    {
+        int example_occupied[7] = { 0, 2, 3, 5, 7, 9, 10 };
+        Rectangle grid_area = {
+            split.detail_bounds.x + 16,
+            split.detail_bounds.y + 56,
+            split.detail_bounds.width - 32,
+            split.detail_bounds.height - 72
+        };
+        Workbench_draw_bed_grid(app, grid_area, "示例病区", 12, example_occupied, 7);
     }
 }
 
@@ -103,20 +133,24 @@ static void draw_ward_list(DesktopApp *app, Rectangle panel) {
 
 static void draw_bed_status(DesktopApp *app, Rectangle panel) {
     DesktopInpatientPageState *st = &app->state.inpatient_page;
-    Rectangle left = { panel.x, panel.y, panel.width * 0.52f, panel.height };
-    Rectangle right = { panel.x + panel.width * 0.56f, panel.y, panel.width * 0.44f, panel.height };
-    float lx = left.x + 16;
-    float ly = left.y;
+    WorkbenchListDetailLayout split = Workbench_compute_list_detail_layout(
+        panel, 0.48f, 18.0f, 280.0f
+    );
+    float lx = split.list_bounds.x + 16;
+    float ly = split.list_bounds.y;
     Result result;
 
-    DrawRectangleRounded(left, 0.12f, 8, app->theme.panel);
-    DrawRectangleRoundedLinesEx(left, 0.12f, 8, 1.0f, Fade(app->theme.border, 0.85f));
-    DrawText("床位状态", (int)lx, (int)ly + 14, 24, app->theme.text_primary);
+    /* Left panel: Query form */
+    DrawRectangleRounded(split.list_bounds, 0.12f, 8, app->theme.panel);
+    DrawRectangleRoundedLinesEx(split.list_bounds, 0.12f, 8, 1.0f, Fade(app->theme.border, 0.85f));
+    DrawText("床位状态查询", (int)lx, (int)ly + 14, 24, app->theme.text_primary);
 
-    GuiLabel((Rectangle){ lx, ly + 52, 120, 20 }, "病区编号");
-    draw_text_input((Rectangle){ lx, ly + 74, 200, 28 }, st->ward_id, sizeof(st->ward_id), 1, &st->active_field, 1);
+    Workbench_draw_section_header(app, (int)lx, (int)ly + 56, "查询条件");
 
-    if (GuiButton((Rectangle){ lx + 216, ly + 74, 140, 30 }, "查看床位")) {
+    Workbench_draw_form_label(app, (int)lx, (int)ly + 90, "病区编号", 1);
+    draw_text_input((Rectangle){ lx, ly + 112, 240, 34 }, st->ward_id, sizeof(st->ward_id), 1, &st->active_field, 1);
+
+    if (GuiButton((Rectangle){ lx, ly + 162, 160, 36 }, "查看床位")) {
         result = DesktopAdapters_list_beds_by_ward(
             &app->application, st->ward_id,
             st->output, sizeof(st->output)
@@ -124,36 +158,58 @@ static void draw_bed_status(DesktopApp *app, Rectangle panel) {
         show_result(app, result);
     }
 
-    draw_output_panel(app, right, "床位列表", st->output,
-                      "输入病区编号并点击「查看床位」。");
+    /* Status legend */
+    Workbench_draw_section_header(app, (int)lx, (int)ly + 220, "状态说明");
+    {
+        Rectangle available_badge = { lx, ly + 254, 100, 28 };
+        Rectangle occupied_badge = { lx + 116, ly + 254, 100, 28 };
+        Workbench_draw_status_badge(app, available_badge, "可用", (Color){ 34, 197, 94, 255 });
+        Workbench_draw_status_badge(app, occupied_badge, "占用", (Color){ 239, 68, 68, 255 });
+    }
+
+    DrawText("绿色表示床位可用，红色表示已占用", (int)lx, (int)ly + 296, 16, app->theme.text_secondary);
+
+    /* Right panel: Results */
+    DrawRectangleRounded(split.detail_bounds, 0.12f, 8, app->theme.panel);
+    DrawRectangleRoundedLinesEx(split.detail_bounds, 0.12f, 8, 1.0f, Fade(app->theme.border, 0.85f));
+    DrawText("床位列表", (int)split.detail_bounds.x + 16, (int)split.detail_bounds.y + 14, 20, app->theme.text_primary);
+
+    if (st->output[0] != '\0') {
+        DrawText(st->output, (int)split.detail_bounds.x + 16, (int)split.detail_bounds.y + 56, 17, app->theme.text_secondary);
+    } else {
+        DrawText("输入病区编号并点击「查看床位」。", (int)split.detail_bounds.x + 16, (int)split.detail_bounds.y + 56, 17, app->theme.text_secondary);
+    }
 }
 
 /* ── Page 3: Transfer ── */
 
 static void draw_transfer(DesktopApp *app, Rectangle panel) {
     DesktopInpatientPageState *st = &app->state.inpatient_page;
-    Rectangle left = { panel.x, panel.y, panel.width * 0.52f, panel.height };
-    Rectangle right = { panel.x + panel.width * 0.56f, panel.y, panel.width * 0.44f, panel.height };
-    float lx = left.x + 16;
-    float ly = left.y;
-    /* transfer needs: admission_id, target bed_id, transferred_at */
+    WorkbenchListDetailLayout split = Workbench_compute_list_detail_layout(
+        panel, 0.48f, 18.0f, 280.0f
+    );
+    float lx = split.list_bounds.x + 16;
+    float ly = split.list_bounds.y;
     static char transferred_at[64] = "";
     Result result;
 
-    DrawRectangleRounded(left, 0.12f, 8, app->theme.panel);
-    DrawRectangleRoundedLinesEx(left, 0.12f, 8, 1.0f, Fade(app->theme.border, 0.85f));
+    /* Left panel: Transfer form */
+    DrawRectangleRounded(split.list_bounds, 0.12f, 8, app->theme.panel);
+    DrawRectangleRoundedLinesEx(split.list_bounds, 0.12f, 8, 1.0f, Fade(app->theme.border, 0.85f));
     DrawText("转床调度", (int)lx, (int)ly + 14, 24, app->theme.text_primary);
 
-    GuiLabel((Rectangle){ lx, ly + 52, 120, 20 }, "住院编号");
-    draw_text_input((Rectangle){ lx, ly + 74, 200, 28 }, st->admission_id, sizeof(st->admission_id), 1, &st->active_field, 1);
+    Workbench_draw_section_header(app, (int)lx, (int)ly + 56, "转床信息");
 
-    GuiLabel((Rectangle){ lx, ly + 112, 120, 20 }, "目标床位");
-    draw_text_input((Rectangle){ lx, ly + 134, 200, 28 }, st->bed_id, sizeof(st->bed_id), 1, &st->active_field, 2);
+    Workbench_draw_form_label(app, (int)lx, (int)ly + 90, "住院编号", 1);
+    draw_text_input((Rectangle){ lx, ly + 112, 240, 34 }, st->admission_id, sizeof(st->admission_id), 1, &st->active_field, 1);
 
-    GuiLabel((Rectangle){ lx, ly + 172, 120, 20 }, "转床时间");
-    draw_text_input((Rectangle){ lx, ly + 194, 200, 28 }, transferred_at, sizeof(transferred_at), 1, &st->active_field, 3);
+    Workbench_draw_form_label(app, (int)lx, (int)ly + 156, "目标床位", 1);
+    draw_text_input((Rectangle){ lx, ly + 178, 240, 34 }, st->bed_id, sizeof(st->bed_id), 1, &st->active_field, 2);
 
-    if (GuiButton((Rectangle){ lx, ly + 240, 160, 34 }, "执行转床")) {
+    Workbench_draw_form_label(app, (int)lx, (int)ly + 222, "转床时间", 0);
+    draw_text_input((Rectangle){ lx, ly + 244, 240, 34 }, transferred_at, sizeof(transferred_at), 1, &st->active_field, 3);
+
+    if (GuiButton((Rectangle){ lx, ly + 294, 160, 36 }, "执行转床")) {
         result = DesktopAdapters_transfer_bed(
             &app->application,
             st->admission_id, st->bed_id, transferred_at,
@@ -162,28 +218,54 @@ static void draw_transfer(DesktopApp *app, Rectangle panel) {
         show_result(app, result);
     }
 
-    draw_output_panel(app, right, "转床结果", st->output,
-                      "填写左侧表单并点击「执行转床」。");
+    /* Right panel: Instructions and result */
+    DrawRectangleRounded(split.detail_bounds, 0.12f, 8, app->theme.panel);
+    DrawRectangleRoundedLinesEx(split.detail_bounds, 0.12f, 8, 1.0f, Fade(app->theme.border, 0.85f));
+    DrawText("操作指引", (int)split.detail_bounds.x + 16, (int)split.detail_bounds.y + 14, 20, app->theme.text_primary);
+
+    {
+        float guide_y = split.detail_bounds.y + 56;
+        DrawText("转床操作步骤：", (int)split.detail_bounds.x + 16, (int)guide_y, 18, app->theme.text_primary);
+        guide_y += 32;
+        DrawText("1. 输入患者的住院编号", (int)split.detail_bounds.x + 16, (int)guide_y, 17, app->theme.text_secondary);
+        guide_y += 28;
+        DrawText("2. 输入目标床位编号", (int)split.detail_bounds.x + 16, (int)guide_y, 17, app->theme.text_secondary);
+        guide_y += 28;
+        DrawText("3. 填写转床时间（可选）", (int)split.detail_bounds.x + 16, (int)guide_y, 17, app->theme.text_secondary);
+        guide_y += 28;
+        DrawText("4. 点击「执行转床」完成操作", (int)split.detail_bounds.x + 16, (int)guide_y, 17, app->theme.text_secondary);
+        guide_y += 48;
+
+        if (st->output[0] != '\0') {
+            Workbench_draw_section_header(app, (int)split.detail_bounds.x + 16, (int)guide_y, "转床结果");
+            guide_y += 34;
+            DrawText(st->output, (int)split.detail_bounds.x + 16, (int)guide_y, 17, app->theme.text_secondary);
+        }
+    }
 }
 
 /* ── Page 4: Discharge Check ── */
 
 static void draw_discharge_check(DesktopApp *app, Rectangle panel) {
     DesktopInpatientPageState *st = &app->state.inpatient_page;
-    Rectangle left = { panel.x, panel.y, panel.width * 0.52f, panel.height };
-    Rectangle right = { panel.x + panel.width * 0.56f, panel.y, panel.width * 0.44f, panel.height };
-    float lx = left.x + 16;
-    float ly = left.y;
+    WorkbenchListDetailLayout split = Workbench_compute_list_detail_layout(
+        panel, 0.48f, 18.0f, 280.0f
+    );
+    float lx = split.list_bounds.x + 16;
+    float ly = split.list_bounds.y;
     Result result;
 
-    DrawRectangleRounded(left, 0.12f, 8, app->theme.panel);
-    DrawRectangleRoundedLinesEx(left, 0.12f, 8, 1.0f, Fade(app->theme.border, 0.85f));
+    /* Left panel: Check form */
+    DrawRectangleRounded(split.list_bounds, 0.12f, 8, app->theme.panel);
+    DrawRectangleRoundedLinesEx(split.list_bounds, 0.12f, 8, 1.0f, Fade(app->theme.border, 0.85f));
     DrawText("出院检查", (int)lx, (int)ly + 14, 24, app->theme.text_primary);
 
-    GuiLabel((Rectangle){ lx, ly + 52, 120, 20 }, "住院编号");
-    draw_text_input((Rectangle){ lx, ly + 74, 200, 28 }, st->admission_id, sizeof(st->admission_id), 1, &st->active_field, 1);
+    Workbench_draw_section_header(app, (int)lx, (int)ly + 56, "患者信息");
 
-    if (GuiButton((Rectangle){ lx + 216, ly + 74, 140, 30 }, "执行检查")) {
+    Workbench_draw_form_label(app, (int)lx, (int)ly + 90, "住院编号", 1);
+    draw_text_input((Rectangle){ lx, ly + 112, 240, 34 }, st->admission_id, sizeof(st->admission_id), 1, &st->active_field, 1);
+
+    if (GuiButton((Rectangle){ lx, ly + 162, 160, 36 }, "执行检查")) {
         result = DesktopAdapters_discharge_check(
             &app->application, st->admission_id,
             st->output, sizeof(st->output)
@@ -191,8 +273,36 @@ static void draw_discharge_check(DesktopApp *app, Rectangle panel) {
         show_result(app, result);
     }
 
-    draw_output_panel(app, right, "检查结果", st->output,
-                      "输入住院编号并点击「执行检查」。");
+    /* Right panel: Process guide and result */
+    DrawRectangleRounded(split.detail_bounds, 0.12f, 8, app->theme.panel);
+    DrawRectangleRoundedLinesEx(split.detail_bounds, 0.12f, 8, 1.0f, Fade(app->theme.border, 0.85f));
+    DrawText("出院流程", (int)split.detail_bounds.x + 16, (int)split.detail_bounds.y + 14, 20, app->theme.text_primary);
+
+    {
+        float guide_y = split.detail_bounds.y + 56;
+        DrawText("出院检查流程：", (int)split.detail_bounds.x + 16, (int)guide_y, 18, app->theme.text_primary);
+        guide_y += 32;
+        DrawText("1. 输入患者住院编号", (int)split.detail_bounds.x + 16, (int)guide_y, 17, app->theme.text_secondary);
+        guide_y += 28;
+        DrawText("2. 点击「执行检查」", (int)split.detail_bounds.x + 16, (int)guide_y, 17, app->theme.text_secondary);
+        guide_y += 28;
+        DrawText("3. 系统将验证以下项目：", (int)split.detail_bounds.x + 16, (int)guide_y, 17, app->theme.text_secondary);
+        guide_y += 28;
+        DrawText("   - 医疗费用是否结清", (int)split.detail_bounds.x + 28, (int)guide_y, 16, app->theme.text_secondary);
+        guide_y += 24;
+        DrawText("   - 医嘱是否全部完成", (int)split.detail_bounds.x + 28, (int)guide_y, 16, app->theme.text_secondary);
+        guide_y += 24;
+        DrawText("   - 床位是否可释放", (int)split.detail_bounds.x + 28, (int)guide_y, 16, app->theme.text_secondary);
+        guide_y += 32;
+        DrawText("4. 检查通过后可办理出院", (int)split.detail_bounds.x + 16, (int)guide_y, 17, app->theme.text_secondary);
+        guide_y += 48;
+
+        if (st->output[0] != '\0') {
+            Workbench_draw_section_header(app, (int)split.detail_bounds.x + 16, (int)guide_y, "检查结果");
+            guide_y += 34;
+            DrawText(st->output, (int)split.detail_bounds.x + 16, (int)guide_y, 17, app->theme.text_secondary);
+        }
+    }
 }
 
 /* ── Entry point ── */

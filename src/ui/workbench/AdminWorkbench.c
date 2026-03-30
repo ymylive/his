@@ -144,14 +144,23 @@ static void admin_draw_patients(DesktopApp *app, Rectangle panel) {
     const LinkedListNode *current = 0;
     Result result;
     int row = 0;
+    int search_clicked = 0;
 
     {
         int active_mode = (int)state->search_mode;
         GuiToggleGroup((Rectangle){ panel.x, panel.y, 220, 30 }, "按编号;按姓名", &active_mode);
         state->search_mode = (DesktopPatientSearchMode)active_mode;
     }
-    draw_text_input((Rectangle){ panel.x + 236, panel.y, panel.width - 360, 34 }, state->query, sizeof(state->query), 1, &state->active_field, 1);
-    if (GuiButton((Rectangle){ panel.x + panel.width - 110, panel.y, 110, 34 }, "查询")) {
+
+    Workbench_draw_search_box(
+        app,
+        (Rectangle){ panel.x + 236, panel.y, panel.width - 236, 34 },
+        state->query, sizeof(state->query),
+        &state->active_field, 1,
+        &search_clicked
+    );
+
+    if (search_clicked) {
         LinkedList_clear(&state->results, free);
         LinkedList_init(&state->results);
         result = DesktopAdapters_search_patients(&app->application, state->search_mode, state->query, &state->results);
@@ -176,6 +185,13 @@ static void admin_draw_patients(DesktopApp *app, Rectangle panel) {
             split.list_bounds.width - 28,
             30
         };
+        int is_selected = state->has_selected_patient &&
+                         strcmp(state->selected_patient.patient_id, patient->patient_id) == 0;
+
+        if (is_selected) {
+            DrawRectangleRounded(row_bounds, 0.15f, 8, Fade(app->theme.border, 0.2f));
+        }
+
         if (GuiButton(row_bounds, TextFormat("%s | %s", patient->patient_id, patient->name))) {
             state->selected_patient = *patient;
             state->has_selected_patient = 1;
@@ -183,12 +199,26 @@ static void admin_draw_patients(DesktopApp *app, Rectangle panel) {
         current = current->next;
         row++;
     }
+
     if (state->has_selected_patient) {
-        Workbench_draw_info_row(app, (int)split.detail_bounds.x + 16, (int)split.detail_bounds.y + 56, "编号", state->selected_patient.patient_id);
-        Workbench_draw_info_row(app, (int)split.detail_bounds.x + 16, (int)split.detail_bounds.y + 84, "姓名", state->selected_patient.name);
-        Workbench_draw_info_row(app, (int)split.detail_bounds.x + 16, (int)split.detail_bounds.y + 112, "病史", state->selected_patient.medical_history);
-        Workbench_draw_info_row(app, (int)split.detail_bounds.x + 16, (int)split.detail_bounds.y + 140, "住院状态", state->selected_patient.is_inpatient ? "是" : "否");
-        if (GuiButton((Rectangle){ split.detail_bounds.x + 16, split.detail_bounds.y + 188, 120, 36 }, "删除患者")) {
+        float detail_y = split.detail_bounds.y + 56;
+        Workbench_draw_info_row(app, (int)split.detail_bounds.x + 16, (int)detail_y, "编号", state->selected_patient.patient_id);
+        detail_y += 32;
+        Workbench_draw_info_row(app, (int)split.detail_bounds.x + 16, (int)detail_y, "姓名", state->selected_patient.name);
+        detail_y += 32;
+        Workbench_draw_info_row(app, (int)split.detail_bounds.x + 16, (int)detail_y, "病史", state->selected_patient.medical_history);
+        detail_y += 32;
+
+        Rectangle status_badge = { split.detail_bounds.x + 126, detail_y, 80, 26 };
+        Color status_color = state->selected_patient.is_inpatient ?
+                            (Color){ 245, 158, 11, 255 } : (Color){ 34, 197, 94, 255 };
+        Workbench_draw_status_badge(app, status_badge,
+                                    state->selected_patient.is_inpatient ? "住院" : "门诊",
+                                    status_color);
+        DrawText("住院状态", (int)split.detail_bounds.x + 16, (int)detail_y + 4, 18, app->theme.text_secondary);
+
+        detail_y += 48;
+        if (GuiButton((Rectangle){ split.detail_bounds.x + 16, detail_y, 120, 36 }, "删除患者")) {
             result = DesktopAdapters_delete_patient(&app->application, state->selected_patient.patient_id, g_admin_maintenance.output, sizeof(g_admin_maintenance.output));
             show_result(app, result);
         }
@@ -202,19 +232,29 @@ static void admin_draw_doctors(DesktopApp *app, Rectangle panel) {
     Department department;
     Doctor doctor;
     Result result;
+    float ly = split.list_bounds.y;
+    float lx = split.list_bounds.x;
 
     DrawRectangleRounded(split.list_bounds, 0.12f, 8, app->theme.panel);
     DrawRectangleRoundedLinesEx(split.list_bounds, 0.12f, 8, 1.0f, Fade(app->theme.border, 0.85f));
-    DrawText("科室与医生维护", (int)split.list_bounds.x + 16, (int)split.list_bounds.y + 14, 24, app->theme.text_primary);
+    DrawText("科室与医生维护", (int)lx + 16, (int)ly + 14, 24, app->theme.text_primary);
 
-    GuiLabel((Rectangle){ split.list_bounds.x + 16, split.list_bounds.y + 54, 120, 20 }, "科室编号");
-    draw_text_input((Rectangle){ split.list_bounds.x + 16, split.list_bounds.y + 78, 180, 34 }, g_admin_maintenance.department_id, sizeof(g_admin_maintenance.department_id), 1, &app->state.patient_page.active_field, 2);
-    GuiLabel((Rectangle){ split.list_bounds.x + 208, split.list_bounds.y + 54, 120, 20 }, "科室名称");
-    draw_text_input((Rectangle){ split.list_bounds.x + 208, split.list_bounds.y + 78, split.list_bounds.width - 224, 34 }, g_admin_maintenance.department_name, sizeof(g_admin_maintenance.department_name), 1, &app->state.patient_page.active_field, 3);
-    draw_text_input((Rectangle){ split.list_bounds.x + 16, split.list_bounds.y + 126, 180, 34 }, g_admin_maintenance.department_location, sizeof(g_admin_maintenance.department_location), 1, &app->state.patient_page.active_field, 4);
-    draw_text_input((Rectangle){ split.list_bounds.x + 208, split.list_bounds.y + 126, split.list_bounds.width - 224, 34 }, g_admin_maintenance.department_description, sizeof(g_admin_maintenance.department_description), 1, &app->state.patient_page.active_field, 5);
+    /* Department section */
+    Workbench_draw_section_header(app, (int)lx + 16, (int)ly + 50, "科室管理");
 
-    if (GuiButton((Rectangle){ split.list_bounds.x + 16, split.list_bounds.y + 176, 140, 36 }, "新增科室")) {
+    Workbench_draw_form_label(app, (int)lx + 16, (int)ly + 84, "科室编号", 1);
+    draw_text_input((Rectangle){ lx + 16, ly + 106, 180, 34 }, g_admin_maintenance.department_id, sizeof(g_admin_maintenance.department_id), 1, &app->state.patient_page.active_field, 2);
+
+    Workbench_draw_form_label(app, (int)lx + 208, (int)ly + 84, "科室名称", 1);
+    draw_text_input((Rectangle){ lx + 208, ly + 106, split.list_bounds.width - 224, 34 }, g_admin_maintenance.department_name, sizeof(g_admin_maintenance.department_name), 1, &app->state.patient_page.active_field, 3);
+
+    Workbench_draw_form_label(app, (int)lx + 16, (int)ly + 150, "位置", 0);
+    draw_text_input((Rectangle){ lx + 16, ly + 172, 180, 34 }, g_admin_maintenance.department_location, sizeof(g_admin_maintenance.department_location), 1, &app->state.patient_page.active_field, 4);
+
+    Workbench_draw_form_label(app, (int)lx + 208, (int)ly + 150, "描述", 0);
+    draw_text_input((Rectangle){ lx + 208, ly + 172, split.list_bounds.width - 224, 34 }, g_admin_maintenance.department_description, sizeof(g_admin_maintenance.department_description), 1, &app->state.patient_page.active_field, 5);
+
+    if (GuiButton((Rectangle){ lx + 16, ly + 222, 140, 36 }, "新增科室")) {
         memset(&department, 0, sizeof(department));
         strncpy(department.department_id, g_admin_maintenance.department_id, sizeof(department.department_id) - 1);
         strncpy(department.name, g_admin_maintenance.department_name, sizeof(department.name) - 1);
@@ -223,7 +263,7 @@ static void admin_draw_doctors(DesktopApp *app, Rectangle panel) {
         result = DesktopAdapters_add_department(&app->application, &department, g_admin_maintenance.output, sizeof(g_admin_maintenance.output));
         show_result(app, result);
     }
-    if (GuiButton((Rectangle){ split.list_bounds.x + 172, split.list_bounds.y + 176, 140, 36 }, "更新科室")) {
+    if (GuiButton((Rectangle){ lx + 172, ly + 222, 140, 36 }, "更新科室")) {
         memset(&department, 0, sizeof(department));
         strncpy(department.department_id, g_admin_maintenance.department_id, sizeof(department.department_id) - 1);
         strncpy(department.name, g_admin_maintenance.department_name, sizeof(department.name) - 1);
@@ -232,20 +272,30 @@ static void admin_draw_doctors(DesktopApp *app, Rectangle panel) {
         result = DesktopAdapters_update_department(&app->application, &department, g_admin_maintenance.output, sizeof(g_admin_maintenance.output));
         show_result(app, result);
     }
-    if (GuiButton((Rectangle){ split.list_bounds.x + 328, split.list_bounds.y + 176, 120, 36 }, "列出科室")) {
+    if (GuiButton((Rectangle){ lx + 328, ly + 222, 120, 36 }, "列出科室")) {
         result = DesktopAdapters_list_departments(&app->application, g_admin_maintenance.output, sizeof(g_admin_maintenance.output));
         show_result(app, result);
     }
 
-    GuiLabel((Rectangle){ split.list_bounds.x + 16, split.list_bounds.y + 240, 120, 20 }, "医生编号");
-    draw_text_input((Rectangle){ split.list_bounds.x + 16, split.list_bounds.y + 264, 180, 34 }, g_admin_maintenance.doctor_id, sizeof(g_admin_maintenance.doctor_id), 1, &app->state.patient_page.active_field, 6);
-    GuiLabel((Rectangle){ split.list_bounds.x + 208, split.list_bounds.y + 240, 120, 20 }, "医生姓名");
-    draw_text_input((Rectangle){ split.list_bounds.x + 208, split.list_bounds.y + 264, split.list_bounds.width - 224, 34 }, g_admin_maintenance.doctor_name, sizeof(g_admin_maintenance.doctor_name), 1, &app->state.patient_page.active_field, 7);
-    draw_text_input((Rectangle){ split.list_bounds.x + 16, split.list_bounds.y + 312, 180, 34 }, g_admin_maintenance.doctor_title, sizeof(g_admin_maintenance.doctor_title), 1, &app->state.patient_page.active_field, 8);
-    draw_text_input((Rectangle){ split.list_bounds.x + 208, split.list_bounds.y + 312, 180, 34 }, g_admin_maintenance.doctor_department_id, sizeof(g_admin_maintenance.doctor_department_id), 1, &app->state.patient_page.active_field, 9);
-    draw_text_input((Rectangle){ split.list_bounds.x + 16, split.list_bounds.y + 360, split.list_bounds.width - 32, 34 }, g_admin_maintenance.doctor_schedule, sizeof(g_admin_maintenance.doctor_schedule), 1, &app->state.patient_page.active_field, 10);
+    /* Doctor section */
+    Workbench_draw_section_header(app, (int)lx + 16, (int)ly + 280, "医生管理");
 
-    if (GuiButton((Rectangle){ split.list_bounds.x + 16, split.list_bounds.y + 410, 140, 36 }, "新增医生")) {
+    Workbench_draw_form_label(app, (int)lx + 16, (int)ly + 314, "医生编号", 1);
+    draw_text_input((Rectangle){ lx + 16, ly + 336, 180, 34 }, g_admin_maintenance.doctor_id, sizeof(g_admin_maintenance.doctor_id), 1, &app->state.patient_page.active_field, 6);
+
+    Workbench_draw_form_label(app, (int)lx + 208, (int)ly + 314, "医生姓名", 1);
+    draw_text_input((Rectangle){ lx + 208, ly + 336, split.list_bounds.width - 224, 34 }, g_admin_maintenance.doctor_name, sizeof(g_admin_maintenance.doctor_name), 1, &app->state.patient_page.active_field, 7);
+
+    Workbench_draw_form_label(app, (int)lx + 16, (int)ly + 380, "职称", 0);
+    draw_text_input((Rectangle){ lx + 16, ly + 402, 180, 34 }, g_admin_maintenance.doctor_title, sizeof(g_admin_maintenance.doctor_title), 1, &app->state.patient_page.active_field, 8);
+
+    Workbench_draw_form_label(app, (int)lx + 208, (int)ly + 380, "所属科室", 1);
+    draw_text_input((Rectangle){ lx + 208, ly + 402, 180, 34 }, g_admin_maintenance.doctor_department_id, sizeof(g_admin_maintenance.doctor_department_id), 1, &app->state.patient_page.active_field, 9);
+
+    Workbench_draw_form_label(app, (int)lx + 16, (int)ly + 446, "排班信息", 0);
+    draw_text_input((Rectangle){ lx + 16, ly + 468, split.list_bounds.width - 32, 34 }, g_admin_maintenance.doctor_schedule, sizeof(g_admin_maintenance.doctor_schedule), 1, &app->state.patient_page.active_field, 10);
+
+    if (GuiButton((Rectangle){ lx + 16, ly + 518, 140, 36 }, "新增医生")) {
         memset(&doctor, 0, sizeof(doctor));
         strncpy(doctor.doctor_id, g_admin_maintenance.doctor_id, sizeof(doctor.doctor_id) - 1);
         strncpy(doctor.name, g_admin_maintenance.doctor_name, sizeof(doctor.name) - 1);
@@ -256,12 +306,14 @@ static void admin_draw_doctors(DesktopApp *app, Rectangle panel) {
         result = DesktopAdapters_add_doctor(&app->application, &doctor, g_admin_maintenance.output, sizeof(g_admin_maintenance.output));
         show_result(app, result);
     }
-    if (GuiButton((Rectangle){ split.list_bounds.x + 172, split.list_bounds.y + 410, 140, 36 }, "按科室列医生")) {
+    if (GuiButton((Rectangle){ lx + 172, ly + 518, 140, 36 }, "按科室列医生")) {
         result = DesktopAdapters_list_doctors_by_department(&app->application, g_admin_maintenance.doctor_department_id, g_admin_maintenance.output, sizeof(g_admin_maintenance.output));
         show_result(app, result);
     }
-    draw_text_input((Rectangle){ split.list_bounds.x + 16, split.list_bounds.y + 466, 180, 34 }, g_admin_maintenance.doctor_query_id, sizeof(g_admin_maintenance.doctor_query_id), 1, &app->state.patient_page.active_field, 11);
-    if (GuiButton((Rectangle){ split.list_bounds.x + 208, split.list_bounds.y + 466, 120, 34 }, "查询医生")) {
+
+    Workbench_draw_form_label(app, (int)lx + 16, (int)ly + 570, "查询医生编号", 0);
+    draw_text_input((Rectangle){ lx + 16, ly + 592, 180, 34 }, g_admin_maintenance.doctor_query_id, sizeof(g_admin_maintenance.doctor_query_id), 1, &app->state.patient_page.active_field, 11);
+    if (GuiButton((Rectangle){ lx + 208, ly + 592, 120, 34 }, "查询医生")) {
         result = DesktopAdapters_query_doctor(&app->application, g_admin_maintenance.doctor_query_id, g_admin_maintenance.output, sizeof(g_admin_maintenance.output));
         show_result(app, result);
     }

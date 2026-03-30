@@ -104,30 +104,43 @@ static void draw_output_panel(
 
 static void patient_draw_home(DesktopApp *app, Rectangle panel) {
     const WorkbenchDef *wb = Workbench_get(USER_ROLE_PATIENT);
-    const char *labels[4] = { "当前身份", "最近挂号", "住院状态", "发药记录" };
+    const char *labels[4] = { "患者编号", "挂号记录", "住院状态", "发药记录" };
     const char *values[4];
     WorkbenchButtonGroupLayout actions;
-    char role_value[32];
-    const char *last_registration = "--";
-    const char *admission_status = "未住院";
-    const char *dispense_status = app->state.dispense_page.loaded > 0 ? "已同步" : "待同步";
+    char patient_id_value[32];
+    char registration_count[16];
+    const char *admission_status = "门诊";
+    char dispense_count[16];
     int index = 0;
+    Result result;
 
     auto_bind_patient_id(app);
-    snprintf(role_value, sizeof(role_value), "%s", "患者");
-    if (app->state.registration_page.last_registration_id[0] != '\0') {
-        last_registration = app->state.registration_page.last_registration_id;
+
+    /* Load dashboard data if needed */
+    if (app->state.dashboard.loaded == 0) {
+        result = DesktopAdapters_load_dashboard(&app->application, &app->state.dashboard);
+        if (result.success) {
+            app->state.dashboard.loaded = 1;
+        }
     }
+
+    snprintf(patient_id_value, sizeof(patient_id_value), "%s", app->state.current_user.user_id);
+    snprintf(registration_count, sizeof(registration_count), "%d次",
+             app->state.registration_page.last_registration_id[0] != '\0' ? 1 : 0);
     if (app->state.inpatient_page.output[0] != '\0') {
-        admission_status = "有住院信息";
+        admission_status = "住院中";
     }
-    values[0] = role_value;
-    values[1] = last_registration;
+    snprintf(dispense_count, sizeof(dispense_count), "%d条",
+             app->state.dispense_page.loaded > 0 ? LinkedList_size(&app->state.dispense_page.results) : 0);
+
+    values[0] = patient_id_value;
+    values[1] = registration_count;
     values[2] = admission_status;
-    values[3] = dispense_status;
+    values[3] = dispense_count;
 
     Workbench_draw_home_cards(app, panel, labels, values, wb->accent);
-    Workbench_draw_section_header(app, (int)panel.x, (int)panel.y + 104, "患者自助流程");
+
+    Workbench_draw_section_header(app, (int)panel.x, (int)panel.y + 104, "快速导航");
     actions = Workbench_compute_button_group_layout(
         (Rectangle){ panel.x, panel.y + 144.0f, panel.width, 40.0f },
         4,
@@ -138,9 +151,9 @@ static void patient_draw_home(DesktopApp *app, Rectangle panel) {
     for (index = 0; index < actions.count; index++) {
         int clicked = 0;
         const char *label = index == 0 ? "自助挂号" :
-                            index == 1 ? "我的病历" :
-                            index == 2 ? "住院状态" :
-                                         "用药说明";
+                            index == 1 ? "看诊记录" :
+                            index == 2 ? "住院信息" :
+                                         "发药记录";
         Workbench_draw_quick_action_btn(app, actions.buttons[index], label, wb->accent, &clicked);
         if (clicked) {
             app->state.workbench_page = index + 1;
@@ -150,8 +163,8 @@ static void patient_draw_home(DesktopApp *app, Rectangle panel) {
     draw_output_panel(
         app,
         (Rectangle){ panel.x, panel.y + 214.0f, panel.width, panel.height - 214.0f },
-        "当前说明",
-        "患者工作台已接通自助挂号、病历/检查查询、住院状态查看、发药记录与药品说明查询。",
+        "服务说明",
+        "欢迎使用患者自助服务台。您可以在这里进行自助挂号、查看看诊记录、了解住院信息以及查询发药记录和药品说明。所有信息均与您的患者编号关联，无需重复输入。",
         "暂无说明"
     );
 }
@@ -160,43 +173,52 @@ static void patient_draw_registration(DesktopApp *app, Rectangle panel) {
     DesktopRegistrationPageState *state = &app->state.registration_page;
     WorkbenchListDetailLayout split = Workbench_compute_list_detail_layout(panel, 0.46f, 18.0f, 280.0f);
     WorkbenchButtonGroupLayout actions;
+    const WorkbenchDef *wb = Workbench_get(USER_ROLE_PATIENT);
     Result result;
     int index = 0;
+    float ly = split.list_bounds.y;
+    float lx = split.list_bounds.x;
 
     auto_bind_patient_id(app);
 
     DrawRectangleRounded(split.list_bounds, 0.12f, 8, app->theme.panel);
     DrawRectangleRoundedLinesEx(split.list_bounds, 0.12f, 8, 1.0f, Fade(app->theme.border, 0.85f));
-    DrawText("自助挂号", (int)split.list_bounds.x + 16, (int)split.list_bounds.y + 14, 24, app->theme.text_primary);
-    Workbench_draw_info_row(
-        app,
-        (int)split.list_bounds.x + 16,
-        (int)split.list_bounds.y + 52,
-        "患者编号",
-        state->patient_id
-    );
+    DrawText(“自助挂号”, (int)lx + 16, (int)ly + 14, 24, app->theme.text_primary);
 
-    GuiLabel((Rectangle){ split.list_bounds.x + 16, split.list_bounds.y + 96, 120, 20 }, "科室编号");
+    /* Patient ID display with badge */
+    DrawText(“患者编号”, (int)lx + 16, (int)ly + 52, 18, app->theme.text_secondary);
+    Rectangle patient_badge = { lx + 126, ly + 48, 160, 28 };
+    Workbench_draw_status_badge(app, patient_badge, state->patient_id, wb->accent);
+
+    /* Step-by-step guidance */
+    Workbench_draw_section_header(app, (int)lx + 16, (int)ly + 92, “挂号流程”);
+
+    DrawText(“步骤 1: 选择科室”, (int)lx + 16, (int)ly + 126, 17, app->theme.text_primary);
+    Workbench_draw_form_label(app, (int)lx + 16, (int)ly + 150, “科室编号”, 1);
     draw_text_input(
-        (Rectangle){ split.list_bounds.x + 16, split.list_bounds.y + 120, split.list_bounds.width - 32, 34 },
+        (Rectangle){ lx + 16, ly + 172, split.list_bounds.width - 32, 34 },
         state->department_id,
         sizeof(state->department_id),
         1,
         &state->active_field,
         1
     );
-    GuiLabel((Rectangle){ split.list_bounds.x + 16, split.list_bounds.y + 168, 120, 20 }, "医生编号");
+
+    DrawText(“步骤 2: 选择医生”, (int)lx + 16, (int)ly + 220, 17, app->theme.text_primary);
+    Workbench_draw_form_label(app, (int)lx + 16, (int)ly + 244, “医生编号”, 1);
     draw_text_input(
-        (Rectangle){ split.list_bounds.x + 16, split.list_bounds.y + 192, split.list_bounds.width - 32, 34 },
+        (Rectangle){ lx + 16, ly + 266, split.list_bounds.width - 32, 34 },
         state->doctor_id,
         sizeof(state->doctor_id),
         1,
         &state->active_field,
         2
     );
-    GuiLabel((Rectangle){ split.list_bounds.x + 16, split.list_bounds.y + 240, 120, 20 }, "挂号时间");
+
+    DrawText(“步骤 3: 选择时间”, (int)lx + 16, (int)ly + 314, 17, app->theme.text_primary);
+    Workbench_draw_form_label(app, (int)lx + 16, (int)ly + 338, “挂号时间”, 1);
     draw_text_input(
-        (Rectangle){ split.list_bounds.x + 16, split.list_bounds.y + 264, split.list_bounds.width - 32, 34 },
+        (Rectangle){ lx + 16, ly + 360, split.list_bounds.width - 32, 34 },
         state->registered_at,
         sizeof(state->registered_at),
         1,
@@ -205,7 +227,7 @@ static void patient_draw_registration(DesktopApp *app, Rectangle panel) {
     );
 
     actions = Workbench_compute_button_group_layout(
-        (Rectangle){ split.list_bounds.x + 16, split.list_bounds.y + 320.0f, split.list_bounds.width - 32, 36.0f },
+        (Rectangle){ lx + 16, ly + 416.0f, split.list_bounds.width - 32, 36.0f },
         3,
         110.0f,
         36.0f,
@@ -213,8 +235,9 @@ static void patient_draw_registration(DesktopApp *app, Rectangle panel) {
     );
     for (index = 0; index < actions.count; index++) {
         int clicked = 0;
-        const char *label = index == 0 ? "科室列表" : index == 1 ? "医生列表" : "提交挂号";
-        Workbench_draw_quick_action_btn(app, actions.buttons[index], label, app->theme.nav_active, &clicked);
+        const char *label = index == 0 ? “科室列表” : index == 1 ? “医生列表” : “提交挂号”;
+        Color btn_color = index == 2 ? (Color){ 34, 197, 94, 255 } : wb->accent;
+        Workbench_draw_quick_action_btn(app, actions.buttons[index], label, btn_color, &clicked);
         if (!clicked) {
             continue;
         }
@@ -261,13 +284,13 @@ static void patient_draw_registration(DesktopApp *app, Rectangle panel) {
         }
     }
 
-    DrawText(
-        TextFormat("最近成功挂号: %s", state->last_registration_id[0] != '\0' ? state->last_registration_id : "--"),
-        (int)split.list_bounds.x + 16,
-        (int)split.list_bounds.y + 380,
-        18,
-        app->theme.text_secondary
-    );
+    /* Last registration status */
+    if (state->last_registration_id[0] != '\0') {
+        DrawText(“最近挂号”, (int)lx + 16, (int)ly + 472, 18, app->theme.text_secondary);
+        Rectangle reg_badge = { lx + 126, ly + 468, 200, 28 };
+        Workbench_draw_status_badge(app, reg_badge, state->last_registration_id,
+                                    (Color){ 34, 197, 94, 255 });
+    }
 
     DrawRectangleRounded(split.detail_bounds, 0.12f, 8, app->theme.panel);
     DrawRectangleRoundedLinesEx(split.detail_bounds, 0.12f, 8, 1.0f, Fade(app->theme.border, 0.85f));
@@ -279,9 +302,9 @@ static void patient_draw_registration(DesktopApp *app, Rectangle panel) {
             split.detail_bounds.width - 24,
             (split.detail_bounds.height - 42) / 3.0f
         },
-        "科室列表",
+        “科室列表”,
         g_patient_registration_view.departments,
-        "点击“科室列表”加载可选科室。"
+        “点击”科室列表”查看所有可选科室及其编号。”
     );
     draw_output_panel(
         app,
@@ -291,9 +314,9 @@ static void patient_draw_registration(DesktopApp *app, Rectangle panel) {
             split.detail_bounds.width - 24,
             (split.detail_bounds.height - 42) / 3.0f
         },
-        "医生列表",
+        “医生列表”,
         g_patient_registration_view.doctors,
-        "输入科室编号后点击“医生列表”。"
+        “输入科室编号后点击”医生列表”查看该科室的医生信息。”
     );
     draw_output_panel(
         app,
@@ -303,18 +326,28 @@ static void patient_draw_registration(DesktopApp *app, Rectangle panel) {
             split.detail_bounds.width - 24,
             (split.detail_bounds.height - 42) / 3.0f
         },
-        "我的挂号",
+        “我的挂号记录”,
         g_patient_registration_view.registrations,
-        "提交挂号后会在这里刷新个人挂号记录。"
+        “提交挂号成功后，您的挂号记录会在这里显示。”
     );
 }
 
 static void patient_draw_visits(DesktopApp *app, Rectangle panel) {
     DesktopDoctorPageState *state = &app->state.doctor_page;
+    const WorkbenchDef *wb = Workbench_get(USER_ROLE_PATIENT);
     Result result;
+    float card_height = 0.0f;
 
     auto_bind_patient_id(app);
-    if (GuiButton((Rectangle){ panel.x + panel.width - 118, panel.y, 118, 34 }, "刷新病历")) {
+
+    /* Header with patient ID badge and refresh button */
+    DrawText(“我的看诊记录”, (int)panel.x, (int)panel.y, 24, app->theme.text_primary);
+
+    DrawText(“患者编号”, (int)panel.x, (int)panel.y + 36, 18, app->theme.text_secondary);
+    Rectangle patient_badge = { panel.x + 110, panel.y + 32, 160, 28 };
+    Workbench_draw_status_badge(app, patient_badge, state->patient_id, wb->accent);
+
+    if (GuiButton((Rectangle){ panel.x + panel.width - 118, panel.y, 118, 34 }, “刷新记录”)) {
         result = DesktopAdapters_query_patient_history(
             &app->application,
             state->patient_id,
@@ -323,21 +356,71 @@ static void patient_draw_visits(DesktopApp *app, Rectangle panel) {
         );
         show_result(app, result);
     }
-    draw_output_panel(
-        app,
-        (Rectangle){ panel.x, panel.y + 48, panel.width, panel.height - 48 },
-        "我的病历与检查",
-        state->output,
-        "点击“刷新病历”加载挂号、看诊、检查和住院摘要。"
+
+    /* Card-style layout for medical records */
+    card_height = (panel.height - 88) / 2.0f - 10.0f;
+
+    /* Consultation records card */
+    DrawRectangleRounded(
+        (Rectangle){ panel.x, panel.y + 78, panel.width, card_height },
+        0.12f, 8, app->theme.panel
+    );
+    DrawRectangleRoundedLinesEx(
+        (Rectangle){ panel.x, panel.y + 78, panel.width, card_height },
+        0.12f, 8, 1.0f, Fade(app->theme.border, 0.85f)
+    );
+    DrawRectangle((int)panel.x, (int)panel.y + 82, 5, (int)card_height - 8, (Color){ 13, 148, 136, 255 });
+    DrawText(“看诊记录”, (int)panel.x + 20, (int)panel.y + 92, 20, app->theme.text_primary);
+    DrawText(
+        state->output[0] != '\0' ? state->output : “暂无看诊记录。点击”刷新记录”加载您的挂号、看诊、检查和住院摘要。”,
+        (int)panel.x + 20,
+        (int)panel.y + 126,
+        17,
+        app->theme.text_secondary
+    );
+
+    /* Examination results card */
+    DrawRectangleRounded(
+        (Rectangle){ panel.x, panel.y + 88 + card_height, panel.width, card_height },
+        0.12f, 8, app->theme.panel
+    );
+    DrawRectangleRoundedLinesEx(
+        (Rectangle){ panel.x, panel.y + 88 + card_height, panel.width, card_height },
+        0.12f, 8, 1.0f, Fade(app->theme.border, 0.85f)
+    );
+    DrawRectangle((int)panel.x, (int)panel.y + 92 + (int)card_height, 5, (int)card_height - 8, (Color){ 245, 158, 11, 255 });
+    DrawText(“检查结果”, (int)panel.x + 20, (int)panel.y + 102 + (int)card_height, 20, app->theme.text_primary);
+    DrawText(
+        “检查结果会在看诊记录中一并显示。如有检查项目，医生会在看诊时录入检查信息。”,
+        (int)panel.x + 20,
+        (int)panel.y + 136 + (int)card_height,
+        17,
+        app->theme.text_secondary
     );
 }
 
 static void patient_draw_admission(DesktopApp *app, Rectangle panel) {
     DesktopInpatientPageState *state = &app->state.inpatient_page;
+    const WorkbenchDef *wb = Workbench_get(USER_ROLE_PATIENT);
     Result result;
+    int has_admission = state->output[0] != '\0' && strstr(state->output, "未找到") == 0;
+    Color status_color = has_admission ? (Color){ 245, 158, 11, 255 } : (Color){ 34, 197, 94, 255 };
+    const char *status_text = has_admission ? "住院中" : "门诊";
 
     auto_bind_patient_id(app);
-    if (GuiButton((Rectangle){ panel.x + panel.width - 118, panel.y, 118, 34 }, "刷新住院")) {
+
+    /* Header with status badge */
+    DrawText("我的住院信息", (int)panel.x, (int)panel.y, 24, app->theme.text_primary);
+
+    DrawText("患者编号", (int)panel.x, (int)panel.y + 36, 18, app->theme.text_secondary);
+    Rectangle patient_badge = { panel.x + 110, panel.y + 32, 160, 28 };
+    Workbench_draw_status_badge(app, patient_badge, state->query_patient_id, wb->accent);
+
+    DrawText("住院状态", (int)panel.x + 290, (int)panel.y + 36, 18, app->theme.text_secondary);
+    Rectangle status_badge = { panel.x + 390, panel.y + 32, 100, 28 };
+    Workbench_draw_status_badge(app, status_badge, status_text, status_color);
+
+    if (GuiButton((Rectangle){ panel.x + panel.width - 118, panel.y, 118, 34 }, "刷新状态")) {
         result = DesktopAdapters_query_active_admission_by_patient(
             &app->application,
             state->query_patient_id,
@@ -346,26 +429,92 @@ static void patient_draw_admission(DesktopApp *app, Rectangle panel) {
         );
         show_result(app, result);
     }
-    draw_output_panel(
-        app,
-        (Rectangle){ panel.x, panel.y + 48, panel.width, panel.height - 48 },
-        "住院状态",
-        state->output,
-        "当前无在院记录时会在这里显示查询失败提示，可用于答辩演示。"
+
+    /* Admission information card */
+    DrawRectangleRounded(
+        (Rectangle){ panel.x, panel.y + 78, panel.width, panel.height - 78 },
+        0.12f, 8, app->theme.panel
     );
+    DrawRectangleRoundedLinesEx(
+        (Rectangle){ panel.x, panel.y + 78, panel.width, panel.height - 78 },
+        0.12f, 8, 1.0f, Fade(app->theme.border, 0.85f)
+    );
+    DrawRectangle((int)panel.x, (int)panel.y + 82, 5, (int)(panel.height - 86), status_color);
+
+    if (has_admission) {
+        DrawText("住院详情", (int)panel.x + 20, (int)panel.y + 92, 20, app->theme.text_primary);
+        DrawText(
+            state->output,
+            (int)panel.x + 20,
+            (int)panel.y + 126,
+            17,
+            app->theme.text_secondary
+        );
+    } else {
+        DrawText("当前状态", (int)panel.x + 20, (int)panel.y + 92, 20, app->theme.text_primary);
+        DrawText(
+            "您当前没有在院记录。如需住院，请前往医院住院登记处办理入院手续。",
+            (int)panel.x + 20,
+            (int)panel.y + 126,
+            17,
+            app->theme.text_secondary
+        );
+        DrawText(
+            "住院流程说明：",
+            (int)panel.x + 20,
+            (int)panel.y + 166,
+            18,
+            app->theme.text_primary
+        );
+        DrawText(
+            "1. 医生开具住院通知单",
+            (int)panel.x + 20,
+            (int)panel.y + 196,
+            17,
+            app->theme.text_secondary
+        );
+        DrawText(
+            "2. 前往住院登记处办理入院手续",
+            (int)panel.x + 20,
+            (int)panel.y + 224,
+            17,
+            app->theme.text_secondary
+        );
+        DrawText(
+            "3. 病区管理员安排床位",
+            (int)panel.x + 20,
+            (int)panel.y + 252,
+            17,
+            app->theme.text_secondary
+        );
+        DrawText(
+            "4. 入住病房开始治疗",
+            (int)panel.x + 20,
+            (int)panel.y + 280,
+            17,
+            app->theme.text_secondary
+        );
+    }
 }
 
 static void patient_draw_dispense(DesktopApp *app, Rectangle panel) {
     DesktopDispensePageState *history_state = &app->state.dispense_page;
     DesktopPharmacyPageState *medicine_state = &app->state.pharmacy_page;
     WorkbenchListDetailLayout split = Workbench_compute_list_detail_layout(panel, 0.5f, 18.0f, 260.0f);
+    const WorkbenchDef *wb = Workbench_get(USER_ROLE_PATIENT);
     const LinkedListNode *current = 0;
     int row = 0;
     Result result;
+    float timeline_y = 0.0f;
 
     auto_bind_patient_id(app);
 
-    if (GuiButton((Rectangle){ split.list_bounds.x, split.list_bounds.y, 118, 34 }, "刷新发药")) {
+    /* Left panel: Dispense history with timeline */
+    DrawRectangleRounded(split.list_bounds, 0.12f, 8, app->theme.panel);
+    DrawRectangleRoundedLinesEx(split.list_bounds, 0.12f, 8, 1.0f, Fade(app->theme.border, 0.85f));
+    DrawText(“我的发药记录”, (int)split.list_bounds.x + 16, (int)split.list_bounds.y + 14, 24, app->theme.text_primary);
+
+    if (GuiButton((Rectangle){ split.list_bounds.x + split.list_bounds.width - 118, split.list_bounds.y + 10, 102, 34 }, “刷新记录”)) {
         LinkedList_clear(&history_state->results, free);
         LinkedList_init(&history_state->results);
         result = DesktopAdapters_load_dispense_history(
@@ -376,50 +525,71 @@ static void patient_draw_dispense(DesktopApp *app, Rectangle panel) {
         history_state->loaded = result.success ? 1 : -1;
         show_result(app, result);
     }
-    DrawRectangleRounded(
-        (Rectangle){ split.list_bounds.x, split.list_bounds.y + 48, split.list_bounds.width, split.list_bounds.height - 48 },
-        0.12f,
-        8,
-        app->theme.panel
-    );
-    DrawRectangleRoundedLinesEx(
-        (Rectangle){ split.list_bounds.x, split.list_bounds.y + 48, split.list_bounds.width, split.list_bounds.height - 48 },
-        0.12f,
-        8,
-        1.0f,
-        Fade(app->theme.border, 0.85f)
-    );
-    DrawText("我的发药记录", (int)split.list_bounds.x + 16, (int)split.list_bounds.y + 60, 20, app->theme.text_primary);
+
+    /* Timeline-style display */
+    timeline_y = split.list_bounds.y + 60;
     current = history_state->results.head;
     while (current != 0 && row < 8) {
         const DispenseRecord *record = (const DispenseRecord *)current->data;
+        Color timeline_color = (Color){ 22, 163, 74, 255 };
+
+        /* Timeline dot and line */
+        DrawCircle((int)split.list_bounds.x + 26, (int)timeline_y + 14, 6, timeline_color);
+        if (current->next != 0 && row < 7) {
+            DrawRectangle((int)split.list_bounds.x + 24, (int)timeline_y + 20, 4, 28, Fade(timeline_color, 0.3f));
+        }
+
+        /* Record card */
+        Rectangle record_card = {
+            split.list_bounds.x + 44,
+            timeline_y,
+            split.list_bounds.width - 60,
+            42
+        };
+        DrawRectangleRounded(record_card, 0.15f, 8, Fade(timeline_color, 0.08f));
+        DrawRectangleRoundedLinesEx(record_card, 0.15f, 8, 1.0f, Fade(timeline_color, 0.25f));
+
+        /* Record info */
         DrawText(
-            TextFormat("%s | %s | %s x%d", record->dispense_id, record->medicine_id, record->dispensed_at, record->quantity),
-            (int)split.list_bounds.x + 16,
-            (int)split.list_bounds.y + 96 + row * 28,
-            17,
+            TextFormat(“发药单号: %s”, record->dispense_id),
+            (int)record_card.x + 12,
+            (int)record_card.y + 6,
+            16,
+            app->theme.text_primary
+        );
+        DrawText(
+            TextFormat(“药品: %s  数量: %d  时间: %s”, record->medicine_id, record->quantity, record->dispensed_at),
+            (int)record_card.x + 12,
+            (int)record_card.y + 24,
+            15,
             app->theme.text_secondary
         );
+
+        timeline_y += 48;
         current = current->next;
         row++;
     }
+
     if (row == 0) {
-        DrawText("暂无发药记录。", (int)split.list_bounds.x + 16, (int)split.list_bounds.y + 96, 17, app->theme.text_secondary);
+        DrawText(“暂无发药记录。”, (int)split.list_bounds.x + 44, (int)split.list_bounds.y + 74, 17, app->theme.text_secondary);
+        DrawText(“医生开具处方并由药房发药后，记录会在这里显示。”, (int)split.list_bounds.x + 44, (int)split.list_bounds.y + 102, 16, Fade(app->theme.text_secondary, 0.8f));
     }
 
+    /* Right panel: Medicine information query */
     DrawRectangleRounded(split.detail_bounds, 0.12f, 8, app->theme.panel);
     DrawRectangleRoundedLinesEx(split.detail_bounds, 0.12f, 8, 1.0f, Fade(app->theme.border, 0.85f));
-    DrawText("药品说明查询", (int)split.detail_bounds.x + 16, (int)split.detail_bounds.y + 14, 20, app->theme.text_primary);
-    GuiLabel((Rectangle){ split.detail_bounds.x + 16, split.detail_bounds.y + 48, 120, 20 }, "药品编号");
+    DrawText(“药品说明查询”, (int)split.detail_bounds.x + 16, (int)split.detail_bounds.y + 14, 24, app->theme.text_primary);
+
+    Workbench_draw_form_label(app, (int)split.detail_bounds.x + 16, (int)split.detail_bounds.y + 56, “药品编号”, 0);
     draw_text_input(
-        (Rectangle){ split.detail_bounds.x + 16, split.detail_bounds.y + 72, split.detail_bounds.width - 152, 34 },
+        (Rectangle){ split.detail_bounds.x + 16, split.detail_bounds.y + 78, split.detail_bounds.width - 152, 34 },
         medicine_state->stock_query_medicine_id,
         sizeof(medicine_state->stock_query_medicine_id),
         1,
         &medicine_state->active_field,
         1
     );
-    if (GuiButton((Rectangle){ split.detail_bounds.x + split.detail_bounds.width - 118, split.detail_bounds.y + 72, 102, 34 }, "查询说明")) {
+    if (GuiButton((Rectangle){ split.detail_bounds.x + split.detail_bounds.width - 118, split.detail_bounds.y + 78, 102, 34 }, “查询说明”)) {
         result = DesktopAdapters_query_medicine_detail(
             &app->application,
             medicine_state->stock_query_medicine_id,
@@ -429,12 +599,29 @@ static void patient_draw_dispense(DesktopApp *app, Rectangle panel) {
         );
         show_result(app, result);
     }
-    draw_output_panel(
-        app,
-        (Rectangle){ split.detail_bounds.x + 12, split.detail_bounds.y + 124, split.detail_bounds.width - 24, split.detail_bounds.height - 136 },
-        "药品说明",
-        medicine_state->output,
-        "输入药品编号后点击“查询说明”。"
+
+    /* Medicine information display */
+    DrawRectangleRounded(
+        (Rectangle){ split.detail_bounds.x + 12, split.detail_bounds.y + 128, split.detail_bounds.width - 24, split.detail_bounds.height - 140 },
+        0.12f, 8, Fade(app->theme.border, 0.05f)
+    );
+    DrawRectangleRoundedLinesEx(
+        (Rectangle){ split.detail_bounds.x + 12, split.detail_bounds.y + 128, split.detail_bounds.width - 24, split.detail_bounds.height - 140 },
+        0.12f, 8, 1.0f, Fade(app->theme.border, 0.3f)
+    );
+    DrawText(
+        “药品说明”,
+        (int)split.detail_bounds.x + 24,
+        (int)split.detail_bounds.y + 140,
+        18,
+        app->theme.text_primary
+    );
+    DrawText(
+        medicine_state->output[0] != '\0' ? medicine_state->output : “输入药品编号后点击”查询说明”查看药品的详细信息，包括名称、规格、用法用量等。”,
+        (int)split.detail_bounds.x + 24,
+        (int)split.detail_bounds.y + 168,
+        17,
+        app->theme.text_secondary
     );
 }
 

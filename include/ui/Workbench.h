@@ -86,6 +86,50 @@ void Workbench_draw_info_row(
     const char *label, const char *value
 );
 
+/* Enhanced UI components */
+void Workbench_draw_form_label(
+    const DesktopApp *app, int x, int y,
+    const char *label, int required
+);
+
+void Workbench_draw_status_badge(
+    const DesktopApp *app, Rectangle rect,
+    const char *text, Color bg_color
+);
+
+void Workbench_draw_bed_grid(
+    const DesktopApp *app, Rectangle panel,
+    const char *ward_name, int bed_count,
+    const int *occupied_beds, int occupied_count
+);
+
+void Workbench_draw_data_table_header(
+    const DesktopApp *app, Rectangle rect,
+    const char **headers, const float *widths, int column_count
+);
+
+void Workbench_draw_data_table_row(
+    DesktopApp *app, Rectangle rect,
+    const char **values, const float *widths, int column_count,
+    int is_selected, int *clicked
+);
+
+void Workbench_draw_icon_button(
+    DesktopApp *app, Rectangle rect,
+    const char *icon, const char *label, Color accent, int *clicked
+);
+
+void Workbench_draw_progress_bar(
+    const DesktopApp *app, Rectangle rect,
+    float progress, Color fill_color
+);
+
+void Workbench_draw_search_box(
+    DesktopApp *app, Rectangle rect,
+    char *text, int text_size, int *active_field, int field_id,
+    int *search_clicked
+);
+
 void Workbench_draw_home_cards(
     const DesktopApp *app, Rectangle panel,
     const char *labels[4], const char *values[4], Color accent
