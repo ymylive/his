@@ -429,7 +429,7 @@ int DesktopApp_run(const DesktopAppConfig *config) {
         return 1;
     }
 
-    SetConfigFlags(FLAG_WINDOW_RESIZABLE | FLAG_VSYNC_HINT | FLAG_WINDOW_HIGHDPI | FLAG_MSAA_4X_HINT);
+    SetConfigFlags(FLAG_WINDOW_RESIZABLE | FLAG_VSYNC_HINT | FLAG_MSAA_4X_HINT);
     window_width = config->width > DesktopApp_min_width() ? config->width : DesktopApp_min_width();
     window_height = config->height > DesktopApp_min_height() ? config->height : DesktopApp_min_height();
     InitWindow(

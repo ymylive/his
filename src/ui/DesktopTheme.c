@@ -83,7 +83,9 @@ static const char *DESKTOP_CJK_UI_TEXT =
     "接诊首页待诊列表患者历史看诊记录检查管理首页总览患者主数据医生与科室病房与药品系统信息"
     "住院首页入院登记出院办理住院查询病区首页病房总览床位状态转床调度出院检查"
     "药房首页药品建档入库补货发药处理库存查询低库存预警"
-    "暂无数据请先完成相关操作后查看此处内容";
+    "暂无数据请先完成相关操作后查看此处内容"
+    /* Additional characters for complete coverage */
+    "、或一显示等的在会并有所点击加载您说明如项目";
 
 const char *DesktopTheme_cjk_glyph_seed_text(void) {
     return DESKTOP_CJK_UI_TEXT;
