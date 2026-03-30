@@ -304,7 +304,7 @@ static void patient_draw_registration(DesktopApp *app, Rectangle panel) {
         },
         "科室列表",
         g_patient_registration_view.departments,
-        "点击"科室列表"查看所有可选科室及其编号。"
+        "点击【科室列表】查看所有可选科室及其编号。"
     );
     draw_output_panel(
         app,
@@ -316,7 +316,7 @@ static void patient_draw_registration(DesktopApp *app, Rectangle panel) {
         },
         "医生列表",
         g_patient_registration_view.doctors,
-        "输入科室编号后点击"医生列表"查看该科室的医生信息。"
+        "输入科室编号后点击【医生列表】查看该科室的医生信息。"
     );
     draw_output_panel(
         app,
@@ -372,7 +372,7 @@ static void patient_draw_visits(DesktopApp *app, Rectangle panel) {
     DrawRectangle((int)panel.x, (int)panel.y + 82, 5, (int)card_height - 8, (Color){ 13, 148, 136, 255 });
     DrawText("看诊记录", (int)panel.x + 20, (int)panel.y + 92, 20, app->theme.text_primary);
     DrawText(
-        state->output[0] != '\0' ? state->output : "暂无看诊记录。点击"刷新记录"加载您的挂号、看诊、检查和住院摘要。",
+        state->output[0] != '\0' ? state->output : "暂无看诊记录。点击【刷新记录】加载您的挂号、看诊、检查和住院摘要。",
         (int)panel.x + 20,
         (int)panel.y + 126,
         17,
@@ -617,7 +617,7 @@ static void patient_draw_dispense(DesktopApp *app, Rectangle panel) {
         app->theme.text_primary
     );
     DrawText(
-        medicine_state->output[0] != '\0' ? medicine_state->output : "输入药品编号后点击"查询说明"查看药品的详细信息，包括名称、规格、用法用量等。",
+        medicine_state->output[0] != '\0' ? medicine_state->output : "输入药品编号后点击【查询说明】查看药品的详细信息，包括名称、规格、用法用量等。",
         (int)split.detail_bounds.x + 24,
         (int)split.detail_bounds.y + 168,
         17,

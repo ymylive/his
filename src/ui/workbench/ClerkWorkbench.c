@@ -269,7 +269,7 @@ static void clerk_draw_patient_create(DesktopApp *app, Rectangle panel) {
         output_bounds,
         "建档结果",
         g_clerk_patient_form.output,
-        "可以先去"患者查询"选中患者，再回到本页快速修改。"
+        "可以先去【患者查询】选中患者，再回到本页快速修改。"
     );
 }
 
