@@ -25,12 +25,14 @@ static const char *DESKTOP_CJK_FONT_CANDIDATES[] = {
     "C:/Windows/Fonts/simsunb.ttf"
 };
 #elif __APPLE__
-/* macOS font paths */
+/* macOS font paths - prefer TTF over TTC for better compatibility */
 static const char *DESKTOP_CJK_FONT_CANDIDATES[] = {
-    /* System Chinese/Japanese fonts (support Chinese characters) */
+    /* System fonts - TTF files (better raylib compatibility) */
+    "/System/Library/Fonts/Supplemental/Arial Unicode.ttf",
+    "/Library/Fonts/Arial Unicode.ttf",
+    /* System fonts - TTC files (may have compatibility issues) */
     "/System/Library/Fonts/STHeiti Light.ttc",
     "/System/Library/Fonts/STHeiti Medium.ttc",
-    "/System/Library/Fonts/Supplemental/Arial Unicode.ttf",
     "/System/Library/Fonts/ヒラギノ角ゴシック W3.ttc",
     "/System/Library/Fonts/ヒラギノ角ゴシック W4.ttc",
     "/System/Library/Fonts/ヒラギノ明朝 ProN.ttc",
@@ -38,11 +40,10 @@ static const char *DESKTOP_CJK_FONT_CANDIDATES[] = {
     "/Library/Fonts/NotoSansSC-Regular.ttf",
     "/Library/Fonts/NotoSansCJK-Regular.ttc",
     "/Library/Fonts/SourceHanSansSC-Regular.otf",
-    "/Library/Fonts/Arial Unicode.ttf",
     /* Homebrew-installed fonts */
     "/usr/local/share/fonts/NotoSansSC-Regular.ttf",
     "/opt/homebrew/share/fonts/NotoSansSC-Regular.ttf",
-    /* Fallback to system fonts */
+    /* Fallback */
     "/System/Library/Fonts/PingFang.ttc"
 };
 #else
