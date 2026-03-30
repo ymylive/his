@@ -4,6 +4,33 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## [2.0.1] - 2026-03-30
+
+### Added - macOS 安全配置改进
+
+- **一键配置脚本** (`scripts/setup-macos.sh`) - 自动配置 macOS 安全设置
+  - 自动移除隔离属性
+  - 自动添加执行权限
+  - 交互式启动选项
+- **安全配置指南** (`docs/MACOS_SECURITY.md`) - 完整的 macOS 安全配置文档
+  - 问题原因说明
+  - 4 种解决方案
+  - 安全性说明和验证方法
+  - 常见问题解答
+  - 企业部署指南
+
+### Changed
+
+- 更新 macOS 打包脚本，包含 `setup-macos.sh`
+- 更新 `START_HERE.txt`，添加首次运行警告
+- 更新 `docs/MACOS_SUPPORT.md`，引用安全配置指南
+- 更新 `README.md`，添加 macOS 安全配置说明
+
+### Fixed
+
+- 解决 macOS Gatekeeper 阻止未签名应用的问题
+- 优化 macOS 用户首次运行体验
+
 ## [2.0.0] - 2026-03-29
 
 ### Added - 全面界面可视化增强 + 跨平台支持

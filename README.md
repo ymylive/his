@@ -2,6 +2,30 @@
 
 面向课程设计答辩的轻量级医院信息系统，采用 `C + raylib + raygui + txt repository`，覆盖门诊、检查、住院、药房与管理员总览场景。
 
+## 🚀 快速开始
+
+### Windows 用户
+1. 下载 [最新 Release](https://github.com/ymylive/his/releases/latest) 中的 `lightweight-his-portable-v*-win64.zip`
+2. 解压并运行 `run_desktop.bat`
+
+### macOS 用户
+1. 下载 [最新 Release](https://github.com/ymylive/his/releases/latest) 中的 `lightweight-his-portable-v*-macos-arm64.zip`
+2. 解压后运行配置脚本：
+   ```bash
+   ./setup-macos.sh
+   ```
+3. 启动应用：
+   ```bash
+   ./run_desktop.sh
+   ```
+
+⚠️ **macOS 重要提示**：由于应用未经 Apple 签名，首次运行前必须配置。详见 [macOS 安全配置指南](docs/MACOS_SECURITY.md)。
+
+### 演示账号
+- `PAT0001 / patient123` - 患者
+- `DOC0001 / doctor123` - 医生
+- `ADM0001 / admin123` - 管理员
+
 ## 版本 2.0 - 全面可视化增强 + 跨平台支持 ✨
 
 当前版本已完成：
@@ -71,12 +95,31 @@ ctest --test-dir build --output-on-failure
 ```
 
 ### macOS
+
+#### 从源码构建
 ```bash
 cmake -S . -B build
 cmake --build build
 ctest --test-dir build --output-on-failure
 ./build/his_desktop
 ```
+
+#### 使用预编译版本
+
+⚠️ **重要**：macOS 会阻止未签名应用，首次运行前需要配置：
+
+```bash
+# 1. 下载并解压 Release
+cd lightweight-his-portable-v*-macos-arm64
+
+# 2. 运行配置脚本（首次必须）
+./setup-macos.sh
+
+# 3. 启动应用
+./run_desktop.sh
+```
+
+详见 [macOS 安全配置指南](docs/MACOS_SECURITY.md)。
 
 ### Linux
 ```bash
@@ -91,6 +134,7 @@ ctest --test-dir build --output-on-failure
 - [安装依赖](docs/INSTALL.md)
 - [构建与运行](docs/BUILD_AND_RUN.md)
 - [macOS 支持](docs/MACOS_SUPPORT.md) ✨ 新增
+- [macOS 安全配置](docs/MACOS_SECURITY.md) ⚠️ 必读
 - [AI 使用](docs/AI_USAGE.md)
 - [界面改进详情](UI_IMPROVEMENTS.md) ✨ 新增
 - [更新日志](CHANGELOG.md)
