@@ -8,6 +8,9 @@
 static Font g_desktop_font;
 static int g_desktop_font_loaded = 0;
 
+/* Platform-specific font paths */
+#ifdef _WIN32
+/* Windows font paths */
 static const char *DESKTOP_CJK_FONT_CANDIDATES[] = {
     "C:/Windows/Fonts/NotoSansSC-VF.ttf",
     "C:/Windows/Fonts/msyhl.ttc",
@@ -21,6 +24,39 @@ static const char *DESKTOP_CJK_FONT_CANDIDATES[] = {
     "C:/Windows/Fonts/simsun.ttc",
     "C:/Windows/Fonts/simsunb.ttf"
 };
+#elif __APPLE__
+/* macOS font paths */
+static const char *DESKTOP_CJK_FONT_CANDIDATES[] = {
+    /* System Chinese/Japanese fonts (support Chinese characters) */
+    "/System/Library/Fonts/STHeiti Light.ttc",
+    "/System/Library/Fonts/STHeiti Medium.ttc",
+    "/System/Library/Fonts/Supplemental/Arial Unicode.ttf",
+    "/System/Library/Fonts/ヒラギノ角ゴシック W3.ttc",
+    "/System/Library/Fonts/ヒラギノ角ゴシック W4.ttc",
+    "/System/Library/Fonts/ヒラギノ明朝 ProN.ttc",
+    /* User-installed fonts */
+    "/Library/Fonts/NotoSansSC-Regular.ttf",
+    "/Library/Fonts/NotoSansCJK-Regular.ttc",
+    "/Library/Fonts/SourceHanSansSC-Regular.otf",
+    "/Library/Fonts/Arial Unicode.ttf",
+    /* Homebrew-installed fonts */
+    "/usr/local/share/fonts/NotoSansSC-Regular.ttf",
+    "/opt/homebrew/share/fonts/NotoSansSC-Regular.ttf",
+    /* Fallback to system fonts */
+    "/System/Library/Fonts/PingFang.ttc"
+};
+#else
+/* Linux font paths */
+static const char *DESKTOP_CJK_FONT_CANDIDATES[] = {
+    "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc",
+    "/usr/share/fonts/truetype/noto/NotoSansCJK-Regular.ttc",
+    "/usr/share/fonts/truetype/droid/DroidSansFallbackFull.ttf",
+    "/usr/share/fonts/truetype/wqy/wqy-microhei.ttc",
+    "/usr/share/fonts/truetype/wqy/wqy-zenhei.ttc",
+    "/usr/share/fonts/opentype/noto/NotoSansSC-Regular.otf",
+    "/usr/share/fonts/truetype/arphic/uming.ttc"
+};
+#endif
 
 static const char *DESKTOP_CJK_UI_TEXT =
     "登录首页患者挂号发药记录系统未知角色医生系统管理员挂号员住院登记员病区管理员药房人员"
