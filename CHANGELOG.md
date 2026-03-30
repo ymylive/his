@@ -4,6 +4,22 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## [2.0.3] - 2026-03-30
+
+### Fixed - 修复 macOS 字体加载兼容性
+
+- **TTC 字体兼容性问题** - TrueType Collection 文件可能无法被 raylib 正确加载
+  - 优先使用 TTF 格式字体（Arial Unicode.ttf）
+  - TTF 文件有更好的 raylib 兼容性
+  - TTC 文件作为备选方案
+
+### Changed
+
+- 调整 macOS 字体优先级
+  1. Arial Unicode.ttf (系统自带 TTF) - 优先
+  2. STHeiti Light.ttc (TTC 备选)
+  3. 其他 TTC 和用户安装的字体
+
 ## [2.0.2] - 2026-03-30
 
 ### Fixed - 修复 macOS 中文字体显示
