@@ -18,7 +18,17 @@ Lightweight HIS 现已支持 macOS 平台，提供与 Windows 版本相同的功
 1. 访问 [Releases 页面](https://github.com/ymylive/his/releases)
 2. 下载最新的 `lightweight-his-portable-v*-macos-arm64.zip`
 3. 解压到任意目录
-4. 双击 `run_desktop.sh` 启动桌面版
+4. **重要**：运行配置脚本（首次必须）
+   ```bash
+   cd lightweight-his-portable-v*-macos-arm64
+   ./setup-macos.sh
+   ```
+5. 启动应用
+   ```bash
+   ./run_desktop.sh
+   ```
+
+**注意**：由于应用未经 Apple 签名，首次运行前必须配置安全设置。详见 [macOS 安全配置指南](MACOS_SECURITY.md)。
 
 ### 方式二：从源码编译
 
@@ -42,14 +52,27 @@ cmake --build build -j$(sysctl -n hw.ncpu)
 
 ### 安全与隐私
 
-首次运行时，macOS 可能会阻止应用启动。解决方法：
+⚠️ **重要**：由于应用未经 Apple 开发者签名和公证，macOS 会阻止运行。
 
-1. **方法一**：右键点击应用 → 选择"打开"
-2. **方法二**：系统偏好设置 → 安全性与隐私 → 点击"仍要打开"
-3. **方法三**（终端）：
-   ```bash
-   xattr -cr /path/to/lightweight-his-portable-*
-   ```
+**推荐解决方案**：使用配置脚本
+```bash
+./setup-macos.sh
+```
+
+**手动配置**：
+```bash
+# 移除隔离属性
+xattr -cr .
+
+# 添加执行权限
+chmod +x run_desktop.sh his_desktop
+```
+
+**详细说明**：请参阅 [macOS 安全配置指南](MACOS_SECURITY.md)，包含：
+- 为什么会被阻止
+- 多种解决方案
+- 安全性说明
+- 常见问题解答
 
 ### 文件权限
 

@@ -63,6 +63,10 @@ cp README.md "$STAGE_PATH/"
 cp CHANGELOG.md "$STAGE_PATH/"
 cp -r data "$STAGE_PATH/"
 
+# Copy setup script
+cp scripts/setup-macos.sh "$STAGE_PATH/"
+chmod +x "$STAGE_PATH/setup-macos.sh"
+
 # Create launcher scripts
 cat > "$STAGE_PATH/run_desktop.sh" << 'EOF'
 #!/bin/bash
@@ -83,12 +87,21 @@ chmod +x "$STAGE_PATH/run_console.sh"
 cat > "$STAGE_PATH/START_HERE.txt" << EOF
 Lightweight HIS Portable v${VERSION} for macOS
 
-Start desktop:
-  ./run_desktop.sh
-  or double-click run_desktop.sh in Finder
+⚠️  首次运行前必读 ⚠️
 
-Start console:
-  ./run_console.sh
+由于应用未经 Apple 签名，macOS 会阻止运行。请先运行配置脚本：
+
+  ./setup-macos.sh
+
+或手动配置：
+
+  xattr -cr .
+  chmod +x run_desktop.sh his_desktop
+
+然后启动：
+
+  ./run_desktop.sh    # 桌面版（推荐）
+  ./run_console.sh    # 控制台版
 
 Demo accounts:
   ADM0001 / admin123  - Administrator
@@ -99,11 +112,13 @@ Demo accounts:
   PHA0001 / pharmacy123 - Pharmacy
   PAT0001 / patient123 - Patient
 
+详细说明：
+  - 安全配置：docs/MACOS_SECURITY.md
+  - 完整文档：docs/MACOS_SUPPORT.md
+
 Notes:
   - Keep the data folder next to the executables
-  - If macOS blocks the app, go to System Preferences > Security & Privacy
-    and click "Open Anyway"
-  - You may need to run: xattr -cr . to remove quarantine attributes
+  - For security details, see docs/MACOS_SECURITY.md
 
 Architecture: ${ARCH_TAG}
 EOF
