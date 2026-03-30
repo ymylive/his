@@ -61,11 +61,28 @@
 
 ## 快速开始
 
+### Windows
 ```powershell
 cmake -S . -B build
 cmake --build build
 ctest --test-dir build --output-on-failure
 .\build\his_desktop.exe
+```
+
+### macOS
+```bash
+cmake -S . -B build
+cmake --build build
+ctest --test-dir build --output-on-failure
+./build/his_desktop
+```
+
+### Linux
+```bash
+cmake -S . -B build
+cmake --build build
+ctest --test-dir build --output-on-failure
+./build/his_desktop
 ```
 
 ## 文档
@@ -88,8 +105,14 @@ ctest --test-dir build --output-on-failure
 
 ## 打包便携版
 
+### Windows
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\scripts\package-release.ps1
+```
+
+### macOS
+```bash
+./scripts/package-release-macos.sh
 ```
 
 产物输出到 `dist/`。

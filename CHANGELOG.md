@@ -8,6 +8,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Added - 全面界面可视化增强
 
+#### 平台支持
+- **macOS 支持** - 新增 macOS (Intel 和 Apple Silicon) 构建和打包脚本
+- **多平台 Release** - GitHub Actions 自动构建 Windows 和 macOS 版本
+
 #### 新增通用 UI 组件
 - **表单标签组件** (`Workbench_draw_form_label`) - 支持必填字段标识（红色星号）
 - **状态徽章组件** (`Workbench_draw_status_badge`) - 彩色背景的状态指示器

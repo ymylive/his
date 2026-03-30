@@ -1,0 +1,84 @@
+name: Multi-Platform Release
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup MSYS2
+        uses: msys2/setup-msys2@v2
+        with:
+          msystem: MINGW32
+          update: true
+          install: >-
+            mingw-w64-i686-gcc
+            mingw-w64-i686-cmake
+            mingw-w64-i686-ninja
+            git
+
+      - name: Build and package portable
+        shell: powershell
+        run: powershell -ExecutionPolicy Bypass -File .\scripts\package-release.ps1 -Version ${{ github.ref_name }} -SkipSmoke
+
+      - name: Upload Windows artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-portable
+          path: dist/*.zip
+
+  build-macos:
+    strategy:
+      matrix:
+        os: [macos-13, macos-14]  # Intel and Apple Silicon
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          brew install cmake ninja
+
+      - name: Build and package portable
+        run: |
+          chmod +x ./scripts/package-release-macos.sh
+          ./scripts/package-release-macos.sh ${{ github.ref_name }}
+
+      - name: Upload macOS artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: macos-portable-${{ matrix.os }}
+          path: dist/*.zip
+
+  publish-release:
+    needs: [build-windows, build-macos]
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/')
+
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Display structure
+        run: ls -R artifacts
+
+      - name: Publish GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: artifacts/**/*.zip
+          fail_on_unmatched_files: false
