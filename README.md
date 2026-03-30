@@ -2,10 +2,11 @@
 
 面向课程设计答辩的轻量级医院信息系统，采用 `C + raylib + raygui + txt repository`，覆盖门诊、检查、住院、药房与管理员总览场景。
 
-## 版本 2.0 - 全面可视化增强 ✨
+## 版本 2.0 - 全面可视化增强 + 跨平台支持 ✨
 
 当前版本已完成：
 
+- **跨平台支持**：Windows、macOS (Apple Silicon)
 - 七角色专门桌面工作台，**全新可视化界面**
 - **7 个增强 UI 组件**：表单标签、状态徽章、床位网格、数据表格、图标按钮、进度条、搜索框
 - **床位网格可视化**：绿色/红色直观显示床位状态
@@ -89,6 +90,7 @@ ctest --test-dir build --output-on-failure
 
 - [安装依赖](docs/INSTALL.md)
 - [构建与运行](docs/BUILD_AND_RUN.md)
+- [macOS 支持](docs/MACOS_SUPPORT.md) ✨ 新增
 - [AI 使用](docs/AI_USAGE.md)
 - [界面改进详情](UI_IMPROVEMENTS.md) ✨ 新增
 - [更新日志](CHANGELOG.md)

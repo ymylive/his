@@ -41,7 +41,10 @@ jobs:
   build-macos:
     strategy:
       matrix:
-        os: [macos-13, macos-14]  # Intel and Apple Silicon
+        include:
+          - os: macos-14
+            arch: arm64
+            name: Apple Silicon
     runs-on: ${{ matrix.os }}
 
     steps:

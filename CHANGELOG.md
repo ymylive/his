@@ -6,11 +6,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [2.0.0] - 2026-03-29
 
-### Added - 全面界面可视化增强
+### Added - 全面界面可视化增强 + 跨平台支持
 
 #### 平台支持
-- **macOS 支持** - 新增 macOS (Intel 和 Apple Silicon) 构建和打包脚本
+- **macOS 支持** - 新增 macOS (Apple Silicon) 构建和打包脚本
 - **多平台 Release** - GitHub Actions 自动构建 Windows 和 macOS 版本
+- **macOS 文档** - 完整的 macOS 安装、配置和故障排查指南
 
 #### 新增通用 UI 组件
 - **表单标签组件** (`Workbench_draw_form_label`) - 支持必填字段标识（红色星号）
