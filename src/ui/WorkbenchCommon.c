@@ -417,7 +417,8 @@ void Workbench_draw_form_label(
     DrawText(label, x, y, 18, app->theme.text_secondary);
     if (required) {
         int label_width = MeasureText(label, 18);
-        DrawText("*", x + label_width + 4, y, 18, (Color){ 239, 68, 68, 255 });
+        Color red_color = { 239, 68, 68, 255 };
+        DrawText("*", x + label_width + 4, y, 18, red_color);
     }
 }
 
