@@ -4,6 +4,24 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## [2.0.6] - 2026-03-31
+
+### Fixed
+
+- **桌面中文 glyph 覆盖不全** - 运行时业务文案此前未完整纳入 glyph seed
+  - 扩大 glyph seed 自动收集范围到整个 `src/ui/*.c` 和 `include/ui/*.h`
+  - 补齐桌面工作台运行时结果文案，避免界面出现 `???`
+  - 新增 UTF-8 级别的 glyph 覆盖测试，防止后续 UI 文案回归
+- **macOS 桌面窗口过宽导致鼠标与选框偏移** - 启动窗口尺寸可能超过当前显示区域
+  - 新增启动窗口尺寸收敛逻辑，启动后按当前显示器可见尺寸调整窗口
+  - 同步收敛最小窗口尺寸和窗口位置，避免系统压缩窗口后布局仍按旧尺寸计算
+  - 修复 Retina 机器上登录页和工作台控件命中区域、选框位置偏移问题
+
+### Changed
+
+- 预编译版本建议升级到 `v2.0.6` 及以上
+- Windows Release 资产说明改为使用通配架构名，避免文档与实际产物命名不一致
+
 ## [2.0.3] - 2026-03-30
 
 ### Fixed - 修复 macOS 字体加载兼容性

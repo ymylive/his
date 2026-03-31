@@ -208,6 +208,14 @@ int DesktopApp_resolve_data_path(
     char *out_path,
     size_t out_path_size
 );
+void DesktopApp_resolve_initial_window_size(
+    int requested_width,
+    int requested_height,
+    int monitor_width,
+    int monitor_height,
+    int *out_width,
+    int *out_height
+);
 int DesktopApp_min_width(void);
 int DesktopApp_min_height(void);
 void DesktopApp_mark_dirty(DesktopAppState *state, DesktopPage page);

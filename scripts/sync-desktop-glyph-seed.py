@@ -10,13 +10,9 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 OUTPUT = ROOT / "src/ui/DesktopGlyphSeed.h"
 SOURCE_PATTERNS = (
-    "src/ui/DesktopApp.c",
-    "src/ui/DesktopPages.c",
-    "src/ui/DesktopAdapters.c",
-    "src/ui/WorkbenchCommon.c",
+    "src/ui/*.c",
     "src/ui/workbench/*.c",
-    "include/ui/Desktop*.h",
-    "include/ui/Workbench*.h",
+    "include/ui/*.h",
     "data/*.txt",
 )
 STRING_LITERAL_RE = re.compile(r'"([^"\\]*(?:\\.[^"\\]*)*)"')

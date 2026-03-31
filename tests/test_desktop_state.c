@@ -119,6 +119,23 @@ static void test_freshness_helpers_and_window_guards(void) {
     DesktopAppState_dispose(&state);
 }
 
+static void test_initial_window_size_fits_monitor_work_area(void) {
+    int width = 0;
+    int height = 0;
+
+    DesktopApp_resolve_initial_window_size(1600, 960, 1512, 982, &width, &height);
+    assert(width == 1512);
+    assert(height == 960);
+
+    DesktopApp_resolve_initial_window_size(1200, 700, 1512, 982, &width, &height);
+    assert(width == 1366);
+    assert(height == 768);
+
+    DesktopApp_resolve_initial_window_size(1600, 960, 1280, 720, &width, &height);
+    assert(width == 1280);
+    assert(height == 720);
+}
+
 static int test_font_exists_for_noto(const char *path) {
     if (path == 0) {
         return 0;
@@ -171,14 +188,60 @@ static void test_cjk_font_path_resolution(void) {
     assert(missing == 0);
 }
 
-static int test_seed_contains_codepoint(const int *seed_codepoints, int seed_count, int codepoint) {
-    int index = 0;
-    for (index = 0; index < seed_count; index++) {
-        if (seed_codepoints[index] == codepoint) {
-            return 1;
-        }
+static int test_utf8_codepoint_length(unsigned char lead_byte) {
+    if ((lead_byte & 0x80U) == 0) {
+        return 1;
+    }
+    if ((lead_byte & 0xE0U) == 0xC0U) {
+        return 2;
+    }
+    if ((lead_byte & 0xF0U) == 0xE0U) {
+        return 3;
+    }
+    if ((lead_byte & 0xF8U) == 0xF0U) {
+        return 4;
     }
     return 0;
+}
+
+static int test_seed_contains_utf8_span(const char *seed, const char *span, int span_length) {
+    const char *cursor = seed;
+
+    if (seed == 0 || span == 0 || span_length <= 0) {
+        return 0;
+    }
+
+    while (*cursor != '\0') {
+        if (memcmp(cursor, span, (size_t)span_length) == 0) {
+            return 1;
+        }
+        cursor++;
+    }
+
+    return 0;
+}
+
+static void test_assert_seed_covers_utf8_text(const char *seed, const char *text) {
+    const unsigned char *cursor = (const unsigned char *)text;
+
+    assert(seed != 0);
+    assert(text != 0);
+
+    while (*cursor != '\0') {
+        int span_length = test_utf8_codepoint_length(*cursor);
+
+        assert(span_length > 0);
+        if (*cursor <= 126U) {
+            cursor += span_length;
+            continue;
+        }
+
+        if (test_seed_contains_utf8_span(seed, (const char *)cursor, span_length) == 0) {
+            fprintf(stderr, "missing glyph span: %.*s\n", span_length, (const char *)cursor);
+        }
+        assert(test_seed_contains_utf8_span(seed, (const char *)cursor, span_length) == 1);
+        cursor += span_length;
+    }
 }
 
 static void test_cjk_seed_covers_recent_ui_copy(void) {
@@ -188,32 +251,17 @@ static void test_cjk_seed_covers_recent_ui_copy(void) {
         "点击【查询】",
         "填写转床时间（可选）",
         "• 当前住院记录",
-        "欢迎使用患者自助服务台。"
+        "欢迎使用患者自助服务台。",
+        "床位状态: 空闲",
+        "病房状态: 启用",
+        "库存盘点/查询库存",
+        "缺药提醒/库存不足提醒"
     };
     int sample_index = 0;
-    int seed_count = 0;
-    int *seed_codepoints = LoadCodepoints(seed, &seed_count);
-
-    assert(seed_codepoints != 0);
-    assert(seed_count > 0);
 
     for (sample_index = 0; sample_index < (int)(sizeof(samples) / sizeof(samples[0])); sample_index++) {
-        int text_count = 0;
-        int text_index = 0;
-        int *text_codepoints = LoadCodepoints(samples[sample_index], &text_count);
-
-        assert(text_codepoints != 0);
-        for (text_index = 0; text_index < text_count; text_index++) {
-            if (text_codepoints[text_index] <= 126) {
-                continue;
-            }
-            assert(test_seed_contains_codepoint(seed_codepoints, seed_count, text_codepoints[text_index]) == 1);
-        }
-
-        UnloadCodepoints(text_codepoints);
+        test_assert_seed_covers_utf8_text(seed, samples[sample_index]);
     }
-
-    UnloadCodepoints(seed_codepoints);
 }
 
 static void test_data_path_resolution_prefers_project_root_over_build_data(void) {
@@ -236,6 +284,7 @@ int main(void) {
     test_role_home_pages_on_login();
     test_role_mapping();
     test_freshness_helpers_and_window_guards();
+    test_initial_window_size_fits_monitor_work_area();
     test_cjk_font_path_resolution();
     test_cjk_seed_covers_recent_ui_copy();
     test_data_path_resolution_prefers_project_root_over_build_data();

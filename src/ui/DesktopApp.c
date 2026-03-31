@@ -151,6 +151,34 @@ int DesktopApp_resolve_data_path(
     );
 }
 
+void DesktopApp_resolve_initial_window_size(
+    int requested_width,
+    int requested_height,
+    int monitor_width,
+    int monitor_height,
+    int *out_width,
+    int *out_height
+) {
+    int resolved_width = requested_width > DesktopApp_min_width() ? requested_width : DesktopApp_min_width();
+    int resolved_height = requested_height > DesktopApp_min_height() ? requested_height : DesktopApp_min_height();
+
+    if (monitor_width > 0 && resolved_width > monitor_width) {
+        resolved_width = monitor_width;
+    }
+
+    if (monitor_height > 0 && resolved_height > monitor_height) {
+        resolved_height = monitor_height;
+    }
+
+    if (out_width != 0) {
+        *out_width = resolved_width;
+    }
+
+    if (out_height != 0) {
+        *out_height = resolved_height;
+    }
+}
+
 int DesktopApp_min_width(void) {
     return DESKTOP_APP_MIN_WIDTH;
 }
@@ -412,6 +440,8 @@ int DesktopApp_run(const DesktopAppConfig *config) {
     char loaded_font_path[260];
     int window_width = 0;
     int window_height = 0;
+    int min_window_width = 0;
+    int min_window_height = 0;
 
     if (config == 0 || config->paths == 0) {
         return 1;
@@ -430,14 +460,51 @@ int DesktopApp_run(const DesktopAppConfig *config) {
     }
 
     SetConfigFlags(FLAG_WINDOW_RESIZABLE | FLAG_VSYNC_HINT | FLAG_MSAA_4X_HINT);
-    window_width = config->width > DesktopApp_min_width() ? config->width : DesktopApp_min_width();
-    window_height = config->height > DesktopApp_min_height() ? config->height : DesktopApp_min_height();
+    DesktopApp_resolve_initial_window_size(
+        config->width,
+        config->height,
+        0,
+        0,
+        &window_width,
+        &window_height
+    );
     InitWindow(
         window_width,
         window_height,
         config->title != 0 ? config->title : "Lightweight HIS Desktop"
     );
-    SetWindowMinSize(DesktopApp_min_width(), DesktopApp_min_height());
+    {
+        int monitor = GetCurrentMonitor();
+        int monitor_width = GetMonitorWidth(monitor);
+        int monitor_height = GetMonitorHeight(monitor);
+        Vector2 monitor_position = GetMonitorPosition(monitor);
+
+        DesktopApp_resolve_initial_window_size(
+            config->width,
+            config->height,
+            monitor_width,
+            monitor_height,
+            &window_width,
+            &window_height
+        );
+        DesktopApp_resolve_initial_window_size(
+            DesktopApp_min_width(),
+            DesktopApp_min_height(),
+            monitor_width,
+            monitor_height,
+            &min_window_width,
+            &min_window_height
+        );
+
+        SetWindowMinSize(min_window_width, min_window_height);
+        if (GetScreenWidth() != window_width || GetScreenHeight() != window_height) {
+            SetWindowSize(window_width, window_height);
+        }
+        SetWindowPosition(
+            (int)monitor_position.x + (monitor_width - window_width) / 2,
+            (int)monitor_position.y + (monitor_height - window_height) / 2
+        );
+    }
     SetTargetFPS(60);
     DesktopTheme_apply_raygui_style(&app.theme);
     if (DesktopTheme_enable_cjk_font(40, loaded_font_path, sizeof(loaded_font_path)) == 0) {

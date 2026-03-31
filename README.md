@@ -16,15 +16,15 @@
 
 ## 如何开始
 
-建议直接使用 GitHub Release 中的预编译版本。当前推荐使用 `v2.0.5` 及以上版本：
+建议直接使用 GitHub Release 中的预编译版本。当前推荐使用 `v2.0.6` 及以上版本：
 
 - 最新版本：<https://github.com/ymylive/his/releases/latest>
-- 当前稳定版本：<https://github.com/ymylive/his/releases/tag/v2.0.5>
+- 当前稳定版本：<https://github.com/ymylive/his/releases/tag/v2.0.6>
 
 ### Windows
 
 1. 打开最新 Release。
-2. 下载 `lightweight-his-portable-v*-win64.zip`。
+2. 下载 `lightweight-his-portable-v*-win*.zip`。
 3. 解压到任意目录。
 4. 双击 `run_desktop.bat` 启动桌面版。
 
