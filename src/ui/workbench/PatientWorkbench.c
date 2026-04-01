@@ -1,49 +1,101 @@
 #include "ui/Workbench.h"
 
+#include <ctype.h>
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
+#include "repository/DepartmentRepository.h"
+#include "repository/DoctorRepository.h"
 #include "raygui.h"
 #include "ui/DesktopAdapters.h"
 #include "ui/DesktopApp.h"
 
 typedef struct PatientRegistrationViewState {
-    char departments[WORKBENCH_OUTPUT_CAPACITY];
-    char doctors[WORKBENCH_OUTPUT_CAPACITY];
     char registrations[WORKBENCH_OUTPUT_CAPACITY];
 } PatientRegistrationViewState;
 
 static PatientRegistrationViewState g_patient_registration_view;
+static WorkbenchSearchSelectState g_patient_department_select;
+static WorkbenchSearchSelectState g_patient_doctor_select;
 
-static void draw_text_input(
-    Rectangle bounds,
-    char *text,
-    int text_size,
-    int editable,
-    int *active_field,
-    int field_id
-) {
-    bool edit_mode = false;
+static void patient_refresh_department_select(DesktopApp *app, DesktopRegistrationPageState *state) {
+    LinkedList departments;
+    const LinkedListNode *current = 0;
+    int selected_index = -1;
 
-    if (editable == 0 || active_field == 0) {
-        GuiTextBox(bounds, text, text_size, false);
+    if (app == 0 || state == 0) {
+        return;
+    }
+    if (!WorkbenchSearchSelectState_needs_refresh(&g_patient_department_select)) return;
+
+    WorkbenchSearchSelectState_reset(&g_patient_department_select);
+    LinkedList_init(&departments);
+    if (DepartmentRepository_load_all(&app->application.doctor_service.department_repository, &departments).success != 1) {
         return;
     }
 
-    edit_mode = (*active_field == field_id);
-    if (GuiTextBox(bounds, text, text_size, edit_mode)) {
-        *active_field = edit_mode ? 0 : field_id;
+    current = departments.head;
+    while (current != 0) {
+        const Department *department = (const Department *)current->data;
+        char label[WORKBENCH_SELECT_LABEL_CAPACITY];
+
+        snprintf(label, sizeof(label), "%s | %s | %s", department->department_id, department->name, department->location);
+        if (Workbench_text_contains_ignore_case(label, g_patient_department_select.query)) {
+            if (strcmp(state->department_id, department->department_id) == 0) {
+                selected_index = g_patient_department_select.option_count;
+            }
+            WorkbenchSearchSelectState_add_option(&g_patient_department_select, label);
+        }
+        current = current->next;
     }
+
+    WorkbenchSearchSelectState_finalize(&g_patient_department_select);
+    g_patient_department_select.active_index = selected_index;
+    DepartmentRepository_clear_list(&departments);
 }
 
-static void show_result(DesktopApp *app, Result result) {
-    DesktopAppState_show_message(
-        &app->state,
-        result.success ? DESKTOP_MESSAGE_SUCCESS : DESKTOP_MESSAGE_ERROR,
-        result.message
-    );
+static void patient_refresh_doctor_select(DesktopApp *app, DesktopRegistrationPageState *state) {
+    LinkedList doctors;
+    const LinkedListNode *current = 0;
+    int selected_index = -1;
+    Result result;
+
+    if (app == 0 || state == 0) {
+        return;
+    }
+    if (!WorkbenchSearchSelectState_needs_refresh(&g_patient_doctor_select)) return;
+
+    WorkbenchSearchSelectState_reset(&g_patient_doctor_select);
+    LinkedList_init(&doctors);
+    if (state->department_id[0] != '\0') {
+        result = DoctorService_list_by_department(&app->application.doctor_service, state->department_id, &doctors);
+    } else {
+        result = DoctorRepository_load_all(&app->application.doctor_service.doctor_repository, &doctors);
+    }
+    if (result.success != 1) {
+        return;
+    }
+
+    current = doctors.head;
+    while (current != 0) {
+        const Doctor *doctor = (const Doctor *)current->data;
+        char label[WORKBENCH_SELECT_LABEL_CAPACITY];
+
+        snprintf(label, sizeof(label), "%s | %s | %s | %s", doctor->doctor_id, doctor->name, doctor->title, doctor->schedule);
+        if (Workbench_text_contains_ignore_case(label, g_patient_doctor_select.query)) {
+            if (strcmp(state->doctor_id, doctor->doctor_id) == 0) {
+                selected_index = g_patient_doctor_select.option_count;
+            }
+            WorkbenchSearchSelectState_add_option(&g_patient_doctor_select, label);
+        }
+        current = current->next;
+    }
+
+    WorkbenchSearchSelectState_finalize(&g_patient_doctor_select);
+    g_patient_doctor_select.active_index = selected_index;
+    DoctorService_clear_list(&doctors);
 }
 
 static void auto_bind_patient_id(DesktopApp *app) {
@@ -79,27 +131,6 @@ static void auto_bind_patient_id(DesktopApp *app) {
             sizeof(app->state.inpatient_page.query_patient_id) - 1
         );
     }
-}
-
-static void draw_output_panel(
-    const DesktopApp *app,
-    Rectangle rect,
-    const char *title,
-    const char *content,
-    const char *empty_text
-) {
-    WorkbenchTextPanelLayout layout = Workbench_compute_text_panel_layout(rect, 14.0f, 22.0f, 14.0f);
-
-    DrawRectangleRounded(rect, 0.12f, 8, app->theme.panel);
-    DrawRectangleRoundedLinesEx(rect, 0.12f, 8, 1.0f, Fade(app->theme.border, 0.85f));
-    DrawText(title, (int)layout.title_bounds.x, (int)layout.title_bounds.y, 20, app->theme.text_primary);
-    DrawText(
-        (content != 0 && content[0] != '\0') ? content : empty_text,
-        (int)layout.content_bounds.x,
-        (int)layout.content_bounds.y,
-        17,
-        app->theme.text_secondary
-    );
 }
 
 static void patient_draw_home(DesktopApp *app, Rectangle panel) {
@@ -160,7 +191,7 @@ static void patient_draw_home(DesktopApp *app, Rectangle panel) {
         }
     }
 
-    draw_output_panel(
+    Workbench_draw_output_panel(
         app,
         (Rectangle){ panel.x, panel.y + 214.0f, panel.width, panel.height - 214.0f },
         "服务说明",
@@ -172,14 +203,18 @@ static void patient_draw_home(DesktopApp *app, Rectangle panel) {
 static void patient_draw_registration(DesktopApp *app, Rectangle panel) {
     DesktopRegistrationPageState *state = &app->state.registration_page;
     WorkbenchListDetailLayout split = Workbench_compute_list_detail_layout(panel, 0.46f, 18.0f, 280.0f);
-    WorkbenchButtonGroupLayout actions;
     const WorkbenchDef *wb = Workbench_get(USER_ROLE_PATIENT);
     Result result;
-    int index = 0;
     float ly = split.list_bounds.y;
     float lx = split.list_bounds.x;
+    Rectangle department_search = { split.detail_bounds.x + 16, split.detail_bounds.y + 50, split.detail_bounds.width - 32, 34 };
+    Rectangle department_list = { split.detail_bounds.x + 16, split.detail_bounds.y + 92, split.detail_bounds.width - 32, split.detail_bounds.height * 0.36f };
+    Rectangle doctor_search = { split.detail_bounds.x + 16, split.detail_bounds.y + split.detail_bounds.height * 0.48f, split.detail_bounds.width - 32, 34 };
+    Rectangle doctor_list = { split.detail_bounds.x + 16, split.detail_bounds.y + split.detail_bounds.height * 0.48f + 42, split.detail_bounds.width - 32, split.detail_bounds.height * 0.30f };
 
     auto_bind_patient_id(app);
+    patient_refresh_department_select(app, state);
+    patient_refresh_doctor_select(app, state);
 
     DrawRectangleRounded(split.list_bounds, 0.12f, 8, app->theme.panel);
     DrawRectangleRoundedLinesEx(split.list_bounds, 0.12f, 8, 1.0f, Fade(app->theme.border, 0.85f));
@@ -194,30 +229,26 @@ static void patient_draw_registration(DesktopApp *app, Rectangle panel) {
     Workbench_draw_section_header(app, (int)lx + 16, (int)ly + 92, "挂号流程");
 
     DrawText("步骤 1: 选择科室", (int)lx + 16, (int)ly + 126, 17, app->theme.text_primary);
-    Workbench_draw_form_label(app, (int)lx + 16, (int)ly + 150, "科室编号", 1);
-    draw_text_input(
-        (Rectangle){ lx + 16, ly + 172, split.list_bounds.width - 32, 34 },
-        state->department_id,
-        sizeof(state->department_id),
-        1,
-        &state->active_field,
-        1
+    Workbench_draw_form_label(app, (int)lx + 16, (int)ly + 150, "已选科室", 1);
+    Workbench_draw_status_badge(
+        app,
+        (Rectangle){ lx + 120, ly + 146, split.list_bounds.width - 136, 28 },
+        state->department_id[0] != '\0' ? state->department_id : "请在右侧搜索并选择科室",
+        wb->accent
     );
 
     DrawText("步骤 2: 选择医生", (int)lx + 16, (int)ly + 220, 17, app->theme.text_primary);
-    Workbench_draw_form_label(app, (int)lx + 16, (int)ly + 244, "医生编号", 1);
-    draw_text_input(
-        (Rectangle){ lx + 16, ly + 266, split.list_bounds.width - 32, 34 },
-        state->doctor_id,
-        sizeof(state->doctor_id),
-        1,
-        &state->active_field,
-        2
+    Workbench_draw_form_label(app, (int)lx + 16, (int)ly + 244, "已选医生", 1);
+    Workbench_draw_status_badge(
+        app,
+        (Rectangle){ lx + 120, ly + 240, split.list_bounds.width - 136, 28 },
+        state->doctor_id[0] != '\0' ? state->doctor_id : "请在右侧搜索并选择医生",
+        wb->accent
     );
 
     DrawText("步骤 3: 选择时间", (int)lx + 16, (int)ly + 314, 17, app->theme.text_primary);
     Workbench_draw_form_label(app, (int)lx + 16, (int)ly + 338, "挂号时间", 1);
-    draw_text_input(
+    Workbench_draw_text_input(
         (Rectangle){ lx + 16, ly + 360, split.list_bounds.width - 32, 34 },
         state->registered_at,
         sizeof(state->registered_at),
@@ -226,61 +257,32 @@ static void patient_draw_registration(DesktopApp *app, Rectangle panel) {
         3
     );
 
-    actions = Workbench_compute_button_group_layout(
-        (Rectangle){ lx + 16, ly + 416.0f, split.list_bounds.width - 32, 36.0f },
-        3,
-        110.0f,
-        36.0f,
-        12.0f
-    );
-    for (index = 0; index < actions.count; index++) {
-        int clicked = 0;
-        const char *label = index == 0 ? "科室列表" : index == 1 ? "医生列表" : "提交挂号";
-        Color btn_color = index == 2 ? (Color){ 34, 197, 94, 255 } : wb->accent;
-        Workbench_draw_quick_action_btn(app, actions.buttons[index], label, btn_color, &clicked);
-        if (!clicked) {
-            continue;
-        }
-        if (index == 0) {
-            result = DesktopAdapters_list_departments(
-                &app->application,
-                g_patient_registration_view.departments,
-                sizeof(g_patient_registration_view.departments)
+    if (GuiButton((Rectangle){ lx + 16, ly + 416, split.list_bounds.width - 32, 40 }, "提交挂号")) {
+        Registration registration;
+        memset(&registration, 0, sizeof(registration));
+        result = DesktopAdapters_submit_self_registration(
+            &app->application,
+            state->doctor_id,
+            state->department_id,
+            state->registered_at,
+            &registration
+        );
+        Workbench_show_result(app, result);
+        if (result.success) {
+            strncpy(
+                state->last_registration_id,
+                registration.registration_id,
+                sizeof(state->last_registration_id) - 1
             );
-            show_result(app, result);
-        } else if (index == 1) {
-            result = DesktopAdapters_list_doctors_by_department(
+            DesktopAdapters_query_registrations_by_patient(
                 &app->application,
-                state->department_id,
-                g_patient_registration_view.doctors,
-                sizeof(g_patient_registration_view.doctors)
+                state->patient_id,
+                g_patient_registration_view.registrations,
+                sizeof(g_patient_registration_view.registrations)
             );
-            show_result(app, result);
-        } else {
-            Registration registration;
-            memset(&registration, 0, sizeof(registration));
-            result = DesktopAdapters_submit_self_registration(
-                &app->application,
-                state->doctor_id,
-                state->department_id,
-                state->registered_at,
-                &registration
-            );
-            show_result(app, result);
-            if (result.success) {
-                strncpy(
-                    state->last_registration_id,
-                    registration.registration_id,
-                    sizeof(state->last_registration_id) - 1
-                );
-                DesktopAdapters_query_registrations_by_patient(
-                    &app->application,
-                    state->patient_id,
-                    g_patient_registration_view.registrations,
-                    sizeof(g_patient_registration_view.registrations)
-                );
-                DesktopApp_mark_dirty(&app->state, DESKTOP_PAGE_DASHBOARD);
-            }
+            DesktopApp_mark_dirty(&app->state, DESKTOP_PAGE_DASHBOARD);
+            WorkbenchSearchSelectState_mark_dirty(&g_patient_department_select);
+            WorkbenchSearchSelectState_mark_dirty(&g_patient_doctor_select);
         }
     }
 
@@ -294,37 +296,27 @@ static void patient_draw_registration(DesktopApp *app, Rectangle panel) {
 
     DrawRectangleRounded(split.detail_bounds, 0.12f, 8, app->theme.panel);
     DrawRectangleRoundedLinesEx(split.detail_bounds, 0.12f, 8, 1.0f, Fade(app->theme.border, 0.85f));
-    draw_output_panel(
+    DrawText("科室搜索与选择", (int)split.detail_bounds.x + 16, (int)split.detail_bounds.y + 16, 20, app->theme.text_primary);
+    Workbench_draw_search_select(app, department_search, department_list, &g_patient_department_select, &state->active_field, 21);
+    if (g_patient_department_select.active_index >= 0 &&
+        g_patient_department_select.active_index < g_patient_department_select.option_count) {
+        sscanf(g_patient_department_select.labels[g_patient_department_select.active_index], "%15s", state->department_id);
+        state->doctor_id[0] = '\0';
+    }
+
+    DrawText("医生搜索与选择", (int)split.detail_bounds.x + 16, (int)(split.detail_bounds.y + split.detail_bounds.height * 0.48f - 28), 20, app->theme.text_primary);
+    Workbench_draw_search_select(app, doctor_search, doctor_list, &g_patient_doctor_select, &state->active_field, 22);
+    if (g_patient_doctor_select.active_index >= 0 &&
+        g_patient_doctor_select.active_index < g_patient_doctor_select.option_count) {
+        sscanf(g_patient_doctor_select.labels[g_patient_doctor_select.active_index], "%15s", state->doctor_id);
+    }
+    Workbench_draw_output_panel(
         app,
         (Rectangle){
             split.detail_bounds.x + 12,
-            split.detail_bounds.y + 12,
+            split.detail_bounds.y + split.detail_bounds.height * 0.82f,
             split.detail_bounds.width - 24,
-            (split.detail_bounds.height - 42) / 3.0f
-        },
-        "科室列表",
-        g_patient_registration_view.departments,
-        "点击【科室列表】查看所有可选科室及其编号。"
-    );
-    draw_output_panel(
-        app,
-        (Rectangle){
-            split.detail_bounds.x + 12,
-            split.detail_bounds.y + 18 + (split.detail_bounds.height - 42) / 3.0f,
-            split.detail_bounds.width - 24,
-            (split.detail_bounds.height - 42) / 3.0f
-        },
-        "医生列表",
-        g_patient_registration_view.doctors,
-        "输入科室编号后点击【医生列表】查看该科室的医生信息。"
-    );
-    draw_output_panel(
-        app,
-        (Rectangle){
-            split.detail_bounds.x + 12,
-            split.detail_bounds.y + 24 + (split.detail_bounds.height - 42) / 3.0f * 2.0f,
-            split.detail_bounds.width - 24,
-            (split.detail_bounds.height - 42) / 3.0f
+            split.detail_bounds.height * 0.16f - 12
         },
         "我的挂号记录",
         g_patient_registration_view.registrations,
@@ -354,7 +346,7 @@ static void patient_draw_visits(DesktopApp *app, Rectangle panel) {
             state->output,
             sizeof(state->output)
         );
-        show_result(app, result);
+        Workbench_show_result(app, result);
     }
 
     /* Card-style layout for medical records */
@@ -427,7 +419,7 @@ static void patient_draw_admission(DesktopApp *app, Rectangle panel) {
             state->output,
             sizeof(state->output)
         );
-        show_result(app, result);
+        Workbench_show_result(app, result);
     }
 
     /* Admission information card */
@@ -523,7 +515,7 @@ static void patient_draw_dispense(DesktopApp *app, Rectangle panel) {
             &history_state->results
         );
         history_state->loaded = result.success ? 1 : -1;
-        show_result(app, result);
+        Workbench_show_result(app, result);
     }
 
     /* Timeline-style display */
@@ -581,7 +573,7 @@ static void patient_draw_dispense(DesktopApp *app, Rectangle panel) {
     DrawText("药品说明查询", (int)split.detail_bounds.x + 16, (int)split.detail_bounds.y + 14, 24, app->theme.text_primary);
 
     Workbench_draw_form_label(app, (int)split.detail_bounds.x + 16, (int)split.detail_bounds.y + 56, "药品编号", 0);
-    draw_text_input(
+    Workbench_draw_text_input(
         (Rectangle){ split.detail_bounds.x + 16, split.detail_bounds.y + 78, split.detail_bounds.width - 152, 34 },
         medicine_state->stock_query_medicine_id,
         sizeof(medicine_state->stock_query_medicine_id),
@@ -597,7 +589,7 @@ static void patient_draw_dispense(DesktopApp *app, Rectangle panel) {
             medicine_state->output,
             sizeof(medicine_state->output)
         );
-        show_result(app, result);
+        Workbench_show_result(app, result);
     }
 
     /* Medicine information display */
@@ -626,6 +618,12 @@ static void patient_draw_dispense(DesktopApp *app, Rectangle panel) {
 }
 
 void PatientWorkbench_draw(DesktopApp *app, Rectangle panel, int page) {
+    static int initialized = 0;
+    if (!initialized) {
+        WorkbenchSearchSelectState_mark_dirty(&g_patient_department_select);
+        WorkbenchSearchSelectState_mark_dirty(&g_patient_doctor_select);
+        initialized = 1;
+    }
     switch (page) {
         case 0:
             patient_draw_home(app, panel);
