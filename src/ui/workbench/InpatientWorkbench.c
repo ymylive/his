@@ -2,49 +2,170 @@
 #include "ui/DesktopApp.h"
 #include "ui/DesktopAdapters.h"
 #include "raygui.h"
+#include <ctype.h>
 #include <string.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdbool.h>
 
+#include "repository/AdmissionRepository.h"
+#include "repository/BedRepository.h"
+#include "repository/WardRepository.h"
+
 /* ── Local helpers ── */
 
-static void show_result(DesktopApp *app, Result result) {
-    DesktopAppState_show_message(
-        &app->state,
-        result.success ? DESKTOP_MESSAGE_SUCCESS : DESKTOP_MESSAGE_ERROR,
-        result.message
-    );
-}
+static WorkbenchSearchSelectState g_inpatient_patient_select;
+static WorkbenchSearchSelectState g_inpatient_ward_select;
+static WorkbenchSearchSelectState g_inpatient_bed_select;
+static WorkbenchSearchSelectState g_inpatient_admission_select;
 
-static void draw_text_input(Rectangle bounds, char *text, int text_size,
-                            int editable, int *active_field, int field_id) {
-    bool edit_mode = false;
-    if (editable == 0 || active_field == 0) {
-        GuiTextBox(bounds, text, text_size, false);
+static void inpatient_refresh_patient_select(DesktopApp *app, DesktopInpatientPageState *st) {
+    LinkedList patients;
+    const LinkedListNode *current = 0;
+    int selected_index = -1;
+    Result result;
+
+    if (!WorkbenchSearchSelectState_needs_refresh(&g_inpatient_patient_select)) return;
+
+    WorkbenchSearchSelectState_reset(&g_inpatient_patient_select);
+    LinkedList_init(&patients);
+    result = DesktopAdapters_search_patients(&app->application, DESKTOP_PATIENT_SEARCH_BY_NAME, "", &patients);
+    if (result.success != 1) {
         return;
     }
-    edit_mode = (*active_field == field_id);
-    if (GuiTextBox(bounds, text, text_size, edit_mode)) {
-        *active_field = edit_mode ? 0 : field_id;
+
+    current = patients.head;
+    while (current != 0) {
+        const Patient *patient = (const Patient *)current->data;
+        char label[WORKBENCH_SELECT_LABEL_CAPACITY];
+
+        snprintf(label, sizeof(label), "%s | %s | %d岁 | %s", patient->patient_id, patient->name, patient->age, patient->contact);
+        if (Workbench_text_contains_ignore_case(label, g_inpatient_patient_select.query)) {
+            if (strcmp(st->patient_id, patient->patient_id) == 0 || strcmp(st->query_patient_id, patient->patient_id) == 0) {
+                selected_index = g_inpatient_patient_select.option_count;
+            }
+            WorkbenchSearchSelectState_add_option(&g_inpatient_patient_select, label);
+        }
+        current = current->next;
     }
+
+    WorkbenchSearchSelectState_finalize(&g_inpatient_patient_select);
+    g_inpatient_patient_select.active_index = selected_index;
+    LinkedList_clear(&patients, free);
 }
 
-static void draw_output_panel(const DesktopApp *app, Rectangle rect,
-                              const char *title, const char *content,
-                              const char *empty_text) {
-    WorkbenchTextPanelLayout layout = Workbench_compute_text_panel_layout(rect, 14.0f, 22.0f, 14.0f);
+static void inpatient_refresh_ward_select(DesktopApp *app, DesktopInpatientPageState *st) {
+    LinkedList wards;
+    const LinkedListNode *current = 0;
+    int selected_index = -1;
 
-    DrawRectangleRounded(rect, 0.12f, 8, app->theme.panel);
-    DrawRectangleRoundedLinesEx(rect, 0.12f, 8, 1.0f, Fade(app->theme.border, 0.85f));
-    DrawText(title, (int)layout.title_bounds.x, (int)layout.title_bounds.y, 20, app->theme.text_primary);
-    DrawText(
-        (content != 0 && content[0] != '\0') ? content : empty_text,
-        (int)layout.content_bounds.x,
-        (int)layout.content_bounds.y,
-        17,
-        app->theme.text_secondary
-    );
+    if (!WorkbenchSearchSelectState_needs_refresh(&g_inpatient_ward_select)) return;
+
+    WorkbenchSearchSelectState_reset(&g_inpatient_ward_select);
+    LinkedList_init(&wards);
+    if (WardRepository_load_all(&app->application.inpatient_service.ward_repository, &wards).success != 1) {
+        return;
+    }
+
+    current = wards.head;
+    while (current != 0) {
+        const Ward *ward = (const Ward *)current->data;
+        char label[WORKBENCH_SELECT_LABEL_CAPACITY];
+
+        snprintf(label, sizeof(label), "%s | %s | %s | %d/%d", ward->ward_id, ward->name, ward->location, ward->occupied_beds, ward->capacity);
+        if (Workbench_text_contains_ignore_case(label, g_inpatient_ward_select.query)) {
+            if (strcmp(st->ward_id, ward->ward_id) == 0) {
+                selected_index = g_inpatient_ward_select.option_count;
+            }
+            WorkbenchSearchSelectState_add_option(&g_inpatient_ward_select, label);
+        }
+        current = current->next;
+    }
+
+    WorkbenchSearchSelectState_finalize(&g_inpatient_ward_select);
+    g_inpatient_ward_select.active_index = selected_index;
+    WardRepository_clear_loaded_list(&wards);
+}
+
+static void inpatient_refresh_bed_select(DesktopApp *app, DesktopInpatientPageState *st, int available_only) {
+    LinkedList beds;
+    const LinkedListNode *current = 0;
+    int selected_index = -1;
+    WorkbenchSearchSelectState *picker = &g_inpatient_bed_select;
+
+    if (!WorkbenchSearchSelectState_needs_refresh(picker)) return;
+
+    WorkbenchSearchSelectState_reset(picker);
+    LinkedList_init(&beds);
+    if (BedRepository_load_all(&app->application.inpatient_service.bed_repository, &beds).success != 1) {
+        return;
+    }
+
+    current = beds.head;
+    while (current != 0) {
+        const Bed *bed = (const Bed *)current->data;
+        char label[WORKBENCH_SELECT_LABEL_CAPACITY];
+
+        if (st->ward_id[0] != '\0' && strcmp(st->ward_id, bed->ward_id) != 0) {
+            current = current->next;
+            continue;
+        }
+        if (available_only != 0 && bed->status != BED_STATUS_AVAILABLE) {
+            current = current->next;
+            continue;
+        }
+
+        snprintf(label, sizeof(label), "%s | 病区=%s | 房间=%s | 床位=%s", bed->bed_id, bed->ward_id, bed->room_no, bed->bed_no);
+        if (Workbench_text_contains_ignore_case(label, picker->query)) {
+            if (strcmp(st->bed_id, bed->bed_id) == 0 || strcmp(st->query_bed_id, bed->bed_id) == 0) {
+                selected_index = picker->option_count;
+            }
+            WorkbenchSearchSelectState_add_option(picker, label);
+        }
+        current = current->next;
+    }
+
+    WorkbenchSearchSelectState_finalize(picker);
+    picker->active_index = selected_index;
+    BedRepository_clear_loaded_list(&beds);
+}
+
+static void inpatient_refresh_admission_select(DesktopApp *app, DesktopInpatientPageState *st, int active_only) {
+    LinkedList admissions;
+    const LinkedListNode *current = 0;
+    int selected_index = -1;
+
+    if (!WorkbenchSearchSelectState_needs_refresh(&g_inpatient_admission_select)) return;
+
+    WorkbenchSearchSelectState_reset(&g_inpatient_admission_select);
+    LinkedList_init(&admissions);
+    if (AdmissionRepository_load_all(&app->application.inpatient_service.admission_repository, &admissions).success != 1) {
+        return;
+    }
+
+    current = admissions.head;
+    while (current != 0) {
+        const Admission *admission = (const Admission *)current->data;
+        char label[WORKBENCH_SELECT_LABEL_CAPACITY];
+
+        if (active_only != 0 && admission->status != ADMISSION_STATUS_ACTIVE) {
+            current = current->next;
+            continue;
+        }
+
+        snprintf(label, sizeof(label), "%s | 患者=%s | 病区=%s | 床位=%s", admission->admission_id, admission->patient_id, admission->ward_id, admission->bed_id);
+        if (Workbench_text_contains_ignore_case(label, g_inpatient_admission_select.query)) {
+            if (strcmp(st->admission_id, admission->admission_id) == 0) {
+                selected_index = g_inpatient_admission_select.option_count;
+            }
+            WorkbenchSearchSelectState_add_option(&g_inpatient_admission_select, label);
+        }
+        current = current->next;
+    }
+
+    WorkbenchSearchSelectState_finalize(&g_inpatient_admission_select);
+    g_inpatient_admission_select.active_index = selected_index;
+    AdmissionRepository_clear_loaded_list(&admissions);
 }
 
 /* ── Page 0: Home ── */
@@ -84,6 +205,16 @@ static void draw_admit(DesktopApp *app, Rectangle panel) {
     float lx = split.list_bounds.x;
     float ly = split.list_bounds.y;
     Result result;
+    Rectangle patient_search = { split.detail_bounds.x + 16, split.detail_bounds.y + 50, split.detail_bounds.width - 32, 34 };
+    Rectangle patient_list = { split.detail_bounds.x + 16, split.detail_bounds.y + 92, split.detail_bounds.width - 32, split.detail_bounds.height * 0.22f };
+    Rectangle ward_search = { split.detail_bounds.x + 16, split.detail_bounds.y + split.detail_bounds.height * 0.34f, split.detail_bounds.width - 32, 34 };
+    Rectangle ward_list = { split.detail_bounds.x + 16, split.detail_bounds.y + split.detail_bounds.height * 0.34f + 42, split.detail_bounds.width - 32, split.detail_bounds.height * 0.18f };
+    Rectangle bed_search = { split.detail_bounds.x + 16, split.detail_bounds.y + split.detail_bounds.height * 0.58f, split.detail_bounds.width - 32, 34 };
+    Rectangle bed_list = { split.detail_bounds.x + 16, split.detail_bounds.y + split.detail_bounds.height * 0.58f + 42, split.detail_bounds.width - 32, split.detail_bounds.height * 0.18f };
+
+    inpatient_refresh_patient_select(app, st);
+    inpatient_refresh_ward_select(app, st);
+    inpatient_refresh_bed_select(app, st, 1);
 
     DrawRectangleRounded(split.list_bounds, 0.12f, 8, app->theme.panel);
     DrawRectangleRoundedLinesEx(split.list_bounds, 0.12f, 8, 1.0f, Fade(app->theme.border, 0.85f));
@@ -91,24 +222,24 @@ static void draw_admit(DesktopApp *app, Rectangle panel) {
 
     Workbench_draw_section_header(app, (int)lx + 16, (int)ly + 52, "患者信息");
 
-    Workbench_draw_form_label(app, (int)lx + 16, (int)ly + 86, "患者编号", 1);
-    draw_text_input((Rectangle){ lx + 16, ly + 108, 200, 34 }, st->patient_id, sizeof(st->patient_id), 1, &st->active_field, 1);
+    Workbench_draw_form_label(app, (int)lx + 16, (int)ly + 86, "已选患者", 1);
+    Workbench_draw_status_badge(app, (Rectangle){ lx + 120, ly + 82, split.list_bounds.width - 136, 28 }, st->patient_id[0] != '\0' ? st->patient_id : "请在右侧搜索并选择患者", Workbench_get(USER_ROLE_INPATIENT_REGISTRAR)->accent);
 
     Workbench_draw_section_header(app, (int)lx + 16, (int)ly + 158, "床位分配");
 
-    Workbench_draw_form_label(app, (int)lx + 16, (int)ly + 192, "病区编号", 1);
-    draw_text_input((Rectangle){ lx + 16, ly + 214, 200, 34 }, st->ward_id, sizeof(st->ward_id), 1, &st->active_field, 2);
+    Workbench_draw_form_label(app, (int)lx + 16, (int)ly + 192, "已选病区", 1);
+    Workbench_draw_status_badge(app, (Rectangle){ lx + 120, ly + 188, split.list_bounds.width - 136, 28 }, st->ward_id[0] != '\0' ? st->ward_id : "请在右侧搜索并选择病区", Workbench_get(USER_ROLE_INPATIENT_REGISTRAR)->accent);
 
-    Workbench_draw_form_label(app, (int)lx + 232, (int)ly + 192, "床位编号", 1);
-    draw_text_input((Rectangle){ lx + 232, ly + 214, 200, 34 }, st->bed_id, sizeof(st->bed_id), 1, &st->active_field, 3);
+    Workbench_draw_form_label(app, (int)lx + 16, (int)ly + 228, "已选床位", 1);
+    Workbench_draw_status_badge(app, (Rectangle){ lx + 120, ly + 224, split.list_bounds.width - 136, 28 }, st->bed_id[0] != '\0' ? st->bed_id : "请在右侧搜索并选择床位", Workbench_get(USER_ROLE_INPATIENT_REGISTRAR)->accent);
 
     Workbench_draw_section_header(app, (int)lx + 16, (int)ly + 264, "入院详情");
 
     Workbench_draw_form_label(app, (int)lx + 16, (int)ly + 298, "入院时间", 1);
-    draw_text_input((Rectangle){ lx + 16, ly + 320, 200, 34 }, st->admitted_at, sizeof(st->admitted_at), 1, &st->active_field, 4);
+    Workbench_draw_text_input((Rectangle){ lx + 16, ly + 320, 200, 34 }, st->admitted_at, sizeof(st->admitted_at), 1, &st->active_field, 4);
 
     Workbench_draw_form_label(app, (int)lx + 16, (int)ly + 364, "入院摘要", 0);
-    draw_text_input((Rectangle){ lx + 16, ly + 386, split.list_bounds.width - 32, 34 }, st->summary, sizeof(st->summary), 1, &st->active_field, 5);
+    Workbench_draw_text_input((Rectangle){ lx + 16, ly + 386, split.list_bounds.width - 32, 34 }, st->summary, sizeof(st->summary), 1, &st->active_field, 5);
 
     if (GuiButton((Rectangle){ lx + 16, ly + 440, 160, 36 }, "办理入院")) {
         result = DesktopAdapters_admit_patient(
@@ -117,10 +248,32 @@ static void draw_admit(DesktopApp *app, Rectangle panel) {
             st->admitted_at, st->summary,
             st->output, sizeof(st->output)
         );
-        show_result(app, result);
+        Workbench_show_result(app, result);
+        if (result.success) {
+            WorkbenchSearchSelectState_mark_dirty(&g_inpatient_patient_select);
+            WorkbenchSearchSelectState_mark_dirty(&g_inpatient_ward_select);
+            WorkbenchSearchSelectState_mark_dirty(&g_inpatient_bed_select);
+            WorkbenchSearchSelectState_mark_dirty(&g_inpatient_admission_select);
+        }
     }
 
-    draw_output_panel(app, split.detail_bounds, "入院结果", st->output,
+    DrawText("患者搜索与选择", (int)split.detail_bounds.x + 16, (int)split.detail_bounds.y + 16, 20, app->theme.text_primary);
+    Workbench_draw_search_select(app, patient_search, patient_list, &g_inpatient_patient_select, &st->active_field, 41);
+    if (g_inpatient_patient_select.active_index >= 0 && g_inpatient_patient_select.active_index < g_inpatient_patient_select.option_count) {
+        sscanf(g_inpatient_patient_select.labels[g_inpatient_patient_select.active_index], "%15s", st->patient_id);
+    }
+    DrawText("病区搜索与选择", (int)split.detail_bounds.x + 16, (int)(split.detail_bounds.y + split.detail_bounds.height * 0.34f - 28), 20, app->theme.text_primary);
+    Workbench_draw_search_select(app, ward_search, ward_list, &g_inpatient_ward_select, &st->active_field, 42);
+    if (g_inpatient_ward_select.active_index >= 0 && g_inpatient_ward_select.active_index < g_inpatient_ward_select.option_count) {
+        sscanf(g_inpatient_ward_select.labels[g_inpatient_ward_select.active_index], "%15s", st->ward_id);
+        st->bed_id[0] = '\0';
+    }
+    DrawText("床位搜索与选择", (int)split.detail_bounds.x + 16, (int)(split.detail_bounds.y + split.detail_bounds.height * 0.58f - 28), 20, app->theme.text_primary);
+    Workbench_draw_search_select(app, bed_search, bed_list, &g_inpatient_bed_select, &st->active_field, 43);
+    if (g_inpatient_bed_select.active_index >= 0 && g_inpatient_bed_select.active_index < g_inpatient_bed_select.option_count) {
+        sscanf(g_inpatient_bed_select.labels[g_inpatient_bed_select.active_index], "%15s", st->bed_id);
+    }
+    Workbench_draw_output_panel(app, (Rectangle){ split.detail_bounds.x + 12, split.detail_bounds.y + split.detail_bounds.height * 0.82f, split.detail_bounds.width - 24, split.detail_bounds.height * 0.16f - 12 }, "入院结果", st->output,
                       "填写左侧表单并点击「办理入院」。");
 }
 
@@ -132,6 +285,10 @@ static void draw_discharge(DesktopApp *app, Rectangle panel) {
     float lx = split.list_bounds.x;
     float ly = split.list_bounds.y;
     Result result;
+    Rectangle admission_search = { split.detail_bounds.x + 16, split.detail_bounds.y + 50, split.detail_bounds.width - 32, 34 };
+    Rectangle admission_list = { split.detail_bounds.x + 16, split.detail_bounds.y + 92, split.detail_bounds.width - 32, split.detail_bounds.height - 108 };
+
+    inpatient_refresh_admission_select(app, st, 1);
 
     DrawRectangleRounded(split.list_bounds, 0.12f, 8, app->theme.panel);
     DrawRectangleRoundedLinesEx(split.list_bounds, 0.12f, 8, 1.0f, Fade(app->theme.border, 0.85f));
@@ -139,21 +296,21 @@ static void draw_discharge(DesktopApp *app, Rectangle panel) {
 
     Workbench_draw_section_header(app, (int)lx + 16, (int)ly + 52, "出院流程");
 
-    DrawText("步骤 1: 输入住院编号", (int)lx + 16, (int)ly + 86, 17, app->theme.text_secondary);
+    DrawText("步骤 1: 选择住院记录", (int)lx + 16, (int)ly + 86, 17, app->theme.text_secondary);
     DrawText("步骤 2: 填写出院时间", (int)lx + 16, (int)ly + 106, 17, app->theme.text_secondary);
     DrawText("步骤 3: 填写出院摘要", (int)lx + 16, (int)ly + 126, 17, app->theme.text_secondary);
     DrawText("步骤 4: 确认办理出院", (int)lx + 16, (int)ly + 146, 17, app->theme.text_secondary);
 
     Workbench_draw_section_header(app, (int)lx + 16, (int)ly + 182, "出院信息");
 
-    Workbench_draw_form_label(app, (int)lx + 16, (int)ly + 216, "住院编号", 1);
-    draw_text_input((Rectangle){ lx + 16, ly + 238, 200, 34 }, st->admission_id, sizeof(st->admission_id), 1, &st->active_field, 1);
+    Workbench_draw_form_label(app, (int)lx + 16, (int)ly + 216, "已选住院记录", 1);
+    Workbench_draw_status_badge(app, (Rectangle){ lx + 120, ly + 212, split.list_bounds.width - 136, 28 }, st->admission_id[0] != '\0' ? st->admission_id : "请在右侧搜索并选择住院记录", Workbench_get(USER_ROLE_INPATIENT_REGISTRAR)->accent);
 
     Workbench_draw_form_label(app, (int)lx + 16, (int)ly + 282, "出院时间", 1);
-    draw_text_input((Rectangle){ lx + 16, ly + 304, 200, 34 }, st->discharged_at, sizeof(st->discharged_at), 1, &st->active_field, 2);
+    Workbench_draw_text_input((Rectangle){ lx + 16, ly + 304, 200, 34 }, st->discharged_at, sizeof(st->discharged_at), 1, &st->active_field, 2);
 
     Workbench_draw_form_label(app, (int)lx + 16, (int)ly + 348, "出院摘要", 0);
-    draw_text_input((Rectangle){ lx + 16, ly + 370, split.list_bounds.width - 32, 34 }, st->summary, sizeof(st->summary), 1, &st->active_field, 3);
+    Workbench_draw_text_input((Rectangle){ lx + 16, ly + 370, split.list_bounds.width - 32, 34 }, st->summary, sizeof(st->summary), 1, &st->active_field, 3);
 
     if (GuiButton((Rectangle){ lx + 16, ly + 424, 160, 36 }, "办理出院")) {
         result = DesktopAdapters_discharge_patient(
@@ -161,11 +318,19 @@ static void draw_discharge(DesktopApp *app, Rectangle panel) {
             st->admission_id, st->discharged_at, st->summary,
             st->output, sizeof(st->output)
         );
-        show_result(app, result);
+        Workbench_show_result(app, result);
+        if (result.success) {
+            WorkbenchSearchSelectState_mark_dirty(&g_inpatient_admission_select);
+            WorkbenchSearchSelectState_mark_dirty(&g_inpatient_bed_select);
+            WorkbenchSearchSelectState_mark_dirty(&g_inpatient_ward_select);
+        }
     }
 
-    draw_output_panel(app, split.detail_bounds, "出院结果", st->output,
-                      "填写左侧表单并点击「办理出院」。");
+    DrawText("住院记录搜索与选择", (int)split.detail_bounds.x + 16, (int)split.detail_bounds.y + 16, 20, app->theme.text_primary);
+    Workbench_draw_search_select(app, admission_search, admission_list, &g_inpatient_admission_select, &st->active_field, 44);
+    if (g_inpatient_admission_select.active_index >= 0 && g_inpatient_admission_select.active_index < g_inpatient_admission_select.option_count) {
+        sscanf(g_inpatient_admission_select.labels[g_inpatient_admission_select.active_index], "%15s", st->admission_id);
+    }
 }
 
 /* ── Page 3: Query ── */
@@ -176,8 +341,13 @@ static void draw_query(DesktopApp *app, Rectangle panel) {
     float lx = split.list_bounds.x;
     float ly = split.list_bounds.y;
     Result result;
-    int search_clicked_patient = 0;
-    int search_clicked_bed = 0;
+    Rectangle patient_search = { lx + 16, ly + 108, split.list_bounds.width - 32, 34 };
+    Rectangle patient_list = { lx + 16, ly + 150, split.list_bounds.width - 32, 96 };
+    Rectangle bed_search = { lx + 16, ly + 224, split.list_bounds.width - 32, 34 };
+    Rectangle bed_list = { lx + 16, ly + 266, split.list_bounds.width - 32, 96 };
+
+    inpatient_refresh_patient_select(app, st);
+    inpatient_refresh_bed_select(app, st, 0);
 
     DrawRectangleRounded(split.list_bounds, 0.12f, 8, app->theme.panel);
     DrawRectangleRoundedLinesEx(split.list_bounds, 0.12f, 8, 1.0f, Fade(app->theme.border, 0.85f));
@@ -185,40 +355,28 @@ static void draw_query(DesktopApp *app, Rectangle panel) {
 
     Workbench_draw_section_header(app, (int)lx + 16, (int)ly + 52, "按患者查询");
 
-    Workbench_draw_form_label(app, (int)lx + 16, (int)ly + 86, "患者编号", 1);
-    Workbench_draw_search_box(
-        app,
-        (Rectangle){ lx + 16, ly + 108, split.list_bounds.width - 32, 34 },
-        st->query_patient_id, sizeof(st->query_patient_id),
-        &st->active_field, 1,
-        &search_clicked_patient
-    );
-
-    if (search_clicked_patient) {
+    Workbench_draw_form_label(app, (int)lx + 16, (int)ly + 86, "患者搜索与选择", 1);
+    Workbench_draw_search_select(app, patient_search, patient_list, &g_inpatient_patient_select, &st->active_field, 45);
+    if (g_inpatient_patient_select.active_index >= 0 && g_inpatient_patient_select.active_index < g_inpatient_patient_select.option_count) {
+        sscanf(g_inpatient_patient_select.labels[g_inpatient_patient_select.active_index], "%15s", st->query_patient_id);
         result = DesktopAdapters_query_active_admission_by_patient(
             &app->application, st->query_patient_id,
             st->output, sizeof(st->output)
         );
-        show_result(app, result);
+        Workbench_show_result(app, result);
     }
 
     Workbench_draw_section_header(app, (int)lx + 16, (int)ly + 168, "按床位查询");
 
-    Workbench_draw_form_label(app, (int)lx + 16, (int)ly + 202, "床位编号", 1);
-    Workbench_draw_search_box(
-        app,
-        (Rectangle){ lx + 16, ly + 224, split.list_bounds.width - 32, 34 },
-        st->query_bed_id, sizeof(st->query_bed_id),
-        &st->active_field, 2,
-        &search_clicked_bed
-    );
-
-    if (search_clicked_bed) {
+    Workbench_draw_form_label(app, (int)lx + 16, (int)ly + 202, "床位搜索与选择", 1);
+    Workbench_draw_search_select(app, bed_search, bed_list, &g_inpatient_bed_select, &st->active_field, 46);
+    if (g_inpatient_bed_select.active_index >= 0 && g_inpatient_bed_select.active_index < g_inpatient_bed_select.option_count) {
+        sscanf(g_inpatient_bed_select.labels[g_inpatient_bed_select.active_index], "%15s", st->query_bed_id);
         result = DesktopAdapters_query_current_patient_by_bed(
             &app->application, st->query_bed_id,
             st->output, sizeof(st->output)
         );
-        show_result(app, result);
+        Workbench_show_result(app, result);
     }
 
     Workbench_draw_section_header(app, (int)lx + 16, (int)ly + 284, "筛选选项");
@@ -234,13 +392,22 @@ static void draw_query(DesktopApp *app, Rectangle panel) {
     DrawText("• 床位占用情况", (int)lx + 16, (int)ly + 398, 16, app->theme.text_secondary);
     DrawText("• 病区分布统计", (int)lx + 16, (int)ly + 418, 16, app->theme.text_secondary);
 
-    draw_output_panel(app, split.detail_bounds, "查询结果", st->output,
+    Workbench_draw_output_panel(app, split.detail_bounds, "查询结果", st->output,
                       "在左侧输入患者编号或床位编号进行查询。");
 }
 
 /* ── Entry point ── */
 
+static int g_inpatient_initialized = 0;
+
 void InpatientWorkbench_draw(DesktopApp *app, Rectangle panel, int page) {
+    if (!g_inpatient_initialized) {
+        WorkbenchSearchSelectState_mark_dirty(&g_inpatient_patient_select);
+        WorkbenchSearchSelectState_mark_dirty(&g_inpatient_ward_select);
+        WorkbenchSearchSelectState_mark_dirty(&g_inpatient_bed_select);
+        WorkbenchSearchSelectState_mark_dirty(&g_inpatient_admission_select);
+        g_inpatient_initialized = 1;
+    }
     switch (page) {
         case 0: draw_home(app, panel); break;
         case 1: draw_admit(app, panel); break;

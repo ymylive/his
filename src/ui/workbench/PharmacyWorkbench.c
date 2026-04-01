@@ -2,48 +2,21 @@
 #include "ui/DesktopApp.h"
 #include "ui/DesktopAdapters.h"
 #include "raygui.h"
+#include <ctype.h>
 #include <string.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdbool.h>
 
 #include "domain/Medicine.h"
+#include "repository/DepartmentRepository.h"
+#include "repository/MedicineRepository.h"
 
 /* ── Local helpers ── */
 
-static void show_result(DesktopApp *app, Result result) {
-    DesktopAppState_show_message(
-        &app->state,
-        result.success ? DESKTOP_MESSAGE_SUCCESS : DESKTOP_MESSAGE_ERROR,
-        result.message
-    );
-}
-
-static void draw_text_input(Rectangle bounds, char *text, int text_size,
-                            int editable, int *active_field, int field_id) {
-    bool edit_mode = false;
-    if (editable == 0 || active_field == 0) {
-        GuiTextBox(bounds, text, text_size, false);
-        return;
-    }
-    edit_mode = (*active_field == field_id);
-    if (GuiTextBox(bounds, text, text_size, edit_mode)) {
-        *active_field = edit_mode ? 0 : field_id;
-    }
-}
-
-static void draw_output_panel(const DesktopApp *app, Rectangle rect,
-                              const char *title, const char *content,
-                              const char *empty_text) {
-    DrawRectangleRounded(rect, 0.12f, 8, app->theme.panel);
-    DrawRectangleRoundedLinesEx(rect, 0.12f, 8, 1.0f, Fade(app->theme.border, 0.85f));
-    DrawText(title, (int)rect.x + 14, (int)rect.y + 12, 20, app->theme.text_primary);
-    if (content == 0 || content[0] == '\0') {
-        DrawText(empty_text, (int)rect.x + 14, (int)rect.y + 48, 17, app->theme.text_secondary);
-        return;
-    }
-    DrawText(content, (int)rect.x + 14, (int)rect.y + 48, 17, app->theme.text_secondary);
-}
+static WorkbenchSearchSelectState g_pharmacy_department_select;
+static WorkbenchSearchSelectState g_pharmacy_medicine_select;
+static WorkbenchSearchSelectState g_pharmacy_patient_select;
 
 static int parse_int_text(const char *text, int *out_value) {
     char *end = 0;
@@ -61,6 +34,104 @@ static void auto_bind_pharmacist(DesktopApp *app) {
         strncpy(st->pharmacist_id, app->state.current_user.user_id, sizeof(st->pharmacist_id) - 1);
         st->pharmacist_id[sizeof(st->pharmacist_id) - 1] = '\0';
     }
+}
+
+static void pharmacy_refresh_department_select(DesktopApp *app, DesktopPharmacyPageState *st) {
+    LinkedList departments;
+    const LinkedListNode *current = 0;
+    int selected_index = -1;
+
+    if (!WorkbenchSearchSelectState_needs_refresh(&g_pharmacy_department_select)) return;
+
+    WorkbenchSearchSelectState_reset(&g_pharmacy_department_select);
+    LinkedList_init(&departments);
+    if (DepartmentRepository_load_all(&app->application.doctor_service.department_repository, &departments).success != 1) {
+        return;
+    }
+
+    current = departments.head;
+    while (current != 0) {
+        const Department *department = (const Department *)current->data;
+        char label[WORKBENCH_SELECT_LABEL_CAPACITY];
+        snprintf(label, sizeof(label), "%s | %s | %s", department->department_id, department->name, department->location);
+        if (Workbench_text_contains_ignore_case(label, g_pharmacy_department_select.query)) {
+            if (strcmp(st->department_id, department->department_id) == 0) {
+                selected_index = g_pharmacy_department_select.option_count;
+            }
+            WorkbenchSearchSelectState_add_option(&g_pharmacy_department_select, label);
+        }
+        current = current->next;
+    }
+
+    WorkbenchSearchSelectState_finalize(&g_pharmacy_department_select);
+    g_pharmacy_department_select.active_index = selected_index;
+    DepartmentRepository_clear_list(&departments);
+}
+
+static void pharmacy_refresh_medicine_select(DesktopApp *app, DesktopPharmacyPageState *st, const char *selected_id) {
+    LinkedList medicines;
+    const LinkedListNode *current = 0;
+    int selected_index = -1;
+
+    if (!WorkbenchSearchSelectState_needs_refresh(&g_pharmacy_medicine_select)) return;
+
+    WorkbenchSearchSelectState_reset(&g_pharmacy_medicine_select);
+    LinkedList_init(&medicines);
+    if (MedicineRepository_load_all(&app->application.pharmacy_service.medicine_repository, &medicines).success != 1) {
+        return;
+    }
+
+    current = medicines.head;
+    while (current != 0) {
+        const Medicine *medicine = (const Medicine *)current->data;
+        char label[WORKBENCH_SELECT_LABEL_CAPACITY];
+        snprintf(label, sizeof(label), "%s | %s | 库存=%d", medicine->medicine_id, medicine->name, medicine->stock);
+        if (Workbench_text_contains_ignore_case(label, g_pharmacy_medicine_select.query)) {
+            if (selected_id != 0 && strcmp(selected_id, medicine->medicine_id) == 0) {
+                selected_index = g_pharmacy_medicine_select.option_count;
+            }
+            WorkbenchSearchSelectState_add_option(&g_pharmacy_medicine_select, label);
+        }
+        current = current->next;
+    }
+
+    WorkbenchSearchSelectState_finalize(&g_pharmacy_medicine_select);
+    g_pharmacy_medicine_select.active_index = selected_index;
+    MedicineRepository_clear_list(&medicines);
+}
+
+static void pharmacy_refresh_patient_select(DesktopApp *app, DesktopPharmacyPageState *st) {
+    LinkedList patients;
+    const LinkedListNode *current = 0;
+    int selected_index = -1;
+    Result result;
+
+    if (!WorkbenchSearchSelectState_needs_refresh(&g_pharmacy_patient_select)) return;
+
+    WorkbenchSearchSelectState_reset(&g_pharmacy_patient_select);
+    LinkedList_init(&patients);
+    result = DesktopAdapters_search_patients(&app->application, DESKTOP_PATIENT_SEARCH_BY_NAME, "", &patients);
+    if (result.success != 1) {
+        return;
+    }
+
+    current = patients.head;
+    while (current != 0) {
+        const Patient *patient = (const Patient *)current->data;
+        char label[WORKBENCH_SELECT_LABEL_CAPACITY];
+        snprintf(label, sizeof(label), "%s | %s | %d岁", patient->patient_id, patient->name, patient->age);
+        if (Workbench_text_contains_ignore_case(label, g_pharmacy_patient_select.query)) {
+            if (strcmp(st->patient_id, patient->patient_id) == 0) {
+                selected_index = g_pharmacy_patient_select.option_count;
+            }
+            WorkbenchSearchSelectState_add_option(&g_pharmacy_patient_select, label);
+        }
+        current = current->next;
+    }
+
+    WorkbenchSearchSelectState_finalize(&g_pharmacy_patient_select);
+    g_pharmacy_patient_select.active_index = selected_index;
+    LinkedList_clear(&patients, free);
 }
 
 /* ── Page 0: Home ── */
@@ -124,28 +195,32 @@ static void draw_add_medicine(DesktopApp *app, Rectangle panel) {
     int stock = 0;
     int threshold = 0;
     Result result;
+    Rectangle department_search = { right.x + 14, right.y + 56, right.width - 28, 34 };
+    Rectangle department_list = { right.x + 14, right.y + 98, right.width - 28, right.height - 114 };
+
+    pharmacy_refresh_department_select(app, st);
 
     DrawRectangleRounded(left, 0.12f, 8, app->theme.panel);
     DrawRectangleRoundedLinesEx(left, 0.12f, 8, 1.0f, Fade(app->theme.border, 0.85f));
     DrawText("药品建档", (int)lx, (int)ly + 14, 24, app->theme.text_primary);
 
-    Workbench_draw_form_label(app, (int)lx, (int)ly + 52, "药品编号", 1);
-    draw_text_input((Rectangle){ lx, ly + 74, 200, 34 }, st->medicine_id, sizeof(st->medicine_id), 1, &st->active_field, 1);
+    Workbench_draw_form_label(app, (int)lx, (int)ly + 52, "药品编号", 0);
+    DrawText("新增时自动生成", (int)lx, (int)ly + 78, 16, app->theme.text_secondary);
 
     Workbench_draw_form_label(app, (int)lx + 220, (int)ly + 52, "药品名称", 1);
-    draw_text_input((Rectangle){ lx + 220, ly + 74, 200, 34 }, st->medicine_name, sizeof(st->medicine_name), 1, &st->active_field, 2);
+    Workbench_draw_text_input((Rectangle){ lx + 220, ly + 74, 200, 34 }, st->medicine_name, sizeof(st->medicine_name), 1, &st->active_field, 1);
 
     Workbench_draw_form_label(app, (int)lx, (int)ly + 118, "单价", 1);
-    draw_text_input((Rectangle){ lx, ly + 140, 120, 34 }, st->price_text, sizeof(st->price_text), 1, &st->active_field, 3);
+    Workbench_draw_text_input((Rectangle){ lx, ly + 140, 120, 34 }, st->price_text, sizeof(st->price_text), 1, &st->active_field, 2);
 
     Workbench_draw_form_label(app, (int)lx + 140, (int)ly + 118, "库存", 1);
-    draw_text_input((Rectangle){ lx + 140, ly + 140, 100, 34 }, st->stock_text, sizeof(st->stock_text), 1, &st->active_field, 4);
+    Workbench_draw_text_input((Rectangle){ lx + 140, ly + 140, 100, 34 }, st->stock_text, sizeof(st->stock_text), 1, &st->active_field, 3);
 
     Workbench_draw_form_label(app, (int)lx + 260, (int)ly + 118, "低库存阈值", 1);
-    draw_text_input((Rectangle){ lx + 260, ly + 140, 100, 34 }, st->low_stock_text, sizeof(st->low_stock_text), 1, &st->active_field, 5);
+    Workbench_draw_text_input((Rectangle){ lx + 260, ly + 140, 100, 34 }, st->low_stock_text, sizeof(st->low_stock_text), 1, &st->active_field, 4);
 
-    Workbench_draw_form_label(app, (int)lx, (int)ly + 184, "科室编号", 1);
-    draw_text_input((Rectangle){ lx, ly + 206, 200, 34 }, st->department_id, sizeof(st->department_id), 1, &st->active_field, 6);
+    Workbench_draw_form_label(app, (int)lx, (int)ly + 184, "已选科室", 1);
+    Workbench_draw_status_badge(app, (Rectangle){ lx + 120, ly + 180, left.width - 152, 28 }, st->department_id[0] != '\0' ? st->department_id : "请在右侧搜索并选择科室", Workbench_get(USER_ROLE_PHARMACY)->accent);
 
     if (GuiButton((Rectangle){ lx, ly + 256, 160, 36 }, "添加药品")) {
         if (parse_int_text(st->stock_text, &stock) == 0 ||
@@ -153,19 +228,24 @@ static void draw_add_medicine(DesktopApp *app, Rectangle panel) {
             DesktopAppState_show_message(&app->state, DESKTOP_MESSAGE_ERROR, "库存或阈值格式无效");
         } else {
             memset(&medicine, 0, sizeof(medicine));
-            strncpy(medicine.medicine_id, st->medicine_id, sizeof(medicine.medicine_id) - 1);
             strncpy(medicine.name, st->medicine_name, sizeof(medicine.name) - 1);
             strncpy(medicine.department_id, st->department_id, sizeof(medicine.department_id) - 1);
             medicine.price = atof(st->price_text);
             medicine.stock = stock;
             medicine.low_stock_threshold = threshold;
             result = DesktopAdapters_add_medicine(&app->application, &medicine, st->output, sizeof(st->output));
-            show_result(app, result);
+            Workbench_show_result(app, result);
+            if (result.success) {
+                WorkbenchSearchSelectState_mark_dirty(&g_pharmacy_medicine_select);
+            }
         }
     }
 
-    draw_output_panel(app, right, "建档结果", st->output,
-                      "填写左侧表单并点击「添加药品」。");
+    DrawText("科室搜索与选择", (int)right.x + 14, (int)right.y + 16, 20, app->theme.text_primary);
+    Workbench_draw_search_select(app, department_search, department_list, &g_pharmacy_department_select, &st->active_field, 61);
+    if (g_pharmacy_department_select.active_index >= 0 && g_pharmacy_department_select.active_index < g_pharmacy_department_select.option_count) {
+        sscanf(g_pharmacy_department_select.labels[g_pharmacy_department_select.active_index], "%15s", st->department_id);
+    }
 }
 
 /* ── Page 2: Restock ── */
@@ -178,16 +258,20 @@ static void draw_restock(DesktopApp *app, Rectangle panel) {
     float ly = left.y;
     int restock_qty = 0;
     Result result;
+    Rectangle medicine_search = { right.x + 14, right.y + 56, right.width - 28, 34 };
+    Rectangle medicine_list = { right.x + 14, right.y + 98, right.width - 28, right.height - 114 };
+
+    pharmacy_refresh_medicine_select(app, st, st->medicine_id);
 
     DrawRectangleRounded(left, 0.12f, 8, app->theme.panel);
     DrawRectangleRoundedLinesEx(left, 0.12f, 8, 1.0f, Fade(app->theme.border, 0.85f));
     DrawText("入库补货", (int)lx, (int)ly + 14, 24, app->theme.text_primary);
 
-    Workbench_draw_form_label(app, (int)lx, (int)ly + 52, "药品编号", 1);
-    draw_text_input((Rectangle){ lx, ly + 74, 200, 34 }, st->medicine_id, sizeof(st->medicine_id), 1, &st->active_field, 1);
+    Workbench_draw_form_label(app, (int)lx, (int)ly + 52, "已选药品", 1);
+    Workbench_draw_status_badge(app, (Rectangle){ lx + 120, ly + 48, left.width - 152, 28 }, st->medicine_id[0] != '\0' ? st->medicine_id : "请在右侧搜索并选择药品", Workbench_get(USER_ROLE_PHARMACY)->accent);
 
     Workbench_draw_form_label(app, (int)lx, (int)ly + 118, "入库数量", 1);
-    draw_text_input((Rectangle){ lx, ly + 140, 140, 34 }, st->restock_quantity_text, sizeof(st->restock_quantity_text), 1, &st->active_field, 2);
+    Workbench_draw_text_input((Rectangle){ lx, ly + 140, 140, 34 }, st->restock_quantity_text, sizeof(st->restock_quantity_text), 1, &st->active_field, 1);
 
     if (GuiButton((Rectangle){ lx, ly + 190, 160, 36 }, "执行入库")) {
         if (parse_int_text(st->restock_quantity_text, &restock_qty) == 0) {
@@ -197,12 +281,19 @@ static void draw_restock(DesktopApp *app, Rectangle panel) {
                 &app->application, st->medicine_id, restock_qty,
                 st->output, sizeof(st->output)
             );
-            show_result(app, result);
+            Workbench_show_result(app, result);
+            if (result.success) {
+                WorkbenchSearchSelectState_mark_dirty(&g_pharmacy_medicine_select);
+            }
         }
     }
 
-    draw_output_panel(app, right, "入库结果", st->output,
-                      "输入药品编号和数量，点击「执行入库」。");
+    DrawText("药品搜索与选择", (int)right.x + 14, (int)right.y + 16, 20, app->theme.text_primary);
+    Workbench_draw_search_select(app, medicine_search, medicine_list, &g_pharmacy_medicine_select, &st->active_field, 62);
+    if (g_pharmacy_medicine_select.active_index >= 0 && g_pharmacy_medicine_select.active_index < g_pharmacy_medicine_select.option_count) {
+        sscanf(g_pharmacy_medicine_select.labels[g_pharmacy_medicine_select.active_index], "%15s", st->medicine_id);
+        sscanf(g_pharmacy_medicine_select.labels[g_pharmacy_medicine_select.active_index], "%15s", st->stock_query_medicine_id);
+    }
 }
 
 /* ── Page 3: Dispense ── */
@@ -216,30 +307,36 @@ static void draw_dispense(DesktopApp *app, Rectangle panel) {
     int is_pharmacy = (app->state.current_user.role == USER_ROLE_PHARMACY);
     int quantity = 0;
     Result result;
+    Rectangle patient_search = { right.x + 14, right.y + 56, right.width - 28, 34 };
+    Rectangle patient_list = { right.x + 14, right.y + 98, right.width - 28, right.height * 0.30f };
+    Rectangle medicine_search = { right.x + 14, right.y + right.height * 0.42f, right.width - 28, 34 };
+    Rectangle medicine_list = { right.x + 14, right.y + right.height * 0.42f + 42, right.width - 28, right.height * 0.30f };
 
     auto_bind_pharmacist(app);
+    pharmacy_refresh_patient_select(app, st);
+    pharmacy_refresh_medicine_select(app, st, st->medicine_id);
 
     DrawRectangleRounded(left, 0.12f, 8, app->theme.panel);
     DrawRectangleRoundedLinesEx(left, 0.12f, 8, 1.0f, Fade(app->theme.border, 0.85f));
     DrawText("发药处理", (int)lx, (int)ly + 14, 24, app->theme.text_primary);
 
-    Workbench_draw_form_label(app, (int)lx, (int)ly + 52, "患者编号", 1);
-    draw_text_input((Rectangle){ lx, ly + 74, 200, 34 }, st->patient_id, sizeof(st->patient_id), 1, &st->active_field, 1);
+    Workbench_draw_form_label(app, (int)lx, (int)ly + 52, "已选患者", 1);
+    Workbench_draw_status_badge(app, (Rectangle){ lx + 120, ly + 48, left.width - 152, 28 }, st->patient_id[0] != '\0' ? st->patient_id : "请在右侧搜索并选择患者", Workbench_get(USER_ROLE_PHARMACY)->accent);
 
     Workbench_draw_form_label(app, (int)lx + 220, (int)ly + 52, "处方编号", 1);
-    draw_text_input((Rectangle){ lx + 220, ly + 74, 200, 34 }, st->prescription_id, sizeof(st->prescription_id), 1, &st->active_field, 2);
+    Workbench_draw_text_input((Rectangle){ lx + 220, ly + 74, 200, 34 }, st->prescription_id, sizeof(st->prescription_id), 1, &st->active_field, 2);
 
-    Workbench_draw_form_label(app, (int)lx, (int)ly + 118, "药品编号", 1);
-    draw_text_input((Rectangle){ lx, ly + 140, 200, 34 }, st->medicine_id, sizeof(st->medicine_id), 1, &st->active_field, 3);
+    Workbench_draw_form_label(app, (int)lx, (int)ly + 118, "已选药品", 1);
+    Workbench_draw_status_badge(app, (Rectangle){ lx + 120, ly + 114, left.width - 152, 28 }, st->medicine_id[0] != '\0' ? st->medicine_id : "请在右侧搜索并选择药品", Workbench_get(USER_ROLE_PHARMACY)->accent);
 
     Workbench_draw_form_label(app, (int)lx + 220, (int)ly + 118, "发药数量", 1);
-    draw_text_input((Rectangle){ lx + 220, ly + 140, 100, 34 }, st->dispense_quantity_text, sizeof(st->dispense_quantity_text), 1, &st->active_field, 4);
+    Workbench_draw_text_input((Rectangle){ lx + 220, ly + 140, 100, 34 }, st->dispense_quantity_text, sizeof(st->dispense_quantity_text), 1, &st->active_field, 1);
 
     Workbench_draw_form_label(app, (int)lx, (int)ly + 184, "药剂师编号", 1);
-    draw_text_input((Rectangle){ lx, ly + 206, 200, 34 }, st->pharmacist_id, sizeof(st->pharmacist_id), is_pharmacy ? 0 : 1, &st->active_field, 5);
+    Workbench_draw_text_input((Rectangle){ lx, ly + 206, 200, 34 }, st->pharmacist_id, sizeof(st->pharmacist_id), is_pharmacy ? 0 : 1, &st->active_field, 2);
 
     Workbench_draw_form_label(app, (int)lx + 220, (int)ly + 184, "发药时间", 0);
-    draw_text_input((Rectangle){ lx + 220, ly + 206, 200, 34 }, st->dispensed_at, sizeof(st->dispensed_at), 1, &st->active_field, 6);
+    Workbench_draw_text_input((Rectangle){ lx + 220, ly + 206, 200, 34 }, st->dispensed_at, sizeof(st->dispensed_at), 1, &st->active_field, 3);
 
     if (GuiButton((Rectangle){ lx, ly + 256, 160, 36 }, "执行发药")) {
         if (parse_int_text(st->dispense_quantity_text, &quantity) == 0) {
@@ -251,15 +348,25 @@ static void draw_dispense(DesktopApp *app, Rectangle panel) {
                 quantity, st->pharmacist_id, st->dispensed_at,
                 st->output, sizeof(st->output)
             );
-            show_result(app, result);
+            Workbench_show_result(app, result);
             if (result.success) {
                 app->state.dashboard.loaded = 0;
+                WorkbenchSearchSelectState_mark_dirty(&g_pharmacy_patient_select);
+                WorkbenchSearchSelectState_mark_dirty(&g_pharmacy_medicine_select);
             }
         }
     }
 
-    draw_output_panel(app, right, "发药结果", st->output,
-                      "填写左侧表单并点击「执行发药」。");
+    DrawText("患者搜索与选择", (int)right.x + 14, (int)right.y + 16, 20, app->theme.text_primary);
+    Workbench_draw_search_select(app, patient_search, patient_list, &g_pharmacy_patient_select, &st->active_field, 63);
+    if (g_pharmacy_patient_select.active_index >= 0 && g_pharmacy_patient_select.active_index < g_pharmacy_patient_select.option_count) {
+        sscanf(g_pharmacy_patient_select.labels[g_pharmacy_patient_select.active_index], "%15s", st->patient_id);
+    }
+    DrawText("药品搜索与选择", (int)right.x + 14, (int)(right.y + right.height * 0.42f - 28), 20, app->theme.text_primary);
+    Workbench_draw_search_select(app, medicine_search, medicine_list, &g_pharmacy_medicine_select, &st->active_field, 64);
+    if (g_pharmacy_medicine_select.active_index >= 0 && g_pharmacy_medicine_select.active_index < g_pharmacy_medicine_select.option_count) {
+        sscanf(g_pharmacy_medicine_select.labels[g_pharmacy_medicine_select.active_index], "%15s", st->medicine_id);
+    }
 }
 
 /* ── Page 4: Stock Query ── */
@@ -270,28 +377,25 @@ static void draw_stock_query(DesktopApp *app, Rectangle panel) {
     Rectangle right = { panel.x + panel.width * 0.56f, panel.y, panel.width * 0.44f, panel.height };
     float lx = left.x + 16;
     float ly = left.y;
-    int search_clicked = 0;
     Result result;
+    Rectangle search_rect = { lx, ly + 74, left.width - 32, 34 };
+    Rectangle list_rect = { lx, ly + 118, left.width - 32, left.height - 134 };
+
+    pharmacy_refresh_medicine_select(app, st, st->stock_query_medicine_id);
 
     DrawRectangleRounded(left, 0.12f, 8, app->theme.panel);
     DrawRectangleRoundedLinesEx(left, 0.12f, 8, 1.0f, Fade(app->theme.border, 0.85f));
     DrawText("库存查询", (int)lx, (int)ly + 14, 24, app->theme.text_primary);
 
-    Workbench_draw_form_label(app, (int)lx, (int)ly + 52, "药品编号", 1);
-    Workbench_draw_search_box(
-        app,
-        (Rectangle){ lx, ly + 74, left.width - 32, 34 },
-        st->stock_query_medicine_id, sizeof(st->stock_query_medicine_id),
-        &st->active_field, 1,
-        &search_clicked
-    );
-
-    if (search_clicked) {
+    Workbench_draw_form_label(app, (int)lx, (int)ly + 52, "药品搜索与选择", 1);
+    Workbench_draw_search_select(app, search_rect, list_rect, &g_pharmacy_medicine_select, &st->active_field, 65);
+    if (g_pharmacy_medicine_select.active_index >= 0 && g_pharmacy_medicine_select.active_index < g_pharmacy_medicine_select.option_count) {
+        sscanf(g_pharmacy_medicine_select.labels[g_pharmacy_medicine_select.active_index], "%15s", st->stock_query_medicine_id);
         result = DesktopAdapters_query_medicine_stock(
             &app->application, st->stock_query_medicine_id,
             st->output, sizeof(st->output)
         );
-        show_result(app, result);
+        Workbench_show_result(app, result);
     }
 
     DrawRectangleRounded(right, 0.12f, 8, app->theme.panel);
@@ -375,7 +479,7 @@ static void draw_low_stock(DesktopApp *app, Rectangle panel) {
         result = DesktopAdapters_find_low_stock_medicines(
             &app->application, st->output, sizeof(st->output)
         );
-        show_result(app, result);
+        Workbench_show_result(app, result);
     }
 
     y_offset += 56;
@@ -471,6 +575,13 @@ static void draw_low_stock(DesktopApp *app, Rectangle panel) {
 /* ── Entry point ── */
 
 void PharmacyWorkbench_draw(DesktopApp *app, Rectangle panel, int page) {
+    static int initialized = 0;
+    if (!initialized) {
+        WorkbenchSearchSelectState_mark_dirty(&g_pharmacy_department_select);
+        WorkbenchSearchSelectState_mark_dirty(&g_pharmacy_medicine_select);
+        WorkbenchSearchSelectState_mark_dirty(&g_pharmacy_patient_select);
+        initialized = 1;
+    }
     switch (page) {
         case 0: draw_home(app, panel); break;
         case 1: draw_add_medicine(app, panel); break;
