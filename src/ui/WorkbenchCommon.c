@@ -1,9 +1,82 @@
 #include "ui/Workbench.h"
 
+#include <ctype.h>
+#include <stdbool.h>
 #include <string.h>
 
 #include "raygui.h"
 #include "ui/DesktopApp.h"
+
+/* ── Common utility functions ── */
+
+int Workbench_text_contains_ignore_case(const char *text, const char *query) {
+    size_t text_index = 0;
+    size_t query_length = 0;
+    size_t query_index = 0;
+
+    if (query == 0 || query[0] == '\0') {
+        return 1;
+    }
+    if (text == 0) {
+        return 0;
+    }
+
+    query_length = strlen(query);
+    while (text[text_index] != '\0') {
+        for (query_index = 0; query_index < query_length; query_index++) {
+            if (text[text_index + query_index] == '\0') {
+                return 0;
+            }
+            if (tolower((unsigned char)text[text_index + query_index]) !=
+                tolower((unsigned char)query[query_index])) {
+                break;
+            }
+        }
+        if (query_index == query_length) {
+            return 1;
+        }
+        text_index++;
+    }
+
+    return 0;
+}
+
+void Workbench_show_result(DesktopApp *app, Result result) {
+    DesktopAppState_show_message(
+        &app->state,
+        result.success ? DESKTOP_MESSAGE_SUCCESS : DESKTOP_MESSAGE_ERROR,
+        result.message
+    );
+}
+
+void Workbench_draw_text_input(
+    Rectangle bounds, char *text, int text_size,
+    int editable, int *active_field, int field_id
+) {
+    bool edit_mode = false;
+    if (editable == 0 || active_field == 0) {
+        GuiTextBox(bounds, text, text_size, false);
+        return;
+    }
+    edit_mode = (*active_field == field_id);
+    if (GuiTextBox(bounds, text, text_size, edit_mode)) {
+        *active_field = edit_mode ? 0 : field_id;
+    }
+}
+
+void Workbench_draw_output_panel(
+    const DesktopApp *app, Rectangle rect,
+    const char *title, const char *content, const char *empty_text
+) {
+    DrawRectangleRounded(rect, 0.12f, 8, app->theme.panel);
+    DrawRectangleRoundedLinesEx(rect, 0.12f, 8, 1.0f, Fade(app->theme.border, 0.85f));
+    DrawText(title, (int)rect.x + 14, (int)rect.y + 12, 20, app->theme.text_primary);
+    if (content == 0 || content[0] == '\0') {
+        DrawText(empty_text, (int)rect.x + 14, (int)rect.y + 48, 17, app->theme.text_secondary);
+        return;
+    }
+    DrawText(content, (int)rect.x + 14, (int)rect.y + 48, 17, app->theme.text_secondary);
+}
 
 /* ── Accent colors per role ── */
 static const Color ACCENT_ADMIN     = { 30,  58, 138, 255 };  /* deep navy */
@@ -602,3 +675,121 @@ void Workbench_draw_search_box(
     *search_clicked = GuiButton(button_rect, "搜索");
 }
 
+void WorkbenchSearchSelectState_reset(WorkbenchSearchSelectState *state) {
+    if (state == 0) {
+        return;
+    }
+
+    memset(state->labels, 0, sizeof(state->labels));
+    memset(state->items, 0, sizeof(state->items));
+    state->option_count = 0;
+    state->active_index = -1;
+    state->focus_index = -1;
+    state->scroll_index = 0;
+    state->dirty = 0;
+    memset(state->prev_query, 0, sizeof(state->prev_query));
+}
+
+void WorkbenchSearchSelectState_mark_dirty(WorkbenchSearchSelectState *state) {
+    if (state == 0) {
+        return;
+    }
+    state->dirty = 1;
+}
+
+int WorkbenchSearchSelectState_needs_refresh(WorkbenchSearchSelectState *state) {
+    if (state == 0) {
+        return 0;
+    }
+    if (state->dirty) {
+        return 1;
+    }
+    if (strcmp(state->query, state->prev_query) != 0) {
+        return 1;
+    }
+    return 0;
+}
+
+int WorkbenchSearchSelectState_add_option(WorkbenchSearchSelectState *state, const char *label) {
+    if (state == 0 || label == 0 || state->option_count >= WORKBENCH_SELECT_OPTION_MAX) {
+        return 0;
+    }
+
+    strncpy(
+        state->labels[state->option_count],
+        label,
+        WORKBENCH_SELECT_LABEL_CAPACITY - 1
+    );
+    state->labels[state->option_count][WORKBENCH_SELECT_LABEL_CAPACITY - 1] = '\0';
+    state->option_count++;
+    return 1;
+}
+
+void WorkbenchSearchSelectState_finalize(WorkbenchSearchSelectState *state) {
+    int index = 0;
+
+    if (state == 0) {
+        return;
+    }
+
+    for (index = 0; index < state->option_count; index++) {
+        state->items[index] = state->labels[index];
+    }
+
+    if (state->option_count <= 0) {
+        state->active_index = -1;
+        state->focus_index = -1;
+        state->scroll_index = 0;
+        return;
+    }
+
+    if (state->active_index >= state->option_count) {
+        state->active_index = -1;
+    }
+    if (state->focus_index >= state->option_count) {
+        state->focus_index = -1;
+    }
+    if (state->scroll_index < 0) {
+        state->scroll_index = 0;
+    }
+    state->dirty = 0;
+    strncpy(state->prev_query, state->query, sizeof(state->prev_query) - 1);
+    state->prev_query[sizeof(state->prev_query) - 1] = '\0';
+}
+
+void Workbench_draw_search_select(
+    DesktopApp *app,
+    Rectangle search_rect,
+    Rectangle list_rect,
+    WorkbenchSearchSelectState *state,
+    int *active_field,
+    int field_id
+) {
+    int search_clicked = 0;
+
+    if (app == 0 || state == 0 || active_field == 0) {
+        return;
+    }
+
+    Workbench_draw_search_box(
+        app,
+        search_rect,
+        state->query,
+        sizeof(state->query),
+        active_field,
+        field_id,
+        &search_clicked
+    );
+    (void)search_clicked;
+
+    DrawRectangleRounded(list_rect, 0.12f, 8, Fade(app->theme.panel_alt, 0.65f));
+    DrawRectangleRoundedLinesEx(list_rect, 0.12f, 8, 1.0f, Fade(app->theme.border, 0.75f));
+    GuiListViewEx(
+        (Rectangle){ list_rect.x + 6, list_rect.y + 6, list_rect.width - 12, list_rect.height - 12 },
+        state->items,
+        state->option_count,
+        &state->scroll_index,
+        &state->active_index,
+        &state->focus_index
+    );
+}

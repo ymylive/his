@@ -260,6 +260,27 @@ Result DesktopAdapters_init_application(
     return MenuApplication_init(application, paths);
 }
 
+Result DesktopAdapters_reset_demo_data(
+    MenuApplication *application,
+    const MenuApplicationPaths *paths,
+    char *buffer,
+    size_t capacity
+) {
+    Result result;
+
+    if (application == 0 || paths == 0 || buffer == 0 || capacity == 0) {
+        return Result_make_failure("demo data reset arguments missing");
+    }
+
+    MenuApplication_logout(application);
+    result = DemoData_reset(paths, buffer, capacity);
+    if (result.success == 0) {
+        return result;
+    }
+
+    return Result_make_success("desktop demo data reset complete");
+}
+
 Result DesktopAdapters_login(
     MenuApplication *application,
     const char *user_id,

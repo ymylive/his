@@ -321,6 +321,7 @@ void DesktopAppState_show_message(
 
     state->message.kind = kind;
     state->message.visible = (text != 0 && text[0] != '\0') ? 1 : 0;
+    state->message.show_time = GetTime();
     if (text == 0) {
         state->message.text[0] = '\0';
         return;
@@ -506,12 +507,10 @@ int DesktopApp_run(const DesktopAppConfig *config) {
         );
     }
     SetTargetFPS(60);
-    DesktopTheme_apply_raygui_style(&app.theme);
     if (DesktopTheme_enable_cjk_font(40, loaded_font_path, sizeof(loaded_font_path)) == 0) {
         fprintf(stderr, "未找到可用 CJK 字体，回退到默认字体\n");
     }
     DesktopTheme_apply_raygui_style(&app.theme);
-
     if (config->smoke_mode != 0) {
         BeginDrawing();
         ClearBackground(app.theme.background);

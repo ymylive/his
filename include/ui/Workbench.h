@@ -1,11 +1,15 @@
 #ifndef HIS_UI_WORKBENCH_H
 #define HIS_UI_WORKBENCH_H
 
+#include "common/Result.h"
 #include "domain/User.h"
 #include "raylib.h"
 
 #define WORKBENCH_NAV_MAX 8
 #define WORKBENCH_OUTPUT_CAPACITY 8192
+#define WORKBENCH_SELECT_OPTION_MAX 128
+#define WORKBENCH_SELECT_QUERY_CAPACITY 64
+#define WORKBENCH_SELECT_LABEL_CAPACITY 160
 
 typedef struct DesktopApp DesktopApp;
 
@@ -60,6 +64,18 @@ typedef struct WorkbenchListDetailLayout {
     float gap;
     int is_stacked;
 } WorkbenchListDetailLayout;
+
+typedef struct WorkbenchSearchSelectState {
+    char query[WORKBENCH_SELECT_QUERY_CAPACITY];
+    char labels[WORKBENCH_SELECT_OPTION_MAX][WORKBENCH_SELECT_LABEL_CAPACITY];
+    char *items[WORKBENCH_SELECT_OPTION_MAX];
+    int option_count;
+    int scroll_index;
+    int active_index;
+    int focus_index;
+    int dirty;
+    char prev_query[WORKBENCH_SELECT_QUERY_CAPACITY];
+} WorkbenchSearchSelectState;
 
 /* Registry */
 const WorkbenchDef *Workbench_get(UserRole role);
@@ -129,6 +145,19 @@ void Workbench_draw_search_box(
     char *text, int text_size, int *active_field, int field_id,
     int *search_clicked
 );
+void WorkbenchSearchSelectState_reset(WorkbenchSearchSelectState *state);
+void WorkbenchSearchSelectState_mark_dirty(WorkbenchSearchSelectState *state);
+int WorkbenchSearchSelectState_needs_refresh(WorkbenchSearchSelectState *state);
+int WorkbenchSearchSelectState_add_option(WorkbenchSearchSelectState *state, const char *label);
+void WorkbenchSearchSelectState_finalize(WorkbenchSearchSelectState *state);
+void Workbench_draw_search_select(
+    DesktopApp *app,
+    Rectangle search_rect,
+    Rectangle list_rect,
+    WorkbenchSearchSelectState *state,
+    int *active_field,
+    int field_id
+);
 
 void Workbench_draw_home_cards(
     const DesktopApp *app, Rectangle panel,
@@ -159,7 +188,17 @@ WorkbenchListDetailLayout Workbench_compute_list_detail_layout(
     float min_column_width
 );
 
-/* PLACEHOLDER_WORKBENCH_DECLS */
+/* Common workbench utility functions */
+int Workbench_text_contains_ignore_case(const char *text, const char *query);
+void Workbench_show_result(DesktopApp *app, Result result);
+void Workbench_draw_text_input(
+    Rectangle bounds, char *text, int text_size,
+    int editable, int *active_field, int field_id
+);
+void Workbench_draw_output_panel(
+    const DesktopApp *app, Rectangle rect,
+    const char *title, const char *content, const char *empty_text
+);
 
 /* Workbench draw entry points */
 void AdminWorkbench_draw(DesktopApp *app, Rectangle panel, int page);

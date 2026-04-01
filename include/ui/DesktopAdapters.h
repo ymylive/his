@@ -9,11 +9,18 @@
 #include "domain/Registration.h"
 #include "domain/User.h"
 #include "ui/DesktopApp.h"
+#include "ui/DemoData.h"
 #include "ui/MenuApplication.h"
 
 Result DesktopAdapters_init_application(
     MenuApplication *application,
     const MenuApplicationPaths *paths
+);
+Result DesktopAdapters_reset_demo_data(
+    MenuApplication *application,
+    const MenuApplicationPaths *paths,
+    char *buffer,
+    size_t capacity
 );
 Result DesktopAdapters_login(
     MenuApplication *application,

@@ -45,6 +45,7 @@ typedef struct DesktopMessage {
     DesktopMessageKind kind;
     char text[RESULT_MESSAGE_CAPACITY];
     int visible;
+    double show_time;
 } DesktopMessage;
 
 typedef struct DesktopLoginForm {
