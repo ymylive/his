@@ -22,6 +22,7 @@ static const char MENU_MAIN_TEXT[] =
     "5. 住院登记员\n"
     "6. 护士站/病区管理员\n"
     "7. 药房人员\n"
+    "8. 重置演示数据\n"
     "0. 退出系统\n";
 
 static const MenuOption MENU_ADMIN_OPTIONS[] = {
@@ -263,6 +264,9 @@ Result MenuController_parse_main_selection(const char *input, MenuRole *out_role
         case 7:
             *out_role = MENU_ROLE_PHARMACY;
             return Result_make_success("pharmacy selected");
+        case 8:
+            *out_role = MENU_ROLE_RESET_DEMO;
+            return Result_make_success("reset demo selected");
         default:
             return Result_make_failure("main menu selection invalid");
     }
@@ -348,6 +352,8 @@ const char *MenuController_role_label(MenuRole role) {
             return "护士站/病区管理员";
         case MENU_ROLE_PHARMACY:
             return "药房人员";
+        case MENU_ROLE_RESET_DEMO:
+            return "重置演示数据";
         case MENU_ROLE_EXIT:
             return "退出系统";
         default:

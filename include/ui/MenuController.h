@@ -14,6 +14,7 @@ typedef enum MenuRole {
     MENU_ROLE_INPATIENT_REGISTRAR = 5,
     MENU_ROLE_WARD_MANAGER = 6,
     MENU_ROLE_PHARMACY = 7,
+    MENU_ROLE_RESET_DEMO = 8,
     MENU_ROLE_EXIT = 99
 } MenuRole;
 

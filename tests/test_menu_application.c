@@ -925,7 +925,6 @@ static void test_execute_action_rejects_invalid_medicine_price(void) {
     result = execute_action_with_text_io(
         &application,
         MENU_ACTION_PHARMACY_ADD_MEDICINE,
-        "MED5001\n"
         "InvalidPriceMedicine\n"
         "abc\n"
         "5\n"
@@ -947,12 +946,24 @@ static void test_execute_action_rejects_overlong_prompt_input(void) {
     setup_context(&context, "execute_overlong_prompt");
     result = MenuApplication_init(&application, &context.paths);
     assert(result.success == 1);
+    seed_department_and_doctor(&context);
+    seed_patient(&context, "PAT9901", "OverflowPatient", 0);
+    result = MenuApplication_create_registration(
+        &application,
+        "PAT9901",
+        "DOC0001",
+        "DEP0001",
+        "2026-03-20T10:00",
+        output,
+        sizeof(output)
+    );
+    assert(result.success == 1);
 
     result = execute_action_with_text_io(
         &application,
         MENU_ACTION_CLERK_QUERY_REGISTRATION,
         "2\n"
-        "REG1234567890123456789012345678901234567890\n"
+        "REG12345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890\n"
         "2026-03-20T12:00\n",
         output,
         sizeof(output)
@@ -1209,52 +1220,57 @@ static void test_patient_session_authorizes_only_bound_patient_routes(void) {
     result = execute_action_with_text_io(
         &application,
         MENU_ACTION_PATIENT_BASIC_INFO,
-        "PAT7002\n",
+        "",
         output,
         sizeof(output)
     );
-    assert(result.success == 0);
-    assert(strstr(result.message, "session") != 0);
+    assert(result.success == 1);
+    assert(strstr(output, "PAT7001") != 0);
+    assert(strstr(output, "PAT7002") == 0);
 
     result = execute_action_with_text_io(
         &application,
         MENU_ACTION_PATIENT_QUERY_REGISTRATION,
-        "PAT7002\n",
+        "",
         output,
         sizeof(output)
     );
-    assert(result.success == 0);
-    assert(strstr(result.message, "session") != 0);
+    assert(result.success == 1);
+    assert(strstr(output, "PAT7001") != 0);
+    assert(strstr(output, "PAT7002") == 0);
 
     result = execute_action_with_text_io(
         &application,
         MENU_ACTION_PATIENT_QUERY_VISITS,
-        "PAT7002\n",
+        "",
         output,
         sizeof(output)
     );
-    assert(result.success == 0);
-    assert(strstr(result.message, "session") != 0);
+    assert(result.success == 1);
+    assert(strstr(output, "PAT7001") != 0);
+    assert(strstr(output, "PAT7002") == 0);
 
     result = execute_action_with_text_io(
         &application,
         MENU_ACTION_PATIENT_QUERY_EXAMS,
-        "PAT7002\n",
+        "",
         output,
         sizeof(output)
     );
-    assert(result.success == 0);
-    assert(strstr(result.message, "session") != 0);
+    assert(result.success == 1);
+    assert(strstr(output, "PAT7001") != 0);
+    assert(strstr(output, "PAT7002") == 0);
 
     result = execute_action_with_text_io(
         &application,
         MENU_ACTION_PATIENT_QUERY_ADMISSIONS,
-        "PAT7002\n",
+        "",
         output,
         sizeof(output)
     );
-    assert(result.success == 0);
-    assert(strstr(result.message, "session") != 0);
+    assert(result.success == 1);
+    assert(strstr(output, "PAT7001") != 0);
+    assert(strstr(output, "PAT7002") == 0);
 
     result = execute_action_with_text_io(
         &application,
@@ -1596,7 +1612,6 @@ static void test_execute_action_admin_doctor_department_adds_and_lists_doctor(vo
         &application,
         MENU_ACTION_ADMIN_DOCTOR_DEPARTMENT,
         "1\n"
-        "DEP9101\n"
         "Surgery\n"
         "Floor 9\n"
         "Surgery Dept\n",
@@ -1604,35 +1619,34 @@ static void test_execute_action_admin_doctor_department_adds_and_lists_doctor(vo
         sizeof(output)
     );
     assert(result.success == 1);
-    assert(strstr(output, "DEP9101") != 0);
+    assert(strstr(output, "DEP0001") != 0);
 
     result = execute_action_with_text_io(
         &application,
         MENU_ACTION_ADMIN_DOCTOR_DEPARTMENT,
         "3\n"
-        "DOC9101\n"
         "Dr.Bob\n"
         "Attending\n"
-        "DEP9101\n"
+        "DEP0001\n"
         "Tue PM\n"
         "1\n",
         output,
         sizeof(output)
     );
     assert(result.success == 1);
-    assert(strstr(output, "DOC9101") != 0);
+    assert(strstr(output, "DOC0001") != 0);
 
     result = execute_action_with_text_io(
         &application,
         MENU_ACTION_ADMIN_DOCTOR_DEPARTMENT,
         "5\n"
-        "DEP9101\n",
+        "DEP0001\n",
         output,
         sizeof(output)
     );
     assert(result.success == 1);
-    assert(strstr(output, "DOC9101") != 0);
-    assert(strstr(output, "DEP9101") != 0);
+    assert(strstr(output, "DOC0001") != 0);
+    assert(strstr(output, "DEP0001") != 0);
 }
 
 static void test_execute_action_admin_medical_records_queries_time_range(void) {

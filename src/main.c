@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <string.h>
 
+#include "ui/DemoData.h"
 #include "ui/MenuApplication.h"
 #include "ui/MenuController.h"
 
@@ -121,6 +122,17 @@ int main(void) {
         if (MenuController_is_exit_role(role)) {
             puts("系统已退出。");
             return 0;
+        }
+
+        if (role == MENU_ROLE_RESET_DEMO) {
+            char reset_message[RESULT_MESSAGE_CAPACITY];
+            result = DemoData_reset(&paths, reset_message, sizeof(reset_message));
+            if (result.success == 0) {
+                printf("重置失败: %s\n", reset_message[0] != '\0' ? reset_message : result.message);
+            } else {
+                printf("%s\n", reset_message);
+            }
+            continue;
         }
 
         {

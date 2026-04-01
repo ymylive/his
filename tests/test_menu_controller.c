@@ -15,6 +15,7 @@ static void test_render_main_menu_contains_all_roles(void) {
     assert(strstr(buffer, "住院登记员") != 0);
     assert(strstr(buffer, "护士站/病区管理员") != 0);
     assert(strstr(buffer, "药房人员") != 0);
+    assert(strstr(buffer, "重置演示数据") != 0);
 }
 
 static void test_parse_main_menu_selection(void) {
@@ -29,6 +30,10 @@ static void test_parse_main_menu_selection(void) {
     assert(MenuController_is_exit_role(role) == 1);
 
     result = MenuController_parse_main_selection("8", &role);
+    assert(result.success == 1);
+    assert(role == MENU_ROLE_RESET_DEMO);
+
+    result = MenuController_parse_main_selection("9", &role);
     assert(result.success == 0);
 }
 
