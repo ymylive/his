@@ -50,6 +50,7 @@ add_library(his_common
     src/service/PatientService.c
     src/service/PharmacyService.c
     src/service/RegistrationService.c
+    src/ui/DemoData.c
     src/ui/MenuApplication.c
     src/ui/MenuController.c
 )
@@ -69,6 +70,7 @@ add_library(desktop_core
     src/ui/DesktopAdapters.c
     src/ui/WorkbenchCommon.c
     src/ui/workbench/AdminWorkbench.c
+    src/ui/workbench/AdminWorkbenchSupport.c
     src/ui/workbench/ClerkWorkbench.c
     src/ui/workbench/DoctorWorkbench.c
     src/ui/workbench/PatientWorkbench.c
@@ -305,6 +307,14 @@ target_link_libraries(test_pharmacy_admin_workbench_flow PRIVATE desktop_core)
 
 add_test(NAME test_pharmacy_admin_workbench_flow COMMAND test_pharmacy_admin_workbench_flow)
 
+add_executable(test_admin_workbench_support
+    tests/test_admin_workbench_support.c
+)
+
+target_link_libraries(test_admin_workbench_support PRIVATE desktop_core)
+
+add_test(NAME test_admin_workbench_support COMMAND test_admin_workbench_support)
+
 add_executable(test_demo_data_integrity
     tests/test_demo_data_integrity.c
 )
@@ -348,6 +358,7 @@ set(HIS_TEST_TARGETS
     test_doctor_workbench_flow
     test_inpatient_ward_workbench_flow
     test_pharmacy_admin_workbench_flow
+    test_admin_workbench_support
     test_demo_data_integrity
     test_auth_service
 )

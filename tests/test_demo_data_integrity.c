@@ -1,5 +1,6 @@
 #include <assert.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 #include "common/LinkedList.h"
@@ -16,6 +17,7 @@
 #include "repository/VisitRecordRepository.h"
 #include "repository/WardRepository.h"
 #include "repository/BedRepository.h"
+#include "ui/DemoData.h"
 
 static const char *resolve_demo_data_path(const char *file_name) {
     static char path[128];
@@ -30,6 +32,38 @@ static const char *resolve_demo_data_path(const char *file_name) {
 
     snprintf(path, sizeof(path), "data/%s", file_name);
     return path;
+}
+
+static const char *resolve_demo_seed_path(const char *file_name) {
+    static char path[160];
+    FILE *file = 0;
+
+    snprintf(path, sizeof(path), "../data/demo_seed/%s", file_name);
+    file = fopen(path, "r");
+    if (file != 0) {
+        fclose(file);
+        return path;
+    }
+
+    snprintf(path, sizeof(path), "data/demo_seed/%s", file_name);
+    return path;
+}
+
+static void copy_file_contents(const char *source_path, const char *destination_path) {
+    FILE *source = fopen(source_path, "rb");
+    FILE *destination = fopen(destination_path, "wb");
+    char buffer[4096];
+    size_t read_bytes = 0;
+
+    assert(source != 0);
+    assert(destination != 0);
+
+    while ((read_bytes = fread(buffer, 1, sizeof(buffer), source)) > 0) {
+        assert(fwrite(buffer, 1, read_bytes, destination) == read_bytes);
+    }
+
+    fclose(source);
+    fclose(destination);
 }
 
 static void test_demo_accounts_exist(void) {
@@ -126,17 +160,17 @@ static void test_demo_domain_data_has_answering_scale(void) {
     result = DispenseRecordRepository_load_all(&dispense_repository, &dispenses);
     assert(result.success == 1);
 
-    assert(LinkedList_count(&patients) >= 10);
-    assert(LinkedList_count(&departments) >= 4);
-    assert(LinkedList_count(&doctors) >= 7);
-    assert(LinkedList_count(&registrations) >= 8);
-    assert(LinkedList_count(&visits) >= 5);
-    assert(LinkedList_count(&examinations) >= 4);
-    assert(LinkedList_count(&wards) >= 3);
-    assert(LinkedList_count(&beds) >= 8);
-    assert(LinkedList_count(&admissions) >= 2);
-    assert(LinkedList_count(&medicines) >= 6);
-    assert(LinkedList_count(&dispenses) >= 4);
+    assert(LinkedList_count(&patients) >= 20);
+    assert(LinkedList_count(&departments) >= 6);
+    assert(LinkedList_count(&doctors) >= 10);
+    assert(LinkedList_count(&registrations) >= 20);
+    assert(LinkedList_count(&visits) >= 14);
+    assert(LinkedList_count(&examinations) >= 9);
+    assert(LinkedList_count(&wards) >= 5);
+    assert(LinkedList_count(&beds) >= 18);
+    assert(LinkedList_count(&admissions) >= 5);
+    assert(LinkedList_count(&medicines) >= 10);
+    assert(LinkedList_count(&dispenses) >= 8);
 
     PatientRepository_clear_loaded_list(&patients);
     DepartmentRepository_clear_list(&departments);
@@ -151,8 +185,163 @@ static void test_demo_domain_data_has_answering_scale(void) {
     DispenseRecordRepository_clear_list(&dispenses);
 }
 
+static void test_demo_seed_files_exist_and_reset_runtime_files(void) {
+    MenuApplicationPaths paths;
+    char runtime_users[256];
+    char runtime_patients[256];
+    char runtime_departments[256];
+    char runtime_doctors[256];
+    char runtime_registrations[256];
+    char runtime_visits[256];
+    char runtime_examinations[256];
+    char runtime_wards[256];
+    char runtime_beds[256];
+    char runtime_admissions[256];
+    char runtime_medicines[256];
+    char runtime_dispenses[256];
+    char buffer[256];
+    FILE *file = 0;
+    char line[256];
+    Result result;
+
+#ifdef _WIN32
+    system("mkdir build\\demo_seed >NUL 2>NUL");
+#else
+    system("mkdir -p build/demo_seed");
+#endif
+
+    assert(fopen(resolve_demo_seed_path("users.txt"), "r") != 0);
+    assert(fopen(resolve_demo_seed_path("patients.txt"), "r") != 0);
+    assert(fopen(resolve_demo_seed_path("departments.txt"), "r") != 0);
+    assert(fopen(resolve_demo_seed_path("doctors.txt"), "r") != 0);
+    assert(fopen(resolve_demo_seed_path("registrations.txt"), "r") != 0);
+    assert(fopen(resolve_demo_seed_path("visits.txt"), "r") != 0);
+    assert(fopen(resolve_demo_seed_path("examinations.txt"), "r") != 0);
+    assert(fopen(resolve_demo_seed_path("wards.txt"), "r") != 0);
+    assert(fopen(resolve_demo_seed_path("beds.txt"), "r") != 0);
+    assert(fopen(resolve_demo_seed_path("admissions.txt"), "r") != 0);
+    assert(fopen(resolve_demo_seed_path("medicines.txt"), "r") != 0);
+    assert(fopen(resolve_demo_seed_path("dispense_records.txt"), "r") != 0);
+
+    snprintf(runtime_users, sizeof(runtime_users), "build/users.txt");
+    snprintf(runtime_patients, sizeof(runtime_patients), "build/patients.txt");
+    snprintf(runtime_departments, sizeof(runtime_departments), "build/departments.txt");
+    snprintf(runtime_doctors, sizeof(runtime_doctors), "build/doctors.txt");
+    snprintf(runtime_registrations, sizeof(runtime_registrations), "build/registrations.txt");
+    snprintf(runtime_visits, sizeof(runtime_visits), "build/visits.txt");
+    snprintf(runtime_examinations, sizeof(runtime_examinations), "build/examinations.txt");
+    snprintf(runtime_wards, sizeof(runtime_wards), "build/wards.txt");
+    snprintf(runtime_beds, sizeof(runtime_beds), "build/beds.txt");
+    snprintf(runtime_admissions, sizeof(runtime_admissions), "build/admissions.txt");
+    snprintf(runtime_medicines, sizeof(runtime_medicines), "build/medicines.txt");
+    snprintf(runtime_dispenses, sizeof(runtime_dispenses), "build/dispense_records.txt");
+
+    copy_file_contents(resolve_demo_seed_path("users.txt"), "build/demo_seed/users.txt");
+    copy_file_contents(resolve_demo_seed_path("patients.txt"), "build/demo_seed/patients.txt");
+    copy_file_contents(resolve_demo_seed_path("departments.txt"), "build/demo_seed/departments.txt");
+    copy_file_contents(resolve_demo_seed_path("doctors.txt"), "build/demo_seed/doctors.txt");
+    copy_file_contents(resolve_demo_seed_path("registrations.txt"), "build/demo_seed/registrations.txt");
+    copy_file_contents(resolve_demo_seed_path("visits.txt"), "build/demo_seed/visits.txt");
+    copy_file_contents(resolve_demo_seed_path("examinations.txt"), "build/demo_seed/examinations.txt");
+    copy_file_contents(resolve_demo_seed_path("wards.txt"), "build/demo_seed/wards.txt");
+    copy_file_contents(resolve_demo_seed_path("beds.txt"), "build/demo_seed/beds.txt");
+    copy_file_contents(resolve_demo_seed_path("admissions.txt"), "build/demo_seed/admissions.txt");
+    copy_file_contents(resolve_demo_seed_path("medicines.txt"), "build/demo_seed/medicines.txt");
+    copy_file_contents(resolve_demo_seed_path("dispense_records.txt"), "build/demo_seed/dispense_records.txt");
+
+    file = fopen(runtime_users, "w");
+    assert(file != 0);
+    fputs("corrupted\n", file);
+    fclose(file);
+
+    file = fopen(runtime_patients, "w");
+    assert(file != 0);
+    fputs("corrupted\n", file);
+    fclose(file);
+
+    file = fopen(runtime_departments, "w");
+    assert(file != 0);
+    fputs("corrupted\n", file);
+    fclose(file);
+
+    file = fopen(runtime_doctors, "w");
+    assert(file != 0);
+    fputs("corrupted\n", file);
+    fclose(file);
+
+    file = fopen(runtime_registrations, "w");
+    assert(file != 0);
+    fputs("corrupted\n", file);
+    fclose(file);
+
+    file = fopen(runtime_visits, "w");
+    assert(file != 0);
+    fputs("corrupted\n", file);
+    fclose(file);
+
+    file = fopen(runtime_examinations, "w");
+    assert(file != 0);
+    fputs("corrupted\n", file);
+    fclose(file);
+
+    file = fopen(runtime_wards, "w");
+    assert(file != 0);
+    fputs("corrupted\n", file);
+    fclose(file);
+
+    file = fopen(runtime_beds, "w");
+    assert(file != 0);
+    fputs("corrupted\n", file);
+    fclose(file);
+
+    file = fopen(runtime_admissions, "w");
+    assert(file != 0);
+    fputs("corrupted\n", file);
+    fclose(file);
+
+    file = fopen(runtime_medicines, "w");
+    assert(file != 0);
+    fputs("corrupted\n", file);
+    fclose(file);
+
+    file = fopen(runtime_dispenses, "w");
+    assert(file != 0);
+    fputs("corrupted\n", file);
+    fclose(file);
+
+    paths.user_path = runtime_users;
+    paths.patient_path = runtime_patients;
+    paths.department_path = runtime_departments;
+    paths.doctor_path = runtime_doctors;
+    paths.registration_path = runtime_registrations;
+    paths.visit_path = runtime_visits;
+    paths.examination_path = runtime_examinations;
+    paths.ward_path = runtime_wards;
+    paths.bed_path = runtime_beds;
+    paths.admission_path = runtime_admissions;
+    paths.medicine_path = runtime_medicines;
+    paths.dispense_record_path = runtime_dispenses;
+
+    result = DemoData_reset(&paths, buffer, sizeof(buffer));
+    assert(result.success == 1);
+    assert(strstr(buffer, "演示数据已重置") != 0);
+
+    file = fopen(runtime_patients, "r");
+    assert(file != 0);
+    assert(fgets(line, sizeof(line), file) != 0);
+    assert(strstr(line, "patient_id|name|gender") != 0);
+    fclose(file);
+
+    file = fopen(runtime_registrations, "r");
+    assert(file != 0);
+    assert(fgets(line, sizeof(line), file) != 0);
+    assert(strstr(line, "registration_id|patient_id|doctor_id") != 0);
+    fclose(file);
+}
+
 int main(void) {
     test_demo_accounts_exist();
     test_demo_domain_data_has_answering_scale();
+    test_demo_seed_files_exist_and_reset_runtime_files();
     return 0;
 }
