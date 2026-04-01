@@ -5,9 +5,11 @@
 - `include/`: 头文件
 - `src/service/`: 业务服务
 - `src/ui/MenuApplication.c`: 应用层聚合和权限约束
+- `src/ui/DemoData.c`: 演示数据重置与种子覆盖
 - `src/ui/DesktopAdapters.c`: 桌面业务桥接
 - `src/ui/workbench/*.c`: 七角色专门界面
-- `data/*.txt`: 演示数据
+- `data/*.txt`: 当前运行数据
+- `data/demo_seed/*.txt`: 演示种子数据
 - `tests/*.c`: 单测、流程测试、演示数据测试
 
 ## 推荐执行路径
@@ -38,6 +40,7 @@ ctest --test-dir build --output-on-failure
 - 不要放开患者 ownership 限制
 - 不要引入收费/结算
 - UI 重叠优先复用 `Workbench_compute_*` helper 修根因
+- 搜索选择交互优先复用 `WorkbenchSearchSelectState` 和 `MenuApplication` 里的选择 helper
 
 ## 关键测试
 

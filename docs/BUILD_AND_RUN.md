@@ -28,6 +28,16 @@ ctest --test-dir build --output-on-failure
 .\build\his_desktop.exe --smoke
 ```
 
+## 演示数据与重置
+
+- `data/*.txt` 是运行时实际读写的数据
+- `data/demo_seed/*.txt` 是“重置演示数据”时的种子来源
+
+恢复完整演示环境的方法：
+
+- 桌面版：登录页或管理员系统页点击“重置演示数据”
+- 控制台版：主菜单选择“重置演示数据”
+
 ## Docker
 
 构建镜像：
@@ -54,6 +64,10 @@ docker build --target build -t lightweight-his-build:latest .
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\scripts\package-release.ps1
+```
+
+```bash
+./scripts/package-release-macos.sh
 ```
 
 ## 演示账号
