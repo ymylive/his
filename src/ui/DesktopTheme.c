@@ -252,6 +252,46 @@ void DesktopTheme_apply_raygui_style(const DesktopTheme *theme) {
     GuiSetStyle(DEFAULT, TEXT_SPACING, 1);
     GuiSetStyle(LABEL, TEXT_ALIGNMENT, TEXT_ALIGN_LEFT);
     GuiSetStyle(TEXTBOX, TEXT_ALIGNMENT, TEXT_ALIGN_LEFT);
+
+    /* Enhanced widget styling for modern look */
+    GuiSetStyle(DEFAULT, BORDER_WIDTH, 1);
+    GuiSetStyle(DEFAULT, TEXT_PADDING, 10);
+
+    /* Textbox: softer border, more padding */
+    GuiSetStyle(TEXTBOX, BORDER_WIDTH, 1);
+    GuiSetStyle(TEXTBOX, TEXT_PADDING, 12);
+    GuiSetStyle(TEXTBOX, BORDER_COLOR_NORMAL, ColorToInt(Fade(theme->border, 0.7f)));
+    GuiSetStyle(TEXTBOX, BASE_COLOR_NORMAL, ColorToInt((Color){ 255, 255, 255, 255 }));
+    GuiSetStyle(TEXTBOX, BORDER_COLOR_FOCUSED, ColorToInt(theme->nav_active));
+    GuiSetStyle(TEXTBOX, BASE_COLOR_FOCUSED, ColorToInt((Color){ 255, 255, 255, 255 }));
+
+    /* Button: accent-colored when pressed */
+    GuiSetStyle(BUTTON, BORDER_WIDTH, 1);
+    GuiSetStyle(BUTTON, TEXT_PADDING, 16);
+    GuiSetStyle(BUTTON, BORDER_COLOR_NORMAL, ColorToInt(Fade(theme->border, 0.6f)));
+    GuiSetStyle(BUTTON, BASE_COLOR_NORMAL, ColorToInt(theme->panel));
+    GuiSetStyle(BUTTON, BORDER_COLOR_FOCUSED, ColorToInt(theme->nav_active));
+    GuiSetStyle(BUTTON, BASE_COLOR_FOCUSED, ColorToInt(Fade(theme->nav_active, 0.08f)));
+    GuiSetStyle(BUTTON, BORDER_COLOR_PRESSED, ColorToInt(theme->nav_active));
+    GuiSetStyle(BUTTON, BASE_COLOR_PRESSED, ColorToInt(Fade(theme->nav_active, 0.15f)));
+
+    /* ListViewEx: clean list styling */
+    GuiSetStyle(LISTVIEW, BORDER_WIDTH, 0);
+    GuiSetStyle(LISTVIEW, TEXT_PADDING, 8);
+    GuiSetStyle(LISTVIEW, BORDER_COLOR_NORMAL, ColorToInt(BLANK));
+    GuiSetStyle(LISTVIEW, BASE_COLOR_NORMAL, ColorToInt(BLANK));
+
+    /* Toggle: clean toggle buttons */
+    GuiSetStyle(TOGGLE, BORDER_WIDTH, 1);
+    GuiSetStyle(TOGGLE, TEXT_PADDING, 12);
+    GuiSetStyle(TOGGLE, BORDER_COLOR_PRESSED, ColorToInt(theme->nav_active));
+    GuiSetStyle(TOGGLE, BASE_COLOR_PRESSED, ColorToInt(Fade(theme->nav_active, 0.15f)));
+    GuiSetStyle(TOGGLE, TEXT_COLOR_PRESSED, ColorToInt(theme->nav_active));
+
+    /* Checkbox */
+    GuiSetStyle(CHECKBOX, BORDER_WIDTH, 1);
+    GuiSetStyle(CHECKBOX, BORDER_COLOR_PRESSED, ColorToInt(theme->nav_active));
+    GuiSetStyle(CHECKBOX, BASE_COLOR_PRESSED, ColorToInt(theme->nav_active));
 }
 
 void DesktopTheme_draw_text(const char *text, int pos_x, int pos_y, int font_size, Color color) {

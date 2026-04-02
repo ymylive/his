@@ -152,12 +152,12 @@ DesktopLoginLayout DesktopPages_compute_login_layout(
 
     card_width = DesktopPages_clampf((float)screen_width - margin * 2.0f, 460.0f, 620.0f);
     padding = screen_width <= 1440 ? 32.0f : 36.0f;
-    user_y = 132.0f;
-    password_y = user_y + field_height + 38.0f;
-    role_y = password_y + field_height + 38.0f;
+    user_y = 120.0f;
+    password_y = user_y + field_height + 32.0f;
+    role_y = password_y + field_height + 32.0f;
     login_y = role_y + field_height + 32.0f;
-    card_height = login_y + 48.0f + 36.0f;
-    card_height = DesktopPages_clampf(card_height, 440.0f, (float)screen_height - margin * 2.0f);
+    card_height = login_y + 48.0f + 80.0f;
+    card_height = DesktopPages_clampf(card_height, 480.0f, (float)screen_height - margin * 2.0f);
     card_x = ((float)screen_width - card_width) * 0.5f;
     card_y = ((float)screen_height - card_height) * 0.5f;
     role_value_width = card_width - padding * 2.0f - role_button_width * 2.0f - gap * 2.0f;
@@ -230,7 +230,9 @@ static void DesktopPages_draw_message_bar(DesktopApp *app) {
 
     DrawRectangleRounded(rect, 0.2f, 8, Fade(background, 0.18f));
     DrawRectangleRoundedLinesEx(rect, 0.2f, 8, 1.0f, Fade(background, 0.35f));
-    DrawText(app->state.message.text, (int)rect.x + 12, (int)rect.y + 9, 18, app->theme.text_primary);
+    /* Left accent stripe */
+    DrawRectangle((int)rect.x + 2, (int)rect.y + 4, 3, (int)rect.height - 8, background);
+    DrawText(app->state.message.text, (int)rect.x + 20, (int)rect.y + 9, 18, app->theme.text_primary);
 }
 
 static void DesktopPages_release_focus_on_click(
@@ -277,35 +279,74 @@ static void DesktopPages_draw_login(DesktopApp *app) {
     User user;
     Result result;
     char reset_message[RESULT_MESSAGE_CAPACITY];
+    int saved_border_w;
+    int saved_base_n;
+    int saved_base_f;
+    int saved_base_p;
+    int saved_text_n;
 
-    DrawRectangleGradientV(0, 0, GetScreenWidth(), GetScreenHeight(), (Color){ 244, 248, 255, 255 }, app->theme.background);
-    DrawCircleGradient((int)(card.x - 30), (int)(card.y + 60), 140.0f, Fade(app->theme.nav_active, 0.12f), BLANK);
-    DrawCircleGradient((int)(card.x + card.width + 20), (int)(card.y + card.height - 40), 180.0f, Fade(app->theme.accent, 0.10f), BLANK);
-    DrawRectangleRounded(card, 0.2f, 10, Fade(app->theme.panel, 0.94f));
-    DrawRectangleRoundedLinesEx(card, 0.2f, 10, 1.0f, Fade(app->theme.border, 0.9f));
+    /* ── Background ── */
+    DrawRectangleGradientV(0, 0, GetScreenWidth(), GetScreenHeight(),
+                           (Color){ 246, 249, 255, 255 }, app->theme.background);
+    DrawCircleGradient((int)(card.x - 30), (int)(card.y + 60), 140.0f,
+                       Fade(app->theme.nav_active, 0.08f), BLANK);
+    DrawCircleGradient((int)(card.x + card.width + 20), (int)(card.y + card.height - 40), 180.0f,
+                       Fade(app->theme.accent, 0.06f), BLANK);
+
+    /* ── Card shadow (layered for soft blur) ── */
     DrawRectangleRounded(
-        (Rectangle){ card.x + 24, card.y + 24, 92, 8 },
-        0.5f,
-        8,
-        Fade(app->theme.nav_active, 0.9f)
+        (Rectangle){ card.x + 2, card.y + 4, card.width, card.height },
+        0.06f, 10, (Color){ 0, 0, 0, 12 }
+    );
+    DrawRectangleRounded(
+        (Rectangle){ card.x + 1, card.y + 2, card.width, card.height },
+        0.06f, 10, (Color){ 0, 0, 0, 8 }
     );
 
-    DrawText("轻量级 HIS 桌面控制页", (int)card.x + 36, (int)card.y + 44, 34, app->theme.text_primary);
-    DrawText(
-        "原生工作台 / 自动识别账号角色 / 现代医疗后台",
-        (int)card.x + 36,
-        (int)card.y + 88,
-        20,
-        app->theme.text_secondary
-    );
+    /* ── Card ── */
+    DrawRectangleRounded(card, 0.06f, 10, WHITE);
+    DrawRectangleRoundedLinesEx(card, 0.06f, 10, 1.0f, Fade(app->theme.border, 0.4f));
 
+    /* ── Left accent stripe ── */
+    DrawRectangle((int)card.x, (int)card.y + 8, 4, (int)card.height - 16,
+                  app->theme.nav_active);
+
+    /* ── Medical cross hint (geometric, top-right area) ── */
+    {
+        int cx = (int)(card.x + card.width - 52);
+        int cy = (int)(card.y + 48);
+        Color cross_color = Fade(app->theme.nav_active, 0.10f);
+        DrawRectangle(cx - 3, cy - 12, 6, 24, cross_color);
+        DrawRectangle(cx - 12, cy - 3, 24, 6, cross_color);
+    }
+
+    /* ── Title ── */
+    DrawText("轻量级 HIS 桌面控制页",
+             (int)card.x + 36, (int)card.y + 32, 30, app->theme.text_primary);
+
+    /* ── Version badge ── */
+    {
+        Rectangle ver_badge = { card.x + card.width - 100, card.y + 32, 68, 24 };
+        DrawRectangleRounded(ver_badge, 0.4f, 8, Fade(app->theme.nav_active, 0.12f));
+        DrawText("v2.2.0", (int)ver_badge.x + 10, (int)ver_badge.y + 4, 16,
+                 app->theme.nav_active);
+    }
+
+    /* ── Subtitle ── */
+    DrawText("原生工作台 / 自动识别账号角色 / 现代医疗后台",
+             (int)card.x + 36, (int)card.y + 70, 17,
+             Fade(app->theme.text_secondary, 0.8f));
+
+    /* ── Focus management ── */
     DesktopPages_release_focus_on_click(
         &app->state.login_form.active_field,
         input_fields,
         (int)(sizeof(input_fields) / sizeof(input_fields[0]))
     );
 
-    GuiLabel((Rectangle){ user_box.x, user_box.y - 24, 120, 20 }, "用户编号");
+    /* ── User ID field ── */
+    Workbench_draw_form_label(app, (int)user_box.x, (int)user_box.y - 26,
+                              "用户编号", 1);
     Workbench_draw_text_input(
         user_box,
         app->state.login_form.user_id,
@@ -315,7 +356,9 @@ static void DesktopPages_draw_login(DesktopApp *app) {
         1
     );
 
-    GuiLabel((Rectangle){ password_box.x, password_box.y - 24, 120, 20 }, "密码");
+    /* ── Password field ── */
+    Workbench_draw_form_label(app, (int)password_box.x, (int)password_box.y - 26,
+                              "密码", 1);
     Workbench_draw_text_input(
         password_box,
         app->state.login_form.password,
@@ -325,26 +368,61 @@ static void DesktopPages_draw_login(DesktopApp *app) {
         2
     );
 
-    GuiLabel((Rectangle){ role_box.x, role_box.y - 24, 120, 20 }, "角色");
+    /* ── Role selector ── */
+    Workbench_draw_form_label(app, (int)role_box.x, (int)role_box.y - 26,
+                              "角色", 1);
+
+    /* Left arrow pill */
+    DrawRectangleRounded(role_prev, 0.3f, 8, Fade(app->theme.border, 0.12f));
+    DrawRectangleRoundedLinesEx(role_prev, 0.3f, 8, 1.0f, Fade(app->theme.border, 0.4f));
     if (GuiButton(role_prev, "<")) {
         app->state.login_form.active_field = 0;
-        app->state.login_form.role_index = DesktopPages_wrap_role_index(app->state.login_form.role_index - 1);
-    }
-    DrawRectangleRounded(role_box, 0.18f, 8, Fade(app->theme.panel_alt, 0.96f));
-    DrawRectangleRoundedLinesEx(role_box, 0.18f, 8, 1.0f, Fade(app->theme.border, 0.9f));
-    DrawText(
-        DesktopPages_role_name_from_index(app->state.login_form.role_index),
-        (int)role_box.x + 18,
-        (int)role_box.y + 10,
-        22,
-        app->theme.text_primary
-    );
-    if (GuiButton(role_next, ">")) {
-        app->state.login_form.active_field = 0;
-        app->state.login_form.role_index = DesktopPages_wrap_role_index(app->state.login_form.role_index + 1);
+        app->state.login_form.role_index = DesktopPages_wrap_role_index(
+            app->state.login_form.role_index - 1);
     }
 
-    if (GuiButton(login_button, "登录")) {
+    /* Role value pill */
+    DrawRectangleRounded(role_box, 0.15f, 8, Fade(app->theme.nav_active, 0.06f));
+    DrawRectangleRoundedLinesEx(role_box, 0.15f, 8, 1.0f, Fade(app->theme.nav_active, 0.3f));
+    {
+        const char *role_name = DesktopPages_role_name_from_index(
+            app->state.login_form.role_index);
+        int rw = MeasureText(role_name, 20);
+        DrawText(role_name,
+                 (int)(role_box.x + (role_box.width - rw) / 2),
+                 (int)(role_box.y + 12), 20, app->theme.nav_active);
+    }
+
+    /* Right arrow pill */
+    DrawRectangleRounded(role_next, 0.3f, 8, Fade(app->theme.border, 0.12f));
+    DrawRectangleRoundedLinesEx(role_next, 0.3f, 8, 1.0f, Fade(app->theme.border, 0.4f));
+    if (GuiButton(role_next, ">")) {
+        app->state.login_form.active_field = 0;
+        app->state.login_form.role_index = DesktopPages_wrap_role_index(
+            app->state.login_form.role_index + 1);
+    }
+
+    /* ── Login button (filled accent) ── */
+    DrawRectangleRounded(login_button, 0.18f, 8, app->theme.nav_active);
+    {
+        const char *btn_text = "登录";
+        int tw = MeasureText(btn_text, 22);
+        DrawText(btn_text,
+                 (int)(login_button.x + (login_button.width - tw) / 2),
+                 (int)(login_button.y + 13), 22, WHITE);
+    }
+    /* Invisible click area */
+    saved_border_w = GuiGetStyle(BUTTON, BORDER_WIDTH);
+    saved_base_n = GuiGetStyle(BUTTON, BASE_COLOR_NORMAL);
+    saved_base_f = GuiGetStyle(BUTTON, BASE_COLOR_FOCUSED);
+    saved_base_p = GuiGetStyle(BUTTON, BASE_COLOR_PRESSED);
+    saved_text_n = GuiGetStyle(BUTTON, TEXT_COLOR_NORMAL);
+    GuiSetStyle(BUTTON, BORDER_WIDTH, 0);
+    GuiSetStyle(BUTTON, BASE_COLOR_NORMAL, ColorToInt(BLANK));
+    GuiSetStyle(BUTTON, BASE_COLOR_FOCUSED, ColorToInt(BLANK));
+    GuiSetStyle(BUTTON, BASE_COLOR_PRESSED, ColorToInt(BLANK));
+    GuiSetStyle(BUTTON, TEXT_COLOR_NORMAL, ColorToInt(BLANK));
+    if (GuiButton(login_button, "")) {
         result = DesktopAdapters_login(
             &app->application,
             app->state.login_form.user_id,
@@ -357,7 +435,35 @@ static void DesktopPages_draw_login(DesktopApp *app) {
             DesktopAppState_login_success(&app->state, &user);
         }
     }
-    if (GuiButton(reset_button, "重置演示数据")) {
+    GuiSetStyle(BUTTON, BORDER_WIDTH, saved_border_w);
+    GuiSetStyle(BUTTON, BASE_COLOR_NORMAL, saved_base_n);
+    GuiSetStyle(BUTTON, BASE_COLOR_FOCUSED, saved_base_f);
+    GuiSetStyle(BUTTON, BASE_COLOR_PRESSED, saved_base_p);
+    GuiSetStyle(BUTTON, TEXT_COLOR_NORMAL, saved_text_n);
+
+    /* ── Reset button (ghost/outline) ── */
+    DrawRectangleRounded(reset_button, 0.18f, 8, BLANK);
+    DrawRectangleRoundedLinesEx(reset_button, 0.18f, 8, 1.0f,
+                                Fade(app->theme.border, 0.5f));
+    {
+        const char *reset_text = "重置演示数据";
+        int tw = MeasureText(reset_text, 18);
+        DrawText(reset_text,
+                 (int)(reset_button.x + (reset_button.width - tw) / 2),
+                 (int)(reset_button.y + 11), 18, app->theme.text_secondary);
+    }
+    /* Invisible click area for reset */
+    saved_border_w = GuiGetStyle(BUTTON, BORDER_WIDTH);
+    saved_base_n = GuiGetStyle(BUTTON, BASE_COLOR_NORMAL);
+    saved_base_f = GuiGetStyle(BUTTON, BASE_COLOR_FOCUSED);
+    saved_base_p = GuiGetStyle(BUTTON, BASE_COLOR_PRESSED);
+    saved_text_n = GuiGetStyle(BUTTON, TEXT_COLOR_NORMAL);
+    GuiSetStyle(BUTTON, BORDER_WIDTH, 0);
+    GuiSetStyle(BUTTON, BASE_COLOR_NORMAL, ColorToInt(BLANK));
+    GuiSetStyle(BUTTON, BASE_COLOR_FOCUSED, ColorToInt(BLANK));
+    GuiSetStyle(BUTTON, BASE_COLOR_PRESSED, ColorToInt(BLANK));
+    GuiSetStyle(BUTTON, TEXT_COLOR_NORMAL, ColorToInt(BLANK));
+    if (GuiButton(reset_button, "")) {
         result = DesktopAdapters_reset_demo_data(
             &app->application,
             app->paths,
@@ -370,6 +476,21 @@ static void DesktopPages_draw_login(DesktopApp *app) {
             memset(&app->state.login_form, 0, sizeof(app->state.login_form));
             app->state.login_form.role_index = DesktopApp_role_index_from_role(USER_ROLE_PATIENT);
         }
+    }
+    GuiSetStyle(BUTTON, BORDER_WIDTH, saved_border_w);
+    GuiSetStyle(BUTTON, BASE_COLOR_NORMAL, saved_base_n);
+    GuiSetStyle(BUTTON, BASE_COLOR_FOCUSED, saved_base_f);
+    GuiSetStyle(BUTTON, BASE_COLOR_PRESSED, saved_base_p);
+    GuiSetStyle(BUTTON, TEXT_COLOR_NORMAL, saved_text_n);
+
+    /* ── Footer demo hint ── */
+    {
+        const char *hint = "演示账号: PAT0001 / patient123";
+        int hw = MeasureText(hint, 15);
+        DrawText(hint,
+                 (int)(card.x + card.width / 2 - hw / 2),
+                 (int)(card.y + card.height - 28), 15,
+                 Fade(app->theme.text_secondary, 0.5f));
     }
 }
 
@@ -415,8 +536,12 @@ static void DesktopPages_draw_topbar(DesktopApp *app) {
     DrawRectangleRec(layout.bar_bounds, app->theme.panel_alt);
     /* Accent bar at top */
     DrawRectangle(0, 0, GetScreenWidth(), 3, wb != 0 ? wb->accent : app->theme.nav_active);
-    DrawLine(0, app->theme.topbar_height - 1, GetScreenWidth(), app->theme.topbar_height - 1, app->theme.border);
+    /* Subtle bottom shadow */
+    DrawRectangle(0, app->theme.topbar_height, GetScreenWidth(), 1, Fade(app->theme.border, 0.5f));
+    DrawRectangle(0, app->theme.topbar_height + 1, GetScreenWidth(), 1, Fade(app->theme.border, 0.2f));
+    DrawRectangle(0, app->theme.topbar_height + 2, GetScreenWidth(), 1, Fade(app->theme.border, 0.08f));
     DrawText(title, (int)layout.title_bounds.x, (int)layout.title_bounds.y, 28, app->theme.text_primary);
+    DrawCircle((int)layout.session_bounds.x - 12, (int)(layout.session_bounds.y + 9), 4, app->theme.success);
     DrawText(
         session_text,
         (int)layout.session_bounds.x,
@@ -426,6 +551,9 @@ static void DesktopPages_draw_topbar(DesktopApp *app) {
     );
     DrawText(cached_time_text, (int)layout.time_bounds.x, (int)layout.time_bounds.y, 18, app->theme.text_secondary);
 
+    /* Custom logout button */
+    DrawRectangleRounded(layout.logout_bounds, 0.22f, 8, Fade(app->theme.error, 0.08f));
+    DrawRectangleRoundedLinesEx(layout.logout_bounds, 0.22f, 8, 1.0f, Fade(app->theme.error, 0.3f));
     if (GuiButton(layout.logout_bounds, "退出")) {
         MenuApplication_logout(&app->application);
         DesktopAppState_logout(&app->state);

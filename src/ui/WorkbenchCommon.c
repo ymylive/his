@@ -56,14 +56,43 @@ void Workbench_draw_text_input(
     int editable, int *active_field, int field_id
 ) {
     bool edit_mode = false;
+    int saved_border;
+    int saved_base;
+    int saved_base_focused;
+
     if (editable == 0 || active_field == 0) {
         GuiTextBox(bounds, text, text_size, false);
         return;
     }
+
     edit_mode = (*active_field == field_id);
+
+    /* Save and override raygui base colors to transparent — we draw our own background */
+    saved_border = GuiGetStyle(TEXTBOX, BORDER_WIDTH);
+    saved_base = GuiGetStyle(TEXTBOX, BASE_COLOR_NORMAL);
+    saved_base_focused = GuiGetStyle(TEXTBOX, BASE_COLOR_FOCUSED);
+
+    /* Draw custom rounded background */
+    DrawRectangleRounded(bounds, 0.15f, 8, (Color){ 255, 255, 255, 255 });
+    if (edit_mode) {
+        DrawRectangleRoundedLinesEx(bounds, 0.15f, 8, 1.5f, (Color){ 37, 99, 235, 255 });
+    } else {
+        DrawRectangleRoundedLinesEx(bounds, 0.15f, 8, 1.0f, (Color){ 203, 213, 225, 180 });
+    }
+
+    /* Make raygui draw transparent so our background shows through */
+    GuiSetStyle(TEXTBOX, BORDER_WIDTH, 0);
+    GuiSetStyle(TEXTBOX, BASE_COLOR_NORMAL, ColorToInt(BLANK));
+    GuiSetStyle(TEXTBOX, BASE_COLOR_FOCUSED, ColorToInt(BLANK));
+
     if (GuiTextBox(bounds, text, text_size, edit_mode)) {
         *active_field = edit_mode ? 0 : field_id;
     }
+
+    /* Restore */
+    GuiSetStyle(TEXTBOX, BORDER_WIDTH, saved_border);
+    GuiSetStyle(TEXTBOX, BASE_COLOR_NORMAL, saved_base);
+    GuiSetStyle(TEXTBOX, BASE_COLOR_FOCUSED, saved_base_focused);
 }
 
 void Workbench_draw_output_panel(
@@ -373,8 +402,10 @@ void Workbench_draw_sidebar(DesktopApp *app, const WorkbenchDef *wb) {
 
     DrawRectangle(0, app->theme.topbar_height, app->theme.sidebar_width,
                   GetScreenHeight() - app->theme.topbar_height, app->theme.nav_background);
-    DrawLine(app->theme.sidebar_width - 1, app->theme.topbar_height,
-             app->theme.sidebar_width - 1, GetScreenHeight(), app->theme.border);
+    /* Right shadow */
+    DrawRectangle(app->theme.sidebar_width, app->theme.topbar_height, 1, GetScreenHeight() - app->theme.topbar_height, Fade(app->theme.border, 0.4f));
+    DrawRectangle(app->theme.sidebar_width + 1, app->theme.topbar_height, 1, GetScreenHeight() - app->theme.topbar_height, Fade(app->theme.border, 0.15f));
+    DrawRectangle(app->theme.sidebar_width + 2, app->theme.topbar_height, 1, GetScreenHeight() - app->theme.topbar_height, Fade(app->theme.border, 0.05f));
 
     /* Role accent stripe */
     DrawRectangle(0, app->theme.topbar_height, 4,
@@ -383,6 +414,7 @@ void Workbench_draw_sidebar(DesktopApp *app, const WorkbenchDef *wb) {
     /* Role title */
     DrawText(wb->title, 18, app->theme.topbar_height + 18, 20, app->theme.text_primary);
     DrawText(wb->subtitle, 18, app->theme.topbar_height + 44, 16, app->theme.text_secondary);
+    DrawLine(18, app->theme.topbar_height + 68, app->theme.sidebar_width - 18, app->theme.topbar_height + 68, Fade(app->theme.border, 0.3f));
 
     for (i = 0; i < wb->nav_count; i++) {
         btn = (Rectangle){
@@ -393,8 +425,8 @@ void Workbench_draw_sidebar(DesktopApp *app, const WorkbenchDef *wb) {
         };
 
         if (app->state.workbench_page == wb->nav[i].page_id) {
-            DrawRectangleRounded(btn, 0.22f, 8, Fade(wb->accent, 0.18f));
-            DrawRectangle((int)btn.x, (int)btn.y, 4, (int)btn.height, wb->accent);
+            DrawRectangleRounded(btn, 0.22f, 8, Fade(wb->accent, 0.14f));
+            DrawRectangle((int)btn.x, (int)btn.y + 4, 3, (int)btn.height - 8, wb->accent);
         }
 
         if (GuiButton(btn, wb->nav[i].label)) {
