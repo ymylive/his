@@ -483,33 +483,42 @@ static void clerk_draw_registration(DesktopApp *app, Rectangle panel) {
     Workbench_draw_section_header(app, (int)split.list_bounds.x + 16, (int)split.list_bounds.y + 328, "步骤 3: 挂号时间");
 
     Workbench_draw_form_label(app, (int)split.list_bounds.x + 16, (int)split.list_bounds.y + 362, "挂号时间", 1);
-    Workbench_draw_text_input((Rectangle){ split.list_bounds.x + 16, split.list_bounds.y + 384, split.list_bounds.width - 32, 34 }, state->registered_at, sizeof(state->registered_at), 1, &state->active_field, 4);
+    {
+        static WorkbenchDatePickerState clerk_reg_dp;
+        static int clerk_reg_dp_init = 0;
+        if (!clerk_reg_dp_init) { WorkbenchDatePickerState_init(&clerk_reg_dp); clerk_reg_dp_init = 1; }
+        Workbench_draw_date_picker(app, (Rectangle){ split.list_bounds.x + 16, split.list_bounds.y + 384, split.list_bounds.width - 32, 34 }, &clerk_reg_dp, state->registered_at, sizeof(state->registered_at), &state->active_field, 4);
+    }
 
     /* Action Buttons */
     if (GuiButton((Rectangle){ split.list_bounds.x + 16, split.list_bounds.y + 440, split.list_bounds.width - 32, 40 }, "提交挂号")) {
-        Registration registration;
-        memset(&registration, 0, sizeof(registration));
-        result = DesktopAdapters_submit_registration(
-            &app->application,
-            state->patient_id,
-            state->doctor_id,
-            state->department_id,
-            state->registered_at,
-            &registration
-        );
-        Workbench_show_result(app, result);
-        if (result.success) {
-            strncpy(state->last_registration_id, registration.registration_id, sizeof(state->last_registration_id) - 1);
-            DesktopAdapters_query_registrations_by_patient(
+        if (!Workbench_validate_time_format(state->registered_at)) {
+            DesktopAppState_show_message(&app->state, DESKTOP_MESSAGE_ERROR, "时间格式无效，请使用 YYYY-MM-DD HH:MM");
+        } else {
+            Registration registration;
+            memset(&registration, 0, sizeof(registration));
+            result = DesktopAdapters_submit_registration(
                 &app->application,
                 state->patient_id,
-                g_clerk_registration_view.output,
-                sizeof(g_clerk_registration_view.output)
+                state->doctor_id,
+                state->department_id,
+                state->registered_at,
+                &registration
             );
-            DesktopApp_mark_dirty(&app->state, DESKTOP_PAGE_DASHBOARD);
-            WorkbenchSearchSelectState_mark_dirty(&g_clerk_department_select);
-            WorkbenchSearchSelectState_mark_dirty(&g_clerk_doctor_select);
-            WorkbenchSearchSelectState_mark_dirty(&g_clerk_patient_select);
+            Workbench_show_result(app, result);
+            if (result.success) {
+                strncpy(state->last_registration_id, registration.registration_id, sizeof(state->last_registration_id) - 1);
+                DesktopAdapters_query_registrations_by_patient(
+                    &app->application,
+                    state->patient_id,
+                    g_clerk_registration_view.output,
+                    sizeof(g_clerk_registration_view.output)
+                );
+                DesktopApp_mark_dirty(&app->state, DESKTOP_PAGE_DASHBOARD);
+                WorkbenchSearchSelectState_mark_dirty(&g_clerk_department_select);
+                WorkbenchSearchSelectState_mark_dirty(&g_clerk_doctor_select);
+                WorkbenchSearchSelectState_mark_dirty(&g_clerk_patient_select);
+            }
         }
     }
 
@@ -599,7 +608,12 @@ static void clerk_draw_reg_query(DesktopApp *app, Rectangle panel) {
     Workbench_draw_text_input((Rectangle){ split.list_bounds.x + 16, split.list_bounds.y + 274, split.list_bounds.width - 32, 34 }, cancel_registration_id, sizeof(cancel_registration_id), 1, &active_field, 3);
 
     Workbench_draw_form_label(app, (int)split.list_bounds.x + 16, (int)split.list_bounds.y + 318, "取消时间", 1);
-    Workbench_draw_text_input((Rectangle){ split.list_bounds.x + 16, split.list_bounds.y + 340, split.list_bounds.width - 32, 34 }, cancel_time, sizeof(cancel_time), 1, &active_field, 4);
+    {
+        static WorkbenchDatePickerState clerk_cancel_dp;
+        static int clerk_cancel_dp_init = 0;
+        if (!clerk_cancel_dp_init) { WorkbenchDatePickerState_init(&clerk_cancel_dp); clerk_cancel_dp_init = 1; }
+        Workbench_draw_date_picker(app, (Rectangle){ split.list_bounds.x + 16, split.list_bounds.y + 340, split.list_bounds.width - 32, 34 }, &clerk_cancel_dp, cancel_time, sizeof(cancel_time), &active_field, 4);
+    }
 
     if (GuiButton((Rectangle){ split.list_bounds.x + 16, split.list_bounds.y + 388, 120, 36 }, "取消挂号")) {
         result = DesktopAdapters_cancel_registration(&app->application, cancel_registration_id, cancel_time, output, sizeof(output));

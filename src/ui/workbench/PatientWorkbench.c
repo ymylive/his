@@ -5,6 +5,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
 
 #include "repository/DepartmentRepository.h"
 #include "repository/DoctorRepository.h"
@@ -246,20 +247,23 @@ static void patient_draw_registration(DesktopApp *app, Rectangle panel) {
         wb->accent
     );
 
-    DrawText("步骤 3: 选择时间", (int)lx + 16, (int)ly + 314, 17, app->theme.text_primary);
-    Workbench_draw_form_label(app, (int)lx + 16, (int)ly + 338, "挂号时间", 1);
-    Workbench_draw_text_input(
+    DrawText("步骤 3: 挂号时间", (int)lx + 16, (int)ly + 314, 17, app->theme.text_primary);
+    Workbench_draw_form_label(app, (int)lx + 16, (int)ly + 338, "挂号时间", 0);
+    Workbench_draw_status_badge(
+        app,
         (Rectangle){ lx + 16, ly + 360, split.list_bounds.width - 32, 34 },
-        state->registered_at,
-        sizeof(state->registered_at),
-        1,
-        &state->active_field,
-        3
+        "由系统自动生成（提交时记录当前时间）",
+        (Color){ 156, 163, 175, 255 }
     );
 
     if (GuiButton((Rectangle){ lx + 16, ly + 416, split.list_bounds.width - 32, 40 }, "提交挂号")) {
         Registration registration;
         memset(&registration, 0, sizeof(registration));
+        {
+            time_t now = time(NULL);
+            struct tm *local = localtime(&now);
+            strftime(state->registered_at, sizeof(state->registered_at), "%Y-%m-%d %H:%M", local);
+        }
         result = DesktopAdapters_submit_self_registration(
             &app->application,
             state->doctor_id,
@@ -363,6 +367,7 @@ static void patient_draw_visits(DesktopApp *app, Rectangle panel) {
     );
     DrawRectangle((int)panel.x, (int)panel.y + 82, 5, (int)card_height - 8, (Color){ 13, 148, 136, 255 });
     DrawText("看诊记录", (int)panel.x + 20, (int)panel.y + 92, 20, app->theme.text_primary);
+    BeginScissorMode((int)panel.x, (int)(panel.y + 78), (int)panel.width, (int)card_height);
     DrawText(
         state->output[0] != '\0' ? state->output : "暂无看诊记录。点击【刷新记录】加载您的挂号、看诊、检查和住院摘要。",
         (int)panel.x + 20,
@@ -370,6 +375,7 @@ static void patient_draw_visits(DesktopApp *app, Rectangle panel) {
         17,
         app->theme.text_secondary
     );
+    EndScissorMode();
 
     /* Examination results card */
     DrawRectangleRounded(
@@ -382,6 +388,7 @@ static void patient_draw_visits(DesktopApp *app, Rectangle panel) {
     );
     DrawRectangle((int)panel.x, (int)panel.y + 92 + (int)card_height, 5, (int)card_height - 8, (Color){ 245, 158, 11, 255 });
     DrawText("检查结果", (int)panel.x + 20, (int)panel.y + 102 + (int)card_height, 20, app->theme.text_primary);
+    BeginScissorMode((int)panel.x, (int)(panel.y + 88 + card_height), (int)panel.width, (int)card_height);
     DrawText(
         "检查结果会在看诊记录中一并显示。如有检查项目，医生会在看诊时录入检查信息。",
         (int)panel.x + 20,
@@ -389,6 +396,7 @@ static void patient_draw_visits(DesktopApp *app, Rectangle panel) {
         17,
         app->theme.text_secondary
     );
+    EndScissorMode();
 }
 
 static void patient_draw_admission(DesktopApp *app, Rectangle panel) {
@@ -435,6 +443,7 @@ static void patient_draw_admission(DesktopApp *app, Rectangle panel) {
 
     if (has_admission) {
         DrawText("住院详情", (int)panel.x + 20, (int)panel.y + 92, 20, app->theme.text_primary);
+        BeginScissorMode((int)panel.x, (int)(panel.y + 78), (int)panel.width, (int)(panel.height - 78));
         DrawText(
             state->output,
             (int)panel.x + 20,
@@ -442,8 +451,10 @@ static void patient_draw_admission(DesktopApp *app, Rectangle panel) {
             17,
             app->theme.text_secondary
         );
+        EndScissorMode();
     } else {
         DrawText("当前状态", (int)panel.x + 20, (int)panel.y + 92, 20, app->theme.text_primary);
+        BeginScissorMode((int)panel.x, (int)(panel.y + 78), (int)panel.width, (int)(panel.height - 78));
         DrawText(
             "您当前没有在院记录。如需住院，请前往医院住院登记处办理入院手续。",
             (int)panel.x + 20,
@@ -486,6 +497,7 @@ static void patient_draw_admission(DesktopApp *app, Rectangle panel) {
             17,
             app->theme.text_secondary
         );
+        EndScissorMode();
     }
 }
 

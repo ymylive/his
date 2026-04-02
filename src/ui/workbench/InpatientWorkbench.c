@@ -236,12 +236,20 @@ static void draw_admit(DesktopApp *app, Rectangle panel) {
     Workbench_draw_section_header(app, (int)lx + 16, (int)ly + 264, "入院详情");
 
     Workbench_draw_form_label(app, (int)lx + 16, (int)ly + 298, "入院时间", 1);
-    Workbench_draw_text_input((Rectangle){ lx + 16, ly + 320, 200, 34 }, st->admitted_at, sizeof(st->admitted_at), 1, &st->active_field, 4);
+    {
+        static WorkbenchDatePickerState inpatient_admit_dp;
+        static int inpatient_admit_dp_init = 0;
+        if (!inpatient_admit_dp_init) { WorkbenchDatePickerState_init(&inpatient_admit_dp); inpatient_admit_dp_init = 1; }
+        Workbench_draw_date_picker(app, (Rectangle){ lx + 16, ly + 320, 200, 34 }, &inpatient_admit_dp, st->admitted_at, sizeof(st->admitted_at), &st->active_field, 4);
+    }
 
     Workbench_draw_form_label(app, (int)lx + 16, (int)ly + 364, "入院摘要", 0);
     Workbench_draw_text_input((Rectangle){ lx + 16, ly + 386, split.list_bounds.width - 32, 34 }, st->summary, sizeof(st->summary), 1, &st->active_field, 5);
 
     if (GuiButton((Rectangle){ lx + 16, ly + 440, 160, 36 }, "办理入院")) {
+        if (!Workbench_validate_time_format(st->admitted_at)) {
+            DesktopAppState_show_message(&app->state, DESKTOP_MESSAGE_ERROR, "入院时间格式无效，请使用 YYYY-MM-DD HH:MM");
+        } else {
         result = DesktopAdapters_admit_patient(
             &app->application,
             st->patient_id, st->ward_id, st->bed_id,
@@ -254,6 +262,7 @@ static void draw_admit(DesktopApp *app, Rectangle panel) {
             WorkbenchSearchSelectState_mark_dirty(&g_inpatient_ward_select);
             WorkbenchSearchSelectState_mark_dirty(&g_inpatient_bed_select);
             WorkbenchSearchSelectState_mark_dirty(&g_inpatient_admission_select);
+        }
         }
     }
 
@@ -307,12 +316,20 @@ static void draw_discharge(DesktopApp *app, Rectangle panel) {
     Workbench_draw_status_badge(app, (Rectangle){ lx + 120, ly + 212, split.list_bounds.width - 136, 28 }, st->admission_id[0] != '\0' ? st->admission_id : "请在右侧搜索并选择住院记录", Workbench_get(USER_ROLE_INPATIENT_REGISTRAR)->accent);
 
     Workbench_draw_form_label(app, (int)lx + 16, (int)ly + 282, "出院时间", 1);
-    Workbench_draw_text_input((Rectangle){ lx + 16, ly + 304, 200, 34 }, st->discharged_at, sizeof(st->discharged_at), 1, &st->active_field, 2);
+    {
+        static WorkbenchDatePickerState inpatient_discharge_dp;
+        static int inpatient_discharge_dp_init = 0;
+        if (!inpatient_discharge_dp_init) { WorkbenchDatePickerState_init(&inpatient_discharge_dp); inpatient_discharge_dp_init = 1; }
+        Workbench_draw_date_picker(app, (Rectangle){ lx + 16, ly + 304, 200, 34 }, &inpatient_discharge_dp, st->discharged_at, sizeof(st->discharged_at), &st->active_field, 2);
+    }
 
     Workbench_draw_form_label(app, (int)lx + 16, (int)ly + 348, "出院摘要", 0);
     Workbench_draw_text_input((Rectangle){ lx + 16, ly + 370, split.list_bounds.width - 32, 34 }, st->summary, sizeof(st->summary), 1, &st->active_field, 3);
 
     if (GuiButton((Rectangle){ lx + 16, ly + 424, 160, 36 }, "办理出院")) {
+        if (!Workbench_validate_time_format(st->discharged_at)) {
+            DesktopAppState_show_message(&app->state, DESKTOP_MESSAGE_ERROR, "出院时间格式无效，请使用 YYYY-MM-DD HH:MM");
+        } else {
         result = DesktopAdapters_discharge_patient(
             &app->application,
             st->admission_id, st->discharged_at, st->summary,
@@ -323,6 +340,7 @@ static void draw_discharge(DesktopApp *app, Rectangle panel) {
             WorkbenchSearchSelectState_mark_dirty(&g_inpatient_admission_select);
             WorkbenchSearchSelectState_mark_dirty(&g_inpatient_bed_select);
             WorkbenchSearchSelectState_mark_dirty(&g_inpatient_ward_select);
+        }
         }
     }
 

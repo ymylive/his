@@ -309,7 +309,12 @@ static void draw_transfer(DesktopApp *app, Rectangle panel) {
     }
 
     Workbench_draw_form_label(app, (int)lx, (int)ly + 438, "转床时间", 0);
-    Workbench_draw_text_input((Rectangle){ lx, ly + 460, 240, 34 }, transferred_at, sizeof(transferred_at), 1, &st->active_field, 3);
+    {
+        static WorkbenchDatePickerState ward_transfer_dp;
+        static int ward_transfer_dp_init = 0;
+        if (!ward_transfer_dp_init) { WorkbenchDatePickerState_init(&ward_transfer_dp); ward_transfer_dp_init = 1; }
+        Workbench_draw_date_picker(app, (Rectangle){ lx, ly + 460, 240, 34 }, &ward_transfer_dp, transferred_at, sizeof(transferred_at), &st->active_field, 3);
+    }
 
     if (GuiButton((Rectangle){ lx, ly + 510, 160, 36 }, "执行转床")) {
         result = DesktopAdapters_transfer_bed(

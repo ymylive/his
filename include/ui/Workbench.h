@@ -2,6 +2,7 @@
 #define HIS_UI_WORKBENCH_H
 
 #include "common/Result.h"
+#include "domain/DomainTypes.h"
 #include "domain/User.h"
 #include "raylib.h"
 
@@ -199,6 +200,35 @@ void Workbench_draw_output_panel(
     const DesktopApp *app, Rectangle rect,
     const char *title, const char *content, const char *empty_text
 );
+
+/* Date picker */
+typedef struct WorkbenchDatePickerState {
+    int year;
+    int month;          /* 1-12 */
+    int day;            /* 1-31 */
+    int hour;           /* 0-23 */
+    int minute;         /* 0-59 */
+    int calendar_open;  /* whether the calendar popup is visible */
+    char time_text[6];  /* "HH:MM" for manual time entry */
+    int time_active;    /* whether time text input is active */
+} WorkbenchDatePickerState;
+
+void WorkbenchDatePickerState_init(WorkbenchDatePickerState *state);
+
+int Workbench_draw_date_picker(
+    DesktopApp *app,
+    Rectangle bounds,
+    WorkbenchDatePickerState *state,
+    char *out_time,
+    int out_time_capacity,
+    int *active_field,
+    int field_id
+);
+
+int Workbench_validate_time_format(const char *time_str);
+
+/* Deferred calendar popup rendering — call at end of frame */
+void Workbench_draw_pending_calendar_popup(DesktopApp *app);
 
 /* Workbench draw entry points */
 void AdminWorkbench_draw(DesktopApp *app, Rectangle panel, int page);

@@ -336,11 +336,18 @@ static void draw_dispense(DesktopApp *app, Rectangle panel) {
     Workbench_draw_text_input((Rectangle){ lx, ly + 206, 200, 34 }, st->pharmacist_id, sizeof(st->pharmacist_id), is_pharmacy ? 0 : 1, &st->active_field, 2);
 
     Workbench_draw_form_label(app, (int)lx + 220, (int)ly + 184, "发药时间", 0);
-    Workbench_draw_text_input((Rectangle){ lx + 220, ly + 206, 200, 34 }, st->dispensed_at, sizeof(st->dispensed_at), 1, &st->active_field, 3);
+    {
+        static WorkbenchDatePickerState pharmacy_dispensed_dp;
+        static int pharmacy_dispensed_dp_init = 0;
+        if (!pharmacy_dispensed_dp_init) { WorkbenchDatePickerState_init(&pharmacy_dispensed_dp); pharmacy_dispensed_dp_init = 1; }
+        Workbench_draw_date_picker(app, (Rectangle){ lx + 220, ly + 206, 200, 34 }, &pharmacy_dispensed_dp, st->dispensed_at, sizeof(st->dispensed_at), &st->active_field, 3);
+    }
 
     if (GuiButton((Rectangle){ lx, ly + 256, 160, 36 }, "执行发药")) {
         if (parse_int_text(st->dispense_quantity_text, &quantity) == 0) {
             DesktopAppState_show_message(&app->state, DESKTOP_MESSAGE_ERROR, "发药数量格式无效");
+        } else if (!Workbench_validate_time_format(st->dispensed_at)) {
+            DesktopAppState_show_message(&app->state, DESKTOP_MESSAGE_ERROR, "发药时间格式无效，请使用 YYYY-MM-DD HH:MM");
         } else {
             result = DesktopAdapters_dispense_medicine(
                 &app->application,

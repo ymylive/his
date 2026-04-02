@@ -2,7 +2,9 @@
 
 #include <ctype.h>
 #include <stdbool.h>
+#include <stdio.h>
 #include <string.h>
+#include <time.h>
 
 #include "raygui.h"
 #include "ui/DesktopApp.h"
@@ -71,11 +73,15 @@ void Workbench_draw_output_panel(
     DrawRectangleRounded(rect, 0.12f, 8, app->theme.panel);
     DrawRectangleRoundedLinesEx(rect, 0.12f, 8, 1.0f, Fade(app->theme.border, 0.85f));
     DrawText(title, (int)rect.x + 14, (int)rect.y + 12, 20, app->theme.text_primary);
+
+    /* Clip content to panel bounds */
+    BeginScissorMode((int)rect.x, (int)(rect.y + 40), (int)rect.width, (int)(rect.height - 44));
     if (content == 0 || content[0] == '\0') {
         DrawText(empty_text, (int)rect.x + 14, (int)rect.y + 48, 17, app->theme.text_secondary);
-        return;
+    } else {
+        DrawText(content, (int)rect.x + 14, (int)rect.y + 48, 17, app->theme.text_secondary);
     }
-    DrawText(content, (int)rect.x + 14, (int)rect.y + 48, 17, app->theme.text_secondary);
+    EndScissorMode();
 }
 
 /* ── Accent colors per role ── */
@@ -792,4 +798,437 @@ void Workbench_draw_search_select(
         &state->active_index,
         &state->focus_index
     );
+}
+
+/* ── Date picker helpers ── */
+
+static struct {
+    int active;
+    WorkbenchDatePickerState *state;
+    DesktopApp *app;
+    Rectangle date_btn;
+    char *out_time;
+    int out_time_capacity;
+} g_pending_calendar_popup;
+
+static int datepicker_days_in_month(int year, int month) {
+    static const int days[] = { 0, 31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31 };
+    int is_leap = 0;
+
+    if (month < 1 || month > 12) {
+        return 0;
+    }
+    if (month != 2) {
+        return days[month];
+    }
+    is_leap = (year % 4 == 0 && year % 100 != 0) || (year % 400 == 0);
+    return is_leap ? 29 : 28;
+}
+
+/* Returns 0=Sunday .. 6=Saturday using Tomohiko Sakamoto's algorithm */
+static int datepicker_day_of_week(int year, int month, int day) {
+    static const int t[] = { 0, 3, 2, 5, 0, 3, 5, 1, 4, 6, 2, 4 };
+    int y = year;
+
+    if (month < 3) {
+        y -= 1;
+    }
+    return (y + y / 4 - y / 100 + y / 400 + t[month - 1] + day) % 7;
+}
+
+void WorkbenchDatePickerState_init(WorkbenchDatePickerState *state) {
+    time_t now;
+    struct tm *local;
+
+    if (state == 0) {
+        return;
+    }
+    memset(state, 0, sizeof(*state));
+
+    now = time(0);
+    local = localtime(&now);
+    if (local != 0) {
+        state->year = local->tm_year + 1900;
+        state->month = local->tm_mon + 1;
+        state->day = local->tm_mday;
+        state->hour = local->tm_hour;
+        state->minute = local->tm_min;
+    } else {
+        state->year = 2026;
+        state->month = 1;
+        state->day = 1;
+        state->hour = 0;
+        state->minute = 0;
+    }
+    snprintf(state->time_text, sizeof(state->time_text), "%02d:%02d",
+             state->hour, state->minute);
+    state->calendar_open = 0;
+    state->time_active = 0;
+}
+
+int Workbench_validate_time_format(const char *time_str) {
+    int year = 0;
+    int month = 0;
+    int day = 0;
+    int hour = 0;
+    int minute = 0;
+    int max_day = 0;
+    int i = 0;
+
+    if (time_str == 0) {
+        return 0;
+    }
+    /* Must be exactly 16 characters: "YYYY-MM-DD HH:MM" */
+    for (i = 0; time_str[i] != '\0'; i++) {
+        /* counting */
+    }
+    if (i != 16) {
+        return 0;
+    }
+
+    /* Check separator positions */
+    if (time_str[4] != '-' || time_str[7] != '-' ||
+        time_str[10] != ' ' || time_str[13] != ':') {
+        return 0;
+    }
+
+    /* Check all digit positions */
+    for (i = 0; i < 16; i++) {
+        if (i == 4 || i == 7 || i == 10 || i == 13) {
+            continue;
+        }
+        if (time_str[i] < '0' || time_str[i] > '9') {
+            return 0;
+        }
+    }
+
+    /* Parse components */
+    year = (time_str[0] - '0') * 1000 + (time_str[1] - '0') * 100 +
+           (time_str[2] - '0') * 10 + (time_str[3] - '0');
+    month = (time_str[5] - '0') * 10 + (time_str[6] - '0');
+    day = (time_str[8] - '0') * 10 + (time_str[9] - '0');
+    hour = (time_str[11] - '0') * 10 + (time_str[12] - '0');
+    minute = (time_str[14] - '0') * 10 + (time_str[15] - '0');
+
+    /* Range checks */
+    if (year < 1900 || year > 2100) {
+        return 0;
+    }
+    if (month < 1 || month > 12) {
+        return 0;
+    }
+    max_day = datepicker_days_in_month(year, month);
+    if (day < 1 || day > max_day) {
+        return 0;
+    }
+    if (hour > 23) {
+        return 0;
+    }
+    if (minute > 59) {
+        return 0;
+    }
+
+    return 1;
+}
+
+/* Parse "HH:MM" from time_text into hour/minute. Returns 1 on success. */
+static int datepicker_parse_time_text(const char *text, int *out_hour, int *out_minute) {
+    int h = 0;
+    int m = 0;
+    int len = 0;
+    int i = 0;
+
+    if (text == 0 || out_hour == 0 || out_minute == 0) {
+        return 0;
+    }
+    for (i = 0; text[i] != '\0'; i++) {
+        len++;
+    }
+    if (len != 5) {
+        return 0;
+    }
+    if (text[2] != ':') {
+        return 0;
+    }
+    if (text[0] < '0' || text[0] > '9' || text[1] < '0' || text[1] > '9') {
+        return 0;
+    }
+    if (text[3] < '0' || text[3] > '9' || text[4] < '0' || text[4] > '9') {
+        return 0;
+    }
+
+    h = (text[0] - '0') * 10 + (text[1] - '0');
+    m = (text[3] - '0') * 10 + (text[4] - '0');
+    if (h > 23 || m > 59) {
+        return 0;
+    }
+    *out_hour = h;
+    *out_minute = m;
+    return 1;
+}
+
+/* Format the combined date+time into out_time. Returns 1 if it changed. */
+static int datepicker_format_output(
+    const WorkbenchDatePickerState *state,
+    char *out_time, int out_time_capacity
+) {
+    char buf[HIS_DOMAIN_TIME_CAPACITY];
+
+    snprintf(buf, sizeof(buf), "%04d-%02d-%02d %02d:%02d",
+             state->year, state->month, state->day,
+             state->hour, state->minute);
+    if (strcmp(out_time, buf) == 0) {
+        return 0;
+    }
+    strncpy(out_time, buf, (size_t)(out_time_capacity - 1));
+    out_time[out_time_capacity - 1] = '\0';
+    return 1;
+}
+
+int Workbench_draw_date_picker(
+    DesktopApp *app,
+    Rectangle bounds,
+    WorkbenchDatePickerState *state,
+    char *out_time,
+    int out_time_capacity,
+    int *active_field,
+    int field_id
+) {
+    char date_label[16];
+    Rectangle date_btn;
+    Rectangle time_rect;
+    int changed = 0;
+    int parsed_h = 0;
+    int parsed_m = 0;
+    bool time_edit = false;
+
+    if (app == 0 || state == 0 || out_time == 0 || active_field == 0) {
+        return 0;
+    }
+
+    /* Layout: left ~60% = date button, right ~40% = time input */
+    date_btn = (Rectangle){
+        bounds.x, bounds.y,
+        bounds.width * 0.58f, bounds.height
+    };
+    time_rect = (Rectangle){
+        bounds.x + bounds.width * 0.62f, bounds.y,
+        bounds.width * 0.38f, bounds.height
+    };
+
+    /* Date button */
+    snprintf(date_label, sizeof(date_label), "%04d-%02d-%02d",
+             state->year, state->month, state->day);
+    if (GuiButton(date_btn, date_label)) {
+        state->calendar_open = !state->calendar_open;
+    }
+
+    /* Time text input */
+    time_edit = (*active_field == field_id);
+    if (GuiTextBox(time_rect, state->time_text, (int)sizeof(state->time_text), time_edit)) {
+        *active_field = time_edit ? 0 : field_id;
+    }
+
+    /* Format hint below time input */
+    DrawText("HH:MM", (int)(time_rect.x + 4), (int)(time_rect.y + time_rect.height + 2), 12, Fade(app->theme.text_secondary, 0.6f));
+
+    /* Parse time_text and update state if valid */
+    if (datepicker_parse_time_text(state->time_text, &parsed_h, &parsed_m)) {
+        if (parsed_h != state->hour || parsed_m != state->minute) {
+            state->hour = parsed_h;
+            state->minute = parsed_m;
+            changed |= datepicker_format_output(state, out_time, out_time_capacity);
+        }
+    }
+
+    /* Calendar popup — defer drawing to end of frame for correct z-order */
+    if (!state->calendar_open) {
+        changed |= datepicker_format_output(state, out_time, out_time_capacity);
+        return changed;
+    }
+
+    g_pending_calendar_popup.active = 1;
+    g_pending_calendar_popup.state = state;
+    g_pending_calendar_popup.app = app;
+    g_pending_calendar_popup.date_btn = date_btn;
+    g_pending_calendar_popup.out_time = out_time;
+    g_pending_calendar_popup.out_time_capacity = out_time_capacity;
+
+    changed |= datepicker_format_output(state, out_time, out_time_capacity);
+    return changed;
+}
+
+void Workbench_draw_pending_calendar_popup(DesktopApp *app) {
+    WorkbenchDatePickerState *state;
+    Rectangle date_btn;
+    char *out_time;
+    int out_time_capacity;
+
+    float popup_w = 280.0f;
+    float popup_h = 220.0f;
+    Rectangle popup_rect;
+    char header_text[32];
+    Rectangle left_arrow_rect;
+    Rectangle right_arrow_rect;
+    int first_dow = 0;
+    int dim = 0;
+    int row = 0;
+    int col = 0;
+    int day_num = 0;
+    float cell_w = 0.0f;
+    float cell_h = 0.0f;
+    float grid_x = 0.0f;
+    float grid_y = 0.0f;
+    Rectangle cell_rect;
+    char day_str[4];
+    time_t now_t;
+    struct tm *now_tm;
+    int today_y = 0;
+    int today_m = 0;
+    int today_d = 0;
+
+    static const char *dow_labels[] = {
+        "\xe6\x97\xa5", "\xe4\xb8\x80", "\xe4\xba\x8c",
+        "\xe4\xb8\x89", "\xe5\x9b\x9b", "\xe4\xba\x94",
+        "\xe5\x85\xad"
+    };
+
+    (void)app;
+
+    if (!g_pending_calendar_popup.active) {
+        return;
+    }
+
+    state = g_pending_calendar_popup.state;
+    date_btn = g_pending_calendar_popup.date_btn;
+    out_time = g_pending_calendar_popup.out_time;
+    out_time_capacity = g_pending_calendar_popup.out_time_capacity;
+    app = g_pending_calendar_popup.app;
+
+    /* Get today's date for highlighting */
+    now_t = time(0);
+    now_tm = localtime(&now_t);
+    if (now_tm != 0) {
+        today_y = now_tm->tm_year + 1900;
+        today_m = now_tm->tm_mon + 1;
+        today_d = now_tm->tm_mday;
+    }
+
+    popup_rect = (Rectangle){
+        date_btn.x, date_btn.y + date_btn.height + 4.0f,
+        popup_w, popup_h
+    };
+
+    /* Popup background */
+    DrawRectangleRounded(popup_rect, 0.08f, 8, app->theme.panel);
+    DrawRectangleRoundedLinesEx(popup_rect, 0.08f, 8, 1.0f, app->theme.border);
+
+    /* Month/year header with navigation arrows */
+    snprintf(header_text, sizeof(header_text), "%04d\xe5\xb9\xb4 %02d\xe6\x9c\x88",
+             state->year, state->month);
+
+    left_arrow_rect = (Rectangle){
+        popup_rect.x + 8.0f, popup_rect.y + 6.0f, 28.0f, 24.0f
+    };
+    right_arrow_rect = (Rectangle){
+        popup_rect.x + popup_w - 36.0f, popup_rect.y + 6.0f, 28.0f, 24.0f
+    };
+
+    if (GuiButton(left_arrow_rect, "<")) {
+        state->month--;
+        if (state->month < 1) {
+            state->month = 12;
+            state->year--;
+        }
+        dim = datepicker_days_in_month(state->year, state->month);
+        if (state->day > dim) {
+            state->day = dim;
+        }
+    }
+    if (GuiButton(right_arrow_rect, ">")) {
+        state->month++;
+        if (state->month > 12) {
+            state->month = 1;
+            state->year++;
+        }
+        dim = datepicker_days_in_month(state->year, state->month);
+        if (state->day > dim) {
+            state->day = dim;
+        }
+    }
+
+    {
+        int hw = MeasureText(header_text, 17);
+        int hx = (int)(popup_rect.x + (popup_w - (float)hw) / 2.0f);
+        DrawText(header_text, hx, (int)(popup_rect.y + 10.0f), 17, app->theme.text_primary);
+    }
+
+    /* Day-of-week header row */
+    cell_w = (popup_w - 16.0f) / 7.0f;
+    cell_h = 24.0f;
+    grid_x = popup_rect.x + 8.0f;
+    grid_y = popup_rect.y + 36.0f;
+
+    for (col = 0; col < 7; col++) {
+        int lw = MeasureText(dow_labels[col], 14);
+        int lx = (int)(grid_x + (float)col * cell_w + (cell_w - (float)lw) / 2.0f);
+        DrawText(dow_labels[col], lx, (int)grid_y, 14, app->theme.text_secondary);
+    }
+
+    /* Day grid */
+    grid_y += cell_h + 2.0f;
+    cell_h = 26.0f;
+    first_dow = datepicker_day_of_week(state->year, state->month, 1);
+    dim = datepicker_days_in_month(state->year, state->month);
+    day_num = 1;
+
+    for (row = 0; row < 6 && day_num <= dim; row++) {
+        for (col = 0; col < 7; col++) {
+            if (row == 0 && col < first_dow) {
+                continue;
+            }
+            if (day_num > dim) {
+                break;
+            }
+
+            cell_rect = (Rectangle){
+                grid_x + (float)col * cell_w,
+                grid_y + (float)row * cell_h,
+                cell_w, cell_h
+            };
+
+            /* Highlight today */
+            if (state->year == today_y && state->month == today_m &&
+                day_num == today_d) {
+                DrawRectangleRounded(cell_rect, 0.3f, 4,
+                                     Fade(app->theme.nav_active, 0.18f));
+            }
+
+            /* Highlight selected day */
+            if (day_num == state->day) {
+                DrawRectangleRounded(cell_rect, 0.3f, 4, app->theme.nav_active);
+            }
+
+            snprintf(day_str, sizeof(day_str), "%d", day_num);
+
+            if (GuiButton(cell_rect, day_str)) {
+                state->day = day_num;
+                state->calendar_open = 0;
+                datepicker_format_output(state, out_time, out_time_capacity);
+            }
+
+            day_num++;
+        }
+    }
+
+    /* Close popup if user clicks outside */
+    if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
+        Vector2 mouse = GetMousePosition();
+        if (!CheckCollisionPointRec(mouse, popup_rect) &&
+            !CheckCollisionPointRec(mouse, date_btn)) {
+            state->calendar_open = 0;
+        }
+    }
+
+    g_pending_calendar_popup.active = 0;
 }

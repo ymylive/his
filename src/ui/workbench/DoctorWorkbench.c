@@ -230,7 +230,12 @@ static void doctor_draw_visit_record(DesktopApp *app, Rectangle panel) {
     Workbench_draw_text_input((Rectangle){ lx + 16, ly + 274, split.list_bounds.width - 32, 34 }, state->advice, sizeof(state->advice), 1, &state->active_field, 4);
 
     Workbench_draw_form_label(app, (int)lx + 16, (int)ly + 318, "接诊时间", 1);
-    Workbench_draw_text_input((Rectangle){ lx + 16, ly + 340, split.list_bounds.width - 32, 34 }, state->visit_time, sizeof(state->visit_time), 1, &state->active_field, 5);
+    {
+        static WorkbenchDatePickerState doctor_visit_dp;
+        static int doctor_visit_dp_init = 0;
+        if (!doctor_visit_dp_init) { WorkbenchDatePickerState_init(&doctor_visit_dp); doctor_visit_dp_init = 1; }
+        Workbench_draw_date_picker(app, (Rectangle){ lx + 16, ly + 340, split.list_bounds.width - 32, 34 }, &doctor_visit_dp, state->visit_time, sizeof(state->visit_time), &state->active_field, 5);
+    }
 
     Workbench_draw_section_header(app, (int)lx + 16, (int)ly + 388, "后续处理");
     doctor_draw_checkbox((Rectangle){ lx + 16, ly + 422, 18, 18 }, "需要检查", &state->need_exam);
@@ -238,6 +243,9 @@ static void doctor_draw_visit_record(DesktopApp *app, Rectangle panel) {
     doctor_draw_checkbox((Rectangle){ lx + 264, ly + 422, 18, 18 }, "需要用药", &state->need_medicine);
 
     if (GuiButton((Rectangle){ lx + 16, ly + 464, 160, 40 }, "提交接诊")) {
+        if (!Workbench_validate_time_format(state->visit_time)) {
+            DesktopAppState_show_message(&app->state, DESKTOP_MESSAGE_ERROR, "接诊时间格式无效，请使用 YYYY-MM-DD HH:MM");
+        } else {
         memset(&g_doctor_handoff, 0, sizeof(g_doctor_handoff));
         result = DesktopAdapters_create_visit_record_handoff(
             &app->application,
@@ -269,6 +277,7 @@ static void doctor_draw_visit_record(DesktopApp *app, Rectangle panel) {
             DesktopApp_mark_dirty(&app->state, DESKTOP_PAGE_DASHBOARD);
             WorkbenchSearchSelectState_mark_dirty(&g_doctor_pending_select);
             WorkbenchSearchSelectState_mark_dirty(&g_doctor_registration_select);
+        }
         }
     }
 
@@ -315,11 +324,20 @@ static void doctor_draw_examination(DesktopApp *app, Rectangle panel) {
     Workbench_draw_text_input((Rectangle){ lx + 16, ly + 238, split.list_bounds.width - 32, 34 }, state->exam_type, sizeof(state->exam_type), 1, &state->active_field, 8);
 
     Workbench_draw_form_label(app, (int)lx + 16, (int)ly + 282, "申请时间", 1);
-    Workbench_draw_text_input((Rectangle){ lx + 16, ly + 304, split.list_bounds.width - 32, 34 }, state->requested_at, sizeof(state->requested_at), 1, &state->active_field, 9);
+    {
+        static WorkbenchDatePickerState doctor_requested_dp;
+        static int doctor_requested_dp_init = 0;
+        if (!doctor_requested_dp_init) { WorkbenchDatePickerState_init(&doctor_requested_dp); doctor_requested_dp_init = 1; }
+        Workbench_draw_date_picker(app, (Rectangle){ lx + 16, ly + 304, split.list_bounds.width - 32, 34 }, &doctor_requested_dp, state->requested_at, sizeof(state->requested_at), &state->active_field, 9);
+    }
 
     if (GuiButton((Rectangle){ lx + 16, ly + 352, 160, 40 }, "新增检查")) {
+        if (!Workbench_validate_time_format(state->requested_at)) {
+            DesktopAppState_show_message(&app->state, DESKTOP_MESSAGE_ERROR, "申请时间格式无效，请使用 YYYY-MM-DD HH:MM");
+        } else {
         result = DesktopAdapters_create_examination_record(&app->application, state->visit_id, state->exam_item, state->exam_type, state->requested_at, state->output, sizeof(state->output));
         Workbench_show_result(app, result);
+        }
     }
 
     Workbench_draw_section_header(app, (int)lx + 16, (int)ly + 414, "回写检查结果");
@@ -331,11 +349,20 @@ static void doctor_draw_examination(DesktopApp *app, Rectangle panel) {
     Workbench_draw_text_input((Rectangle){ lx + 16, ly + 536, split.list_bounds.width - 32, 34 }, state->exam_result, sizeof(state->exam_result), 1, &state->active_field, 11);
 
     Workbench_draw_form_label(app, (int)lx + 16, (int)ly + 580, "完成时间", 1);
-    Workbench_draw_text_input((Rectangle){ lx + 16, ly + 602, split.list_bounds.width - 32, 34 }, state->completed_at, sizeof(state->completed_at), 1, &state->active_field, 12);
+    {
+        static WorkbenchDatePickerState doctor_completed_dp;
+        static int doctor_completed_dp_init = 0;
+        if (!doctor_completed_dp_init) { WorkbenchDatePickerState_init(&doctor_completed_dp); doctor_completed_dp_init = 1; }
+        Workbench_draw_date_picker(app, (Rectangle){ lx + 16, ly + 602, split.list_bounds.width - 32, 34 }, &doctor_completed_dp, state->completed_at, sizeof(state->completed_at), &state->active_field, 12);
+    }
 
     if (GuiButton((Rectangle){ lx + 16, ly + 650, 160, 40 }, "回写检查")) {
+        if (!Workbench_validate_time_format(state->completed_at)) {
+            DesktopAppState_show_message(&app->state, DESKTOP_MESSAGE_ERROR, "完成时间格式无效，请使用 YYYY-MM-DD HH:MM");
+        } else {
         result = DesktopAdapters_complete_examination_record(&app->application, state->examination_id, state->exam_result, state->completed_at, state->output, sizeof(state->output));
         Workbench_show_result(app, result);
+        }
     }
 
     Workbench_draw_output_panel(

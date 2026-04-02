@@ -457,4 +457,5 @@ void DesktopPages_draw(DesktopApp *app) {
     if (wb != 0 && wb->draw != 0) {
         wb->draw(app, panel, app->state.workbench_page);
     }
+    Workbench_draw_pending_calendar_popup(app);
 }
