@@ -106,10 +106,8 @@ Lightweight HIS Portable v${NORMALIZED_VERSION} for macOS
 
 Demo accounts:
   ADM0001 / admin123  - Administrator
-  CLK0001 / clerk123  - Registration Clerk
   DOC0001 / doctor123 - Doctor
-  INP0001 / inpatient123 - Inpatient Registrar
-  WRD0001 / ward123 - Ward Manager
+  INP0001 / inpatient123 - Inpatient Manager
   PHA0001 / pharmacy123 - Pharmacy
   PAT0001 / patient123 - Patient
 

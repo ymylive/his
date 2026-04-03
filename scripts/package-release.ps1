@@ -138,10 +138,8 @@ Start console:
 
 Demo accounts:
   ADM0001 / admin123
-  CLK0001 / clerk123
   DOC0001 / doctor123
   INP0001 / inpatient123
-  WRD0001 / ward123
   PHA0001 / pharmacy123
   PAT0001 / patient123
 
