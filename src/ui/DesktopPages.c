@@ -13,7 +13,7 @@
 #include "ui/Workbench.h"
 
 static const char *DESKTOP_ROLE_OPTIONS =
-    "患者;医生;系统管理员;挂号员;住院登记员;病区管理员;药房人员";
+    "患者;医生;系统管理员;住院管理员;药房人员";
 
 static float DesktopPages_maxf(float a, float b) {
     return a > b ? a : b;
@@ -33,10 +33,10 @@ static const char *DesktopPages_role_name_from_index(int index) {
 
 static int DesktopPages_wrap_role_index(int index) {
     if (index < 0) {
-        return 6;
+        return 4;
     }
 
-    if (index > 6) {
+    if (index > 4) {
         return 0;
     }
 
@@ -532,26 +532,24 @@ static void DesktopPages_draw_login(DesktopApp *app) {
                  (int)panel_x, (int)panel_y, 15, hint_color);
         panel_y += 22.0f;
 
-        /* 7 accounts in 2 columns (4 left, 3 right) */
+        /* 5 accounts in 2 columns (3 left, 2 right) */
         {
             const char *left_col[] = {
                 "患者: PAT0001 / patient123",
                 "医生: DOC0001 / doctor123",
-                "管理员: ADM0001 / admin123",
-                "挂号员: CLK0001 / clerk123"
+                "管理员: ADM0001 / admin123"
             };
             const char *right_col[] = {
-                "住院登记: INP0001 / inpatient123",
-                "病区管理: WRD0001 / ward123",
+                "住院管理: INP0001 / inpatient123",
                 "药房: PHA0001 / pharmacy123"
             };
 
-            for (i = 0; i < 4; i++) {
+            for (i = 0; i < 3; i++) {
                 DrawText(left_col[i],
                          (int)panel_x, (int)(panel_y + i * line_h),
                          font_size, hint_color);
             }
-            for (i = 0; i < 3; i++) {
+            for (i = 0; i < 2; i++) {
                 DrawText(right_col[i],
                          (int)(panel_x + col_width), (int)(panel_y + i * line_h),
                          font_size, hint_color);

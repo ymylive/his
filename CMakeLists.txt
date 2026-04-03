@@ -71,7 +71,6 @@ add_library(desktop_core
     src/ui/WorkbenchCommon.c
     src/ui/workbench/AdminWorkbench.c
     src/ui/workbench/AdminWorkbenchSupport.c
-    src/ui/workbench/ClerkWorkbench.c
     src/ui/workbench/DoctorWorkbench.c
     src/ui/workbench/PatientWorkbench.c
     src/ui/workbench/InpatientWorkbench.c
@@ -275,14 +274,6 @@ target_link_libraries(test_patient_workbench_flow PRIVATE desktop_core)
 
 add_test(NAME test_patient_workbench_flow COMMAND test_patient_workbench_flow)
 
-add_executable(test_clerk_workbench_flow
-    tests/test_clerk_workbench_flow.c
-)
-
-target_link_libraries(test_clerk_workbench_flow PRIVATE desktop_core)
-
-add_test(NAME test_clerk_workbench_flow COMMAND test_clerk_workbench_flow)
-
 add_executable(test_doctor_workbench_flow
     tests/test_doctor_workbench_flow.c
 )
@@ -354,7 +345,6 @@ set(HIS_TEST_TARGETS
     test_desktop_workflows
     test_desktop_layout_rules
     test_patient_workbench_flow
-    test_clerk_workbench_flow
     test_doctor_workbench_flow
     test_inpatient_ward_workbench_flow
     test_pharmacy_admin_workbench_flow

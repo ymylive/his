@@ -74,14 +74,10 @@ static void test_demo_accounts_exist(void) {
     assert(result.success == 1);
     assert(UserRepository_find_by_user_id(&repository, "ADM0001", &user).success == 1);
     assert(user.role == USER_ROLE_ADMIN);
-    assert(UserRepository_find_by_user_id(&repository, "CLK0001", &user).success == 1);
-    assert(user.role == USER_ROLE_REGISTRATION_CLERK);
     assert(UserRepository_find_by_user_id(&repository, "DOC0001", &user).success == 1);
     assert(user.role == USER_ROLE_DOCTOR);
     assert(UserRepository_find_by_user_id(&repository, "INP0001", &user).success == 1);
-    assert(user.role == USER_ROLE_INPATIENT_REGISTRAR);
-    assert(UserRepository_find_by_user_id(&repository, "WRD0001", &user).success == 1);
-    assert(user.role == USER_ROLE_WARD_MANAGER);
+    assert(user.role == USER_ROLE_INPATIENT_MANAGER);
     assert(UserRepository_find_by_user_id(&repository, "PHA0001", &user).success == 1);
     assert(user.role == USER_ROLE_PHARMACY);
     assert(UserRepository_find_by_user_id(&repository, "PAT0001", &user).success == 1);

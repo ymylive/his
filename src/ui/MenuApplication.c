@@ -3529,60 +3529,6 @@ Result MenuApplication_execute_action(
             }
             return result;
 
-        case MENU_ACTION_CLERK_ADD_PATIENT:
-            result = MenuApplication_prompt_patient_form(&context, &patient, 0);
-            if (result.success == 0) {
-                return result;
-            }
-            result = MenuApplication_add_patient(
-                application,
-                &patient,
-                output_buffer,
-                sizeof(output_buffer)
-            );
-            if (output_buffer[0] != '\0') {
-                fprintf(output, "%s\n", output_buffer);
-            }
-            return result;
-
-        case MENU_ACTION_CLERK_UPDATE_PATIENT:
-            result = MenuApplication_prompt_patient_form(&context, &patient, 1);
-            if (result.success == 0) {
-                return result;
-            }
-            result = MenuApplication_update_patient(
-                application,
-                &patient,
-                output_buffer,
-                sizeof(output_buffer)
-            );
-            if (output_buffer[0] != '\0') {
-                fprintf(output, "%s\n", output_buffer);
-            }
-            return result;
-
-        case MENU_ACTION_CLERK_QUERY_PATIENT:
-            result = MenuApplication_prompt_select_patient(
-                application,
-                &context,
-                "患者搜索关键字/编号(回车列出全部): ",
-                first_id,
-                sizeof(first_id)
-            );
-            if (result.success == 0) {
-                return result;
-            }
-            result = MenuApplication_query_patient(
-                application,
-                first_id,
-                output_buffer,
-                sizeof(output_buffer)
-            );
-            if (output_buffer[0] != '\0') {
-                fprintf(output, "%s\n", output_buffer);
-            }
-            return result;
-
         case MENU_ACTION_PATIENT_BASIC_INFO:
             result = MenuApplication_require_patient_session(application);
             if (result.success == 0) {
@@ -3594,131 +3540,6 @@ Result MenuApplication_execute_action(
                 output_buffer,
                 sizeof(output_buffer)
             );
-            if (output_buffer[0] != '\0') {
-                fprintf(output, "%s\n", output_buffer);
-            }
-            return result;
-
-        case MENU_ACTION_CLERK_CREATE_REGISTRATION:
-            result = MenuApplication_prompt_select_patient(
-                application,
-                &context,
-                "患者搜索关键字/编号(回车列出全部): ",
-                first_id,
-                sizeof(first_id)
-            );
-            if (result.success == 0) {
-                return result;
-            }
-            result = MenuApplication_prompt_select_department(
-                application,
-                &context,
-                "科室搜索关键字/编号(回车列出全部): ",
-                third_id,
-                sizeof(third_id)
-            );
-            if (result.success == 0) {
-                return result;
-            }
-            result = MenuApplication_prompt_select_doctor(
-                application,
-                &context,
-                "医生搜索关键字/工号(回车列出全部): ",
-                third_id,
-                second_id,
-                sizeof(second_id)
-            );
-            if (result.success == 0) {
-                return result;
-            }
-            result = MenuApplication_prompt_line(
-                &context,
-                "挂号时间: ",
-                time_value,
-                sizeof(time_value)
-            );
-            if (result.success == 0) {
-                return result;
-            }
-            result = MenuApplication_create_registration(
-                application,
-                first_id,
-                second_id,
-                third_id,
-                time_value,
-                output_buffer,
-                sizeof(output_buffer)
-            );
-            if (output_buffer[0] != '\0') {
-                fprintf(output, "%s\n", output_buffer);
-            }
-            return result;
-
-        case MENU_ACTION_CLERK_QUERY_REGISTRATION:
-            result = MenuApplication_prompt_line(
-                &context,
-                "1. 查询挂号  2. 取消挂号\n请选择: ",
-                first_id,
-                sizeof(first_id)
-            );
-            if (result.success == 0) {
-                return result;
-            }
-            if (strcmp(first_id, "1") == 0) {
-                result = MenuApplication_prompt_select_registration(
-                    application,
-                    &context,
-                    "挂号搜索关键字/编号(回车列出全部): ",
-                    "",
-                    "",
-                    REG_STATUS_PENDING,
-                    0,
-                    second_id,
-                    sizeof(second_id)
-                );
-                if (result.success == 0) {
-                    return result;
-                }
-                result = MenuApplication_query_registration(
-                    application,
-                    second_id,
-                    output_buffer,
-                    sizeof(output_buffer)
-                );
-            } else if (strcmp(first_id, "2") == 0) {
-                result = MenuApplication_prompt_select_registration(
-                    application,
-                    &context,
-                    "挂号搜索关键字/编号(回车列出全部): ",
-                    "",
-                    "",
-                    REG_STATUS_PENDING,
-                    0,
-                    second_id,
-                    sizeof(second_id)
-                );
-                if (result.success == 0) {
-                    return result;
-                }
-                result = MenuApplication_prompt_line(
-                    &context,
-                    "取消时间: ",
-                    time_value,
-                    sizeof(time_value)
-                );
-                if (result.success == 0) {
-                    return result;
-                }
-                result = MenuApplication_cancel_registration(
-                    application,
-                    second_id,
-                    time_value,
-                    output_buffer,
-                    sizeof(output_buffer)
-                );
-            } else {
-                return Result_make_failure("invalid registration action");
-            }
             if (output_buffer[0] != '\0') {
                 fprintf(output, "%s\n", output_buffer);
             }
@@ -4069,7 +3890,7 @@ Result MenuApplication_execute_action(
             }
             return result;
 
-        case MENU_ACTION_WARD_LIST_WARDS:
+        case MENU_ACTION_INPATIENT_LIST_WARDS:
             result = MenuApplication_list_wards(
                 application,
                 output_buffer,
@@ -4080,7 +3901,7 @@ Result MenuApplication_execute_action(
             }
             return result;
 
-        case MENU_ACTION_WARD_LIST_BEDS:
+        case MENU_ACTION_INPATIENT_LIST_BEDS:
             result = MenuApplication_prompt_select_ward(
                 application,
                 &context,
@@ -4235,32 +4056,7 @@ Result MenuApplication_execute_action(
             }
             return result;
 
-        case MENU_ACTION_WARD_QUERY_INPATIENT:
-            result = MenuApplication_prompt_select_bed(
-                application,
-                &context,
-                "占用床位搜索关键字/编号(回车列出全部): ",
-                "",
-                0,
-                1,
-                first_id,
-                sizeof(first_id)
-            );
-            if (result.success == 0) {
-                return result;
-            }
-            result = MenuApplication_query_current_patient_by_bed(
-                application,
-                first_id,
-                output_buffer,
-                sizeof(output_buffer)
-            );
-            if (output_buffer[0] != '\0') {
-                fprintf(output, "%s\n", output_buffer);
-            }
-            return result;
-
-        case MENU_ACTION_WARD_TRANSFER_BED:
+        case MENU_ACTION_INPATIENT_TRANSFER_BED:
             result = MenuApplication_prompt_select_admission(
                 application,
                 &context,
@@ -4308,7 +4104,7 @@ Result MenuApplication_execute_action(
             }
             return result;
 
-        case MENU_ACTION_WARD_DISCHARGE_CHECK:
+        case MENU_ACTION_INPATIENT_DISCHARGE_CHECK:
             result = MenuApplication_prompt_select_admission(
                 application,
                 &context,

@@ -519,7 +519,7 @@ static void patient_draw_admission(DesktopApp *app, Rectangle panel) {
             app->theme.text_secondary
         );
         DrawText(
-            "3. 病区管理员安排床位",
+            "3. 住院管理员安排床位",
             (int)panel.x + 20,
             (int)panel.y + 252,
             17,

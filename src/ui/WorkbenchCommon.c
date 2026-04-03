@@ -115,11 +115,9 @@ void Workbench_draw_output_panel(
 
 /* ── Accent colors per role ── */
 static const Color ACCENT_ADMIN     = { 30,  58, 138, 255 };  /* deep navy */
-static const Color ACCENT_CLERK     = { 14, 165, 233, 255 };  /* cyan-blue */
 static const Color ACCENT_DOCTOR    = { 13, 148, 136, 255 };  /* teal-green */
 static const Color ACCENT_PATIENT   = { 56, 189, 248, 255 };  /* sky-blue */
 static const Color ACCENT_INPATIENT = { 245, 158, 11, 255 };  /* amber */
-static const Color ACCENT_WARD      = { 79,  70, 229, 255 };  /* indigo */
 static const Color ACCENT_PHARMACY  = { 22, 163,  74, 255 };  /* herb green */
 
 /* ── Workbench definitions ── */
@@ -134,16 +132,6 @@ static const WorkbenchDef g_workbenches[] = {
             { "系统信息", 4 }
         },
         5, AdminWorkbench_draw
-    },
-    {
-        USER_ROLE_REGISTRATION_CLERK, "挂号员工作台", "患者接待与挂号办理",
-        { 14, 165, 233, 255 },
-        {
-            { "接待首页", 0 }, { "患者建档", 1 },
-            { "患者查询", 2 }, { "挂号办理", 3 },
-            { "挂号查询", 4 }
-        },
-        5, ClerkWorkbench_draw
     },
     {
         USER_ROLE_DOCTOR, "医生工作台", "接诊与诊疗记录",
@@ -166,23 +154,15 @@ static const WorkbenchDef g_workbenches[] = {
         5, PatientWorkbench_draw
     },
     {
-        USER_ROLE_INPATIENT_REGISTRAR, "住院登记工作台", "入院与出院办理",
+        USER_ROLE_INPATIENT_MANAGER, "住院管理工作台", "入院出院与病区床位管理",
         { 245, 158, 11, 255 },
         {
-            { "住院首页", 0 }, { "入院登记", 1 },
-            { "出院办理", 2 }, { "住院查询", 3 }
+            { "管理首页", 0 }, { "入院登记", 1 },
+            { "出院办理", 2 }, { "住院查询", 3 },
+            { "病房总览", 4 }, { "床位状态", 5 },
+            { "转床调度", 6 }, { "出院检查", 7 }
         },
-        4, InpatientWorkbench_draw
-    },
-    {
-        USER_ROLE_WARD_MANAGER, "病区管理工作台", "病房床位与转床调度",
-        { 79, 70, 229, 255 },
-        {
-            { "病区首页", 0 }, { "病房总览", 1 },
-            { "床位状态", 2 }, { "转床调度", 3 },
-            { "出院检查", 4 }
-        },
-        5, WardWorkbench_draw
+        8, InpatientManagerWorkbench_draw
     },
     {
         USER_ROLE_PHARMACY, "药房工作台", "药品管理与发药处理",

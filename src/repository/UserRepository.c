@@ -18,9 +18,7 @@ static int UserRepository_is_valid_role(UserRole role) {
     return role == USER_ROLE_PATIENT ||
            role == USER_ROLE_DOCTOR ||
            role == USER_ROLE_ADMIN ||
-           role == USER_ROLE_REGISTRATION_CLERK ||
-           role == USER_ROLE_INPATIENT_REGISTRAR ||
-           role == USER_ROLE_WARD_MANAGER ||
+           role == USER_ROLE_INPATIENT_MANAGER ||
            role == USER_ROLE_PHARMACY;
 }
 

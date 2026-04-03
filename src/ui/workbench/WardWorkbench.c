@@ -128,55 +128,15 @@ static void ward_refresh_admission_select(DesktopApp *app, DesktopInpatientPageS
     AdmissionRepository_clear_loaded_list(&admissions);
 }
 
-/* ── Page 0: Home ── */
-
-static void draw_home(DesktopApp *app, Rectangle panel) {
-    const WorkbenchDef *wb = Workbench_get(USER_ROLE_WARD_MANAGER);
-    const char *labels[4] = { "病房总数", "已占用床位", "可用床位", "待出院检查" };
-    const char *values[4] = { "--", "--", "--", "--" };
-    WorkbenchButtonGroupLayout actions;
-    int index = 0;
-
-    Workbench_draw_home_cards(app, panel, labels, values, wb->accent);
-
-    Workbench_draw_section_header(app, (int)panel.x, (int)panel.y + 110, "快捷操作");
-    actions = Workbench_compute_button_group_layout(
-        (Rectangle){ panel.x, panel.y + 148.0f, panel.width, 40.0f },
-        4,
-        140.0f,
-        40.0f,
-        14.0f
-    );
-    for (index = 0; index < actions.count; index++) {
-        int clicked = 0;
-        const char *label = index == 0 ? "病房总览" :
-                            index == 1 ? "床位状态" :
-                            index == 2 ? "转床调度" :
-                                         "出院检查";
-        Workbench_draw_quick_action_btn(app, actions.buttons[index], label, wb->accent, &clicked);
-        if (clicked) {
-            app->state.workbench_page = index + 1;
-        }
-    }
-
-    Workbench_draw_output_panel(
-        app,
-        (Rectangle){ panel.x, panel.y + 214.0f, panel.width, panel.height - 214.0f },
-        "工作台说明",
-        "病区管理工作台提供病房总览、床位状态查询、转床调度和出院检查功能。",
-        "暂无说明"
-    );
-}
-
 /* ── Page 1: Ward List ── */
 
-static void draw_ward_list(DesktopApp *app, Rectangle panel) {
+void WardWorkbench_draw_ward_list(DesktopApp *app, Rectangle panel) {
     DesktopInpatientPageState *st = &app->state.inpatient_page;
     WorkbenchListDetailLayout split = Workbench_compute_list_detail_layout(
         panel, 0.48f, 18.0f, 280.0f
     );
     Result result;
-    const WorkbenchDef *wb = Workbench_get(USER_ROLE_WARD_MANAGER);
+    const WorkbenchDef *wb = Workbench_get(USER_ROLE_INPATIENT_MANAGER);
 
     /* Left panel: Ward list and controls */
     DrawRectangleRounded(split.list_bounds, 0.12f, 8, app->theme.panel);
@@ -216,7 +176,7 @@ static void draw_ward_list(DesktopApp *app, Rectangle panel) {
 
 /* ── Page 2: Bed Status ── */
 
-static void draw_bed_status(DesktopApp *app, Rectangle panel) {
+void WardWorkbench_draw_bed_status(DesktopApp *app, Rectangle panel) {
     DesktopInpatientPageState *st = &app->state.inpatient_page;
     WorkbenchListDetailLayout split = Workbench_compute_list_detail_layout(
         panel, 0.48f, 18.0f, 280.0f
@@ -272,7 +232,7 @@ static void draw_bed_status(DesktopApp *app, Rectangle panel) {
 
 /* ── Page 3: Transfer ── */
 
-static void draw_transfer(DesktopApp *app, Rectangle panel) {
+void WardWorkbench_draw_transfer(DesktopApp *app, Rectangle panel) {
     DesktopInpatientPageState *st = &app->state.inpatient_page;
     WorkbenchListDetailLayout split = Workbench_compute_list_detail_layout(
         panel, 0.48f, 18.0f, 280.0f
@@ -358,7 +318,7 @@ static void draw_transfer(DesktopApp *app, Rectangle panel) {
 
 /* ── Page 4: Discharge Check ── */
 
-static void draw_discharge_check(DesktopApp *app, Rectangle panel) {
+void WardWorkbench_draw_discharge_check(DesktopApp *app, Rectangle panel) {
     DesktopInpatientPageState *st = &app->state.inpatient_page;
     WorkbenchListDetailLayout split = Workbench_compute_list_detail_layout(
         panel, 0.48f, 18.0f, 280.0f
@@ -427,22 +387,15 @@ static void draw_discharge_check(DesktopApp *app, Rectangle panel) {
     }
 }
 
-/* ── Entry point ── */
+/* ── Ward page initialization ── */
 
-void WardWorkbench_draw(DesktopApp *app, Rectangle panel, int page) {
-    static int initialized = 0;
-    if (!initialized) {
+static int g_ward_initialized = 0;
+
+void WardWorkbench_ensure_initialized(void) {
+    if (!g_ward_initialized) {
         WorkbenchSearchSelectState_mark_dirty(&g_ward_select);
         WorkbenchSearchSelectState_mark_dirty(&g_ward_bed_select);
         WorkbenchSearchSelectState_mark_dirty(&g_ward_admission_select);
-        initialized = 1;
-    }
-    switch (page) {
-        case 0: draw_home(app, panel); break;
-        case 1: draw_ward_list(app, panel); break;
-        case 2: draw_bed_status(app, panel); break;
-        case 3: draw_transfer(app, panel); break;
-        case 4: draw_discharge_check(app, panel); break;
-        default: draw_home(app, panel); break;
+        g_ward_initialized = 1;
     }
 }

@@ -171,8 +171,8 @@ static void inpatient_refresh_admission_select(DesktopApp *app, DesktopInpatient
 /* ── Page 0: Home ── */
 
 static void draw_home(DesktopApp *app, Rectangle panel) {
-    const WorkbenchDef *wb = Workbench_get(USER_ROLE_INPATIENT_REGISTRAR);
-    const char *labels[4] = { "今日入院", "今日出院", "待办理入院", "待办理出院" };
+    const WorkbenchDef *wb = Workbench_get(USER_ROLE_INPATIENT_MANAGER);
+    const char *labels[4] = { "今日入院", "今日出院", "可用床位", "待出院检查" };
     const char *values[4] = { "--", "--", "--", "--" };
     WorkbenchButtonGroupLayout actions;
     int index = 0;
@@ -182,17 +182,20 @@ static void draw_home(DesktopApp *app, Rectangle panel) {
     Workbench_draw_section_header(app, (int)panel.x, (int)panel.y + 110, "快捷操作");
     actions = Workbench_compute_button_group_layout(
         (Rectangle){ panel.x, panel.y + 148.0f, panel.width, 40.0f },
-        3,
-        160.0f,
+        4,
+        140.0f,
         40.0f,
         14.0f
     );
-    for (index = 0; index < actions.count; index++) {
-        int clicked = 0;
-        const char *label = index == 0 ? "入院登记" : index == 1 ? "出院办理" : "住院查询";
-        Workbench_draw_quick_action_btn(app, actions.buttons[index], label, wb->accent, &clicked);
-        if (clicked) {
-            app->state.workbench_page = index + 1;
+    {
+        const char *btn_labels[4] = { "入院登记", "出院办理", "转床调度", "出院检查" };
+        int btn_pages[4] = { 1, 2, 6, 7 };
+        for (index = 0; index < actions.count; index++) {
+            int clicked = 0;
+            Workbench_draw_quick_action_btn(app, actions.buttons[index], btn_labels[index], wb->accent, &clicked);
+            if (clicked) {
+                app->state.workbench_page = btn_pages[index];
+            }
         }
     }
 }
@@ -223,15 +226,15 @@ static void draw_admit(DesktopApp *app, Rectangle panel) {
     Workbench_draw_section_header(app, (int)lx + 16, (int)ly + 52, "患者信息");
 
     Workbench_draw_form_label(app, (int)lx + 16, (int)ly + 86, "已选患者", 1);
-    Workbench_draw_status_badge(app, (Rectangle){ lx + 120, ly + 82, split.list_bounds.width - 136, 28 }, st->patient_id[0] != '\0' ? st->patient_id : "请在右侧搜索并选择患者", Workbench_get(USER_ROLE_INPATIENT_REGISTRAR)->accent);
+    Workbench_draw_status_badge(app, (Rectangle){ lx + 120, ly + 82, split.list_bounds.width - 136, 28 }, st->patient_id[0] != '\0' ? st->patient_id : "请在右侧搜索并选择患者", Workbench_get(USER_ROLE_INPATIENT_MANAGER)->accent);
 
     Workbench_draw_section_header(app, (int)lx + 16, (int)ly + 158, "床位分配");
 
     Workbench_draw_form_label(app, (int)lx + 16, (int)ly + 192, "已选病区", 1);
-    Workbench_draw_status_badge(app, (Rectangle){ lx + 120, ly + 188, split.list_bounds.width - 136, 28 }, st->ward_id[0] != '\0' ? st->ward_id : "请在右侧搜索并选择病区", Workbench_get(USER_ROLE_INPATIENT_REGISTRAR)->accent);
+    Workbench_draw_status_badge(app, (Rectangle){ lx + 120, ly + 188, split.list_bounds.width - 136, 28 }, st->ward_id[0] != '\0' ? st->ward_id : "请在右侧搜索并选择病区", Workbench_get(USER_ROLE_INPATIENT_MANAGER)->accent);
 
     Workbench_draw_form_label(app, (int)lx + 16, (int)ly + 228, "已选床位", 1);
-    Workbench_draw_status_badge(app, (Rectangle){ lx + 120, ly + 224, split.list_bounds.width - 136, 28 }, st->bed_id[0] != '\0' ? st->bed_id : "请在右侧搜索并选择床位", Workbench_get(USER_ROLE_INPATIENT_REGISTRAR)->accent);
+    Workbench_draw_status_badge(app, (Rectangle){ lx + 120, ly + 224, split.list_bounds.width - 136, 28 }, st->bed_id[0] != '\0' ? st->bed_id : "请在右侧搜索并选择床位", Workbench_get(USER_ROLE_INPATIENT_MANAGER)->accent);
 
     Workbench_draw_section_header(app, (int)lx + 16, (int)ly + 264, "入院详情");
 
@@ -313,7 +316,7 @@ static void draw_discharge(DesktopApp *app, Rectangle panel) {
     Workbench_draw_section_header(app, (int)lx + 16, (int)ly + 182, "出院信息");
 
     Workbench_draw_form_label(app, (int)lx + 16, (int)ly + 216, "已选住院记录", 1);
-    Workbench_draw_status_badge(app, (Rectangle){ lx + 120, ly + 212, split.list_bounds.width - 136, 28 }, st->admission_id[0] != '\0' ? st->admission_id : "请在右侧搜索并选择住院记录", Workbench_get(USER_ROLE_INPATIENT_REGISTRAR)->accent);
+    Workbench_draw_status_badge(app, (Rectangle){ lx + 120, ly + 212, split.list_bounds.width - 136, 28 }, st->admission_id[0] != '\0' ? st->admission_id : "请在右侧搜索并选择住院记录", Workbench_get(USER_ROLE_INPATIENT_MANAGER)->accent);
 
     Workbench_draw_form_label(app, (int)lx + 16, (int)ly + 282, "出院时间", 1);
     {
@@ -418,12 +421,13 @@ static void draw_query(DesktopApp *app, Rectangle panel) {
 
 static int g_inpatient_initialized = 0;
 
-void InpatientWorkbench_draw(DesktopApp *app, Rectangle panel, int page) {
+void InpatientManagerWorkbench_draw(DesktopApp *app, Rectangle panel, int page) {
     if (!g_inpatient_initialized) {
         WorkbenchSearchSelectState_mark_dirty(&g_inpatient_patient_select);
         WorkbenchSearchSelectState_mark_dirty(&g_inpatient_ward_select);
         WorkbenchSearchSelectState_mark_dirty(&g_inpatient_bed_select);
         WorkbenchSearchSelectState_mark_dirty(&g_inpatient_admission_select);
+        WardWorkbench_ensure_initialized();
         g_inpatient_initialized = 1;
     }
     switch (page) {
@@ -431,6 +435,10 @@ void InpatientWorkbench_draw(DesktopApp *app, Rectangle panel, int page) {
         case 1: draw_admit(app, panel); break;
         case 2: draw_discharge(app, panel); break;
         case 3: draw_query(app, panel); break;
+        case 4: WardWorkbench_draw_ward_list(app, panel); break;
+        case 5: WardWorkbench_draw_bed_status(app, panel); break;
+        case 6: WardWorkbench_draw_transfer(app, panel); break;
+        case 7: WardWorkbench_draw_discharge_check(app, panel); break;
         default: draw_home(app, panel); break;
     }
 }

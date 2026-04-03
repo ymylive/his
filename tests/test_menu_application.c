@@ -826,7 +826,7 @@ static void test_execute_action_ward_transfer_bed_moves_inpatient_to_target_bed(
     memset(output, 0, sizeof(output));
     result = execute_action_with_text_io(
         &application,
-        MENU_ACTION_WARD_TRANSFER_BED,
+        MENU_ACTION_INPATIENT_TRANSFER_BED,
         "ADM0001\n"
         "BED0002\n"
         "2026-03-21T09:00\n",
@@ -944,71 +944,19 @@ static void test_execute_action_rejects_overlong_prompt_input(void) {
     Result result;
 
     setup_context(&context, "execute_overlong_prompt");
-    result = MenuApplication_init(&application, &context.paths);
-    assert(result.success == 1);
-    seed_department_and_doctor(&context);
     seed_patient(&context, "PAT9901", "OverflowPatient", 0);
-    result = MenuApplication_create_registration(
-        &application,
-        "PAT9901",
-        "DOC0001",
-        "DEP0001",
-        "2026-03-20T10:00",
-        output,
-        sizeof(output)
-    );
+    result = MenuApplication_init(&application, &context.paths);
     assert(result.success == 1);
 
     result = execute_action_with_text_io(
         &application,
-        MENU_ACTION_CLERK_QUERY_REGISTRATION,
-        "2\n"
-        "REG12345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890\n"
-        "2026-03-20T12:00\n",
+        MENU_ACTION_INPATIENT_ADMIT,
+        "PAT12345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890\n",
         output,
         sizeof(output)
     );
     assert(result.success == 0);
     assert(strstr(result.message, "too long") != 0);
-}
-
-static void test_execute_action_updates_patient_record(void) {
-    MenuApplicationTestContext context;
-    MenuApplication application;
-    PatientRepository patient_repository;
-    Patient patient;
-    char output[2048];
-    Result result;
-
-    setup_context(&context, "execute_update_patient");
-    seed_patient(&context, "PAT6001", "Frank", 0);
-    result = MenuApplication_init(&application, &context.paths);
-    assert(result.success == 1);
-    result = PatientRepository_init(&patient_repository, context.patient_path);
-    assert(result.success == 1);
-
-    result = execute_action_with_text_io(
-        &application,
-        MENU_ACTION_CLERK_UPDATE_PATIENT,
-        "PAT6001\n"
-        "Frank Updated\n"
-        "1\n"
-        "41\n"
-        "13800000999\n"
-        "110101198505050055\n"
-        "Seafood\n"
-        "Hypertension\n"
-        "1\n"
-        "updated by route\n",
-        output,
-        sizeof(output)
-    );
-    assert(result.success == 1);
-    assert(strstr(output, "PAT6001") != 0);
-    assert(PatientRepository_find_by_id(&patient_repository, "PAT6001", &patient).success == 1);
-    assert(strcmp(patient.name, "Frank Updated") == 0);
-    assert(patient.age == 41);
-    assert(patient.is_inpatient == 1);
 }
 
 static void test_execute_action_patient_query_registration_lists_records(void) {
@@ -1857,7 +1805,7 @@ static void test_execute_action_ward_discharge_check_reports_ready_status(void) 
 
     result = execute_action_with_text_io(
         &application,
-        MENU_ACTION_WARD_DISCHARGE_CHECK,
+        MENU_ACTION_INPATIENT_DISCHARGE_CHECK,
         "ADM0001\n",
         output,
         sizeof(output)
@@ -1879,7 +1827,6 @@ int main(void) {
     test_execute_action_doctor_visit_preserves_long_complaint();
     test_execute_action_rejects_invalid_medicine_price();
     test_execute_action_rejects_overlong_prompt_input();
-    test_execute_action_updates_patient_record();
     test_execute_action_patient_query_registration_lists_records();
     test_patient_session_authorizes_only_bound_patient_routes();
     test_execute_action_patient_query_dispense_lists_records();

@@ -232,11 +232,16 @@ void Workbench_draw_pending_calendar_popup(DesktopApp *app);
 
 /* Workbench draw entry points */
 void AdminWorkbench_draw(DesktopApp *app, Rectangle panel, int page);
-void ClerkWorkbench_draw(DesktopApp *app, Rectangle panel, int page);
 void DoctorWorkbench_draw(DesktopApp *app, Rectangle panel, int page);
 void PatientWorkbench_draw(DesktopApp *app, Rectangle panel, int page);
-void InpatientWorkbench_draw(DesktopApp *app, Rectangle panel, int page);
-void WardWorkbench_draw(DesktopApp *app, Rectangle panel, int page);
+void InpatientManagerWorkbench_draw(DesktopApp *app, Rectangle panel, int page);
 void PharmacyWorkbench_draw(DesktopApp *app, Rectangle panel, int page);
+
+/* Ward page functions (used by InpatientManagerWorkbench) */
+void WardWorkbench_ensure_initialized(void);
+void WardWorkbench_draw_ward_list(DesktopApp *app, Rectangle panel);
+void WardWorkbench_draw_bed_status(DesktopApp *app, Rectangle panel);
+void WardWorkbench_draw_transfer(DesktopApp *app, Rectangle panel);
+void WardWorkbench_draw_discharge_check(DesktopApp *app, Rectangle panel);
 
 #endif

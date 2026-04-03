@@ -9,18 +9,16 @@ static void test_render_main_menu_contains_all_roles(void) {
 
     assert(result.success == 1);
     assert(strstr(buffer, "系统管理员") != 0);
-    assert(strstr(buffer, "挂号员") != 0);
     assert(strstr(buffer, "医生") != 0);
     assert(strstr(buffer, "患者") != 0);
-    assert(strstr(buffer, "住院登记员") != 0);
-    assert(strstr(buffer, "护士站/病区管理员") != 0);
+    assert(strstr(buffer, "住院管理员") != 0);
     assert(strstr(buffer, "药房人员") != 0);
     assert(strstr(buffer, "重置演示数据") != 0);
 }
 
 static void test_parse_main_menu_selection(void) {
     MenuRole role = MENU_ROLE_INVALID;
-    Result result = MenuController_parse_main_selection(" 3 ", &role);
+    Result result = MenuController_parse_main_selection(" 2 ", &role);
 
     assert(result.success == 1);
     assert(role == MENU_ROLE_DOCTOR);
@@ -29,11 +27,11 @@ static void test_parse_main_menu_selection(void) {
     assert(result.success == 1);
     assert(MenuController_is_exit_role(role) == 1);
 
-    result = MenuController_parse_main_selection("8", &role);
+    result = MenuController_parse_main_selection("6", &role);
     assert(result.success == 1);
     assert(role == MENU_ROLE_RESET_DEMO);
 
-    result = MenuController_parse_main_selection("9", &role);
+    result = MenuController_parse_main_selection("7", &role);
     assert(result.success == 0);
 }
 
@@ -55,7 +53,7 @@ static void test_render_patient_and_inpatient_menus(void) {
     assert(strstr(buffer, "药品使用方法") != 0);
 
     result = MenuController_render_role_menu(
-        MENU_ROLE_INPATIENT_REGISTRAR,
+        MENU_ROLE_INPATIENT_MANAGER,
         buffer,
         sizeof(buffer)
     );
@@ -64,6 +62,9 @@ static void test_render_patient_and_inpatient_menus(void) {
     assert(strstr(buffer, "入院登记") != 0);
     assert(strstr(buffer, "出院办理") != 0);
     assert(strstr(buffer, "住院状态查询") != 0);
+    assert(strstr(buffer, "查看病房信息") != 0);
+    assert(strstr(buffer, "床位调整/转床") != 0);
+    assert(strstr(buffer, "出院前检查") != 0);
 
     result = MenuController_render_role_menu(
         MENU_ROLE_DOCTOR,
@@ -98,7 +99,7 @@ static void test_parse_role_selection_and_back(void) {
     assert(action == MENU_ACTION_PHARMACY_DISPENSE);
 
     result = MenuController_parse_role_selection(
-        MENU_ROLE_WARD_MANAGER,
+        MENU_ROLE_INPATIENT_MANAGER,
         "0",
         &action
     );

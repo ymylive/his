@@ -202,7 +202,6 @@ static void test_clerk_and_doctor_desktop_workflows(void) {
     setup_context(&context, "desktop_workflows_clerk_doctor");
     seed_patient(&context, "PATW001", "WorkflowPatient");
     seed_department_and_doctor(&context);
-    seed_user_account(&context, "CLK0001", "clerk-pass", USER_ROLE_REGISTRATION_CLERK);
 
     result = DesktopAdapters_init_application(&application, &context.paths);
     assert(result.success == 1);

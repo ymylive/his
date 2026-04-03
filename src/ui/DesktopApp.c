@@ -364,12 +364,8 @@ const char *DesktopApp_user_role_label(UserRole role) {
             return "医生";
         case USER_ROLE_ADMIN:
             return "系统管理员";
-        case USER_ROLE_REGISTRATION_CLERK:
-            return "挂号员";
-        case USER_ROLE_INPATIENT_REGISTRAR:
-            return "住院登记员";
-        case USER_ROLE_WARD_MANAGER:
-            return "病区管理员";
+        case USER_ROLE_INPATIENT_MANAGER:
+            return "住院管理员";
         case USER_ROLE_PHARMACY:
             return "药房";
         default:
@@ -386,12 +382,8 @@ UserRole DesktopApp_role_from_index(int index) {
         case 2:
             return USER_ROLE_ADMIN;
         case 3:
-            return USER_ROLE_REGISTRATION_CLERK;
+            return USER_ROLE_INPATIENT_MANAGER;
         case 4:
-            return USER_ROLE_INPATIENT_REGISTRAR;
-        case 5:
-            return USER_ROLE_WARD_MANAGER;
-        case 6:
             return USER_ROLE_PHARMACY;
         default:
             return USER_ROLE_UNKNOWN;
@@ -406,14 +398,10 @@ int DesktopApp_role_index_from_role(UserRole role) {
             return 1;
         case USER_ROLE_ADMIN:
             return 2;
-        case USER_ROLE_REGISTRATION_CLERK:
+        case USER_ROLE_INPATIENT_MANAGER:
             return 3;
-        case USER_ROLE_INPATIENT_REGISTRAR:
-            return 4;
-        case USER_ROLE_WARD_MANAGER:
-            return 5;
         case USER_ROLE_PHARMACY:
-            return 6;
+            return 4;
         default:
             return 0;
     }
@@ -421,12 +409,9 @@ int DesktopApp_role_index_from_role(UserRole role) {
 
 DesktopPage DesktopApp_home_page_for_role(UserRole role) {
     switch (role) {
-        case USER_ROLE_REGISTRATION_CLERK:
-            return DESKTOP_PAGE_REGISTRATION;
         case USER_ROLE_DOCTOR:
             return DESKTOP_PAGE_DOCTOR;
-        case USER_ROLE_INPATIENT_REGISTRAR:
-        case USER_ROLE_WARD_MANAGER:
+        case USER_ROLE_INPATIENT_MANAGER:
             return DESKTOP_PAGE_INPATIENT;
         case USER_ROLE_PHARMACY:
             return DESKTOP_PAGE_PHARMACY;

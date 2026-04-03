@@ -9,16 +9,12 @@ static UserRole role_to_user_role(MenuRole role) {
     switch (role) {
         case MENU_ROLE_ADMIN:
             return USER_ROLE_ADMIN;
-        case MENU_ROLE_REGISTRATION_CLERK:
-            return USER_ROLE_REGISTRATION_CLERK;
         case MENU_ROLE_DOCTOR:
             return USER_ROLE_DOCTOR;
         case MENU_ROLE_PATIENT:
             return USER_ROLE_PATIENT;
-        case MENU_ROLE_INPATIENT_REGISTRAR:
-            return USER_ROLE_INPATIENT_REGISTRAR;
-        case MENU_ROLE_WARD_MANAGER:
-            return USER_ROLE_WARD_MANAGER;
+        case MENU_ROLE_INPATIENT_MANAGER:
+            return USER_ROLE_INPATIENT_MANAGER;
         case MENU_ROLE_PHARMACY:
             return USER_ROLE_PHARMACY;
         default:

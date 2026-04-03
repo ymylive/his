@@ -64,7 +64,7 @@ static void test_role_home_pages_on_login(void) {
 
     memset(&user, 0, sizeof(user));
     strcpy(user.user_id, "INP0001");
-    user.role = USER_ROLE_INPATIENT_REGISTRAR;
+    user.role = USER_ROLE_INPATIENT_MANAGER;
     DesktopAppState_login_success(&state, &user);
     assert(state.current_page == DESKTOP_PAGE_INPATIENT);
 
@@ -80,11 +80,11 @@ static void test_role_home_pages_on_login(void) {
 static void test_role_mapping(void) {
     assert(DesktopApp_role_from_index(0) == USER_ROLE_PATIENT);
     assert(DesktopApp_role_from_index(2) == USER_ROLE_ADMIN);
-    assert(DesktopApp_role_from_index(6) == USER_ROLE_PHARMACY);
-    assert(DesktopApp_role_index_from_role(USER_ROLE_WARD_MANAGER) == 5);
+    assert(DesktopApp_role_from_index(4) == USER_ROLE_PHARMACY);
+    assert(DesktopApp_role_index_from_role(USER_ROLE_INPATIENT_MANAGER) == 3);
     assert(DesktopApp_home_page_for_role(USER_ROLE_PATIENT) == DESKTOP_PAGE_DASHBOARD);
     assert(DesktopApp_home_page_for_role(USER_ROLE_DOCTOR) == DESKTOP_PAGE_DOCTOR);
-    assert(DesktopApp_home_page_for_role(USER_ROLE_INPATIENT_REGISTRAR) == DESKTOP_PAGE_INPATIENT);
+    assert(DesktopApp_home_page_for_role(USER_ROLE_INPATIENT_MANAGER) == DESKTOP_PAGE_INPATIENT);
     assert(DesktopApp_home_page_for_role(USER_ROLE_PHARMACY) == DESKTOP_PAGE_PHARMACY);
     assert(strcmp(DesktopApp_page_label(DESKTOP_PAGE_DISPENSE), "发药记录") == 0);
     assert(strcmp(DesktopApp_page_label(DESKTOP_PAGE_DOCTOR), "医生工作台") == 0);
