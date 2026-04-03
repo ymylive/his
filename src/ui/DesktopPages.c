@@ -346,7 +346,7 @@ static void DesktopPages_draw_login(DesktopApp *app) {
     {
         Rectangle ver_badge = { card.x + card.width - 100, card.y + 32, 68, 24 };
         DrawRectangleRounded(ver_badge, 0.4f, 8, Fade(app->theme.nav_active, 0.12f));
-        DrawText("v2.2.0", (int)ver_badge.x + 10, (int)ver_badge.y + 4, 16,
+        DrawText("v2.4.0", (int)ver_badge.x + 10, (int)ver_badge.y + 4, 16,
                  app->theme.nav_active);
     }
 
