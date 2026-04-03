@@ -9,14 +9,17 @@
 #include <stdbool.h>
 
 #include "domain/Medicine.h"
+#include "domain/VisitRecord.h"
 #include "repository/DepartmentRepository.h"
 #include "repository/MedicineRepository.h"
+#include "repository/VisitRecordRepository.h"
 
 /* ── Local helpers ── */
 
 static WorkbenchSearchSelectState g_pharmacy_department_select;
 static WorkbenchSearchSelectState g_pharmacy_medicine_select;
 static WorkbenchSearchSelectState g_pharmacy_patient_select;
+static WorkbenchSearchSelectState g_pharmacy_visit_select;
 
 static int parse_int_text(const char *text, int *out_value) {
     char *end = 0;
@@ -132,6 +135,40 @@ static void pharmacy_refresh_patient_select(DesktopApp *app, DesktopPharmacyPage
     WorkbenchSearchSelectState_finalize(&g_pharmacy_patient_select);
     g_pharmacy_patient_select.active_index = selected_index;
     LinkedList_clear(&patients, free);
+}
+
+static void pharmacy_refresh_visit_select(DesktopApp *app, DesktopPharmacyPageState *st) {
+    LinkedList visits;
+    const LinkedListNode *current = 0;
+    int selected_index = -1;
+
+    if (!WorkbenchSearchSelectState_needs_refresh(&g_pharmacy_visit_select)) return;
+
+    WorkbenchSearchSelectState_reset(&g_pharmacy_visit_select);
+    LinkedList_init(&visits);
+    if (VisitRecordRepository_load_all(&app->application.medical_record_service.visit_repository, &visits).success != 1) {
+        return;
+    }
+
+    current = visits.head;
+    while (current != 0) {
+        const VisitRecord *v = (const VisitRecord *)current->data;
+        char label[WORKBENCH_SELECT_LABEL_CAPACITY];
+        if (v->need_medicine) {
+            snprintf(label, sizeof(label), "%s | 患者=%s | %s | %s", v->visit_id, v->patient_id, v->diagnosis, v->visit_time);
+            if (Workbench_text_contains_ignore_case(label, g_pharmacy_visit_select.query)) {
+                if (strcmp(st->prescription_id, v->visit_id) == 0) {
+                    selected_index = g_pharmacy_visit_select.option_count;
+                }
+                WorkbenchSearchSelectState_add_option(&g_pharmacy_visit_select, label);
+            }
+        }
+        current = current->next;
+    }
+
+    WorkbenchSearchSelectState_finalize(&g_pharmacy_visit_select);
+    g_pharmacy_visit_select.active_index = selected_index;
+    VisitRecordRepository_clear_list(&visits);
 }
 
 /* ── Page 0: Home ── */
@@ -307,13 +344,21 @@ static void draw_dispense(DesktopApp *app, Rectangle panel) {
     int is_pharmacy = (app->state.current_user.role == USER_ROLE_PHARMACY);
     int quantity = 0;
     Result result;
-    Rectangle patient_search = { right.x + 14, right.y + 56, right.width - 28, 34 };
-    Rectangle patient_list = { right.x + 14, right.y + 98, right.width - 28, right.height * 0.30f };
-    Rectangle medicine_search = { right.x + 14, right.y + right.height * 0.42f, right.width - 28, 34 };
-    Rectangle medicine_list = { right.x + 14, right.y + right.height * 0.42f + 42, right.width - 28, right.height * 0.30f };
+    float section_height = right.height * 0.30f;
+    float gap = right.height * 0.035f;
+    float sec0_y = right.y;
+    float sec1_y = sec0_y + 40 + section_height + gap;
+    float sec2_y = sec1_y + 40 + section_height + gap;
+    Rectangle patient_search = { right.x + 14, sec0_y + 32, right.width - 28, 34 };
+    Rectangle patient_list = { right.x + 14, sec0_y + 72, right.width - 28, section_height - 32 };
+    Rectangle visit_search = { right.x + 14, sec1_y + 32, right.width - 28, 34 };
+    Rectangle visit_list = { right.x + 14, sec1_y + 72, right.width - 28, section_height - 32 };
+    Rectangle medicine_search = { right.x + 14, sec2_y + 32, right.width - 28, 34 };
+    Rectangle medicine_list = { right.x + 14, sec2_y + 72, right.width - 28, section_height - 32 };
 
     auto_bind_pharmacist(app);
     pharmacy_refresh_patient_select(app, st);
+    pharmacy_refresh_visit_select(app, st);
     pharmacy_refresh_medicine_select(app, st, st->medicine_id);
 
     DrawRectangleRounded(left, 0.12f, 8, app->theme.panel);
@@ -323,8 +368,8 @@ static void draw_dispense(DesktopApp *app, Rectangle panel) {
     Workbench_draw_form_label(app, (int)lx, (int)ly + 52, "已选患者", 1);
     Workbench_draw_status_badge(app, (Rectangle){ lx + 120, ly + 48, left.width - 152, 28 }, st->patient_id[0] != '\0' ? st->patient_id : "请在右侧搜索并选择患者", Workbench_get(USER_ROLE_PHARMACY)->accent);
 
-    Workbench_draw_form_label(app, (int)lx + 220, (int)ly + 52, "处方编号", 1);
-    Workbench_draw_text_input((Rectangle){ lx + 220, ly + 74, 200, 34 }, st->prescription_id, sizeof(st->prescription_id), 1, &st->active_field, 2);
+    Workbench_draw_form_label(app, (int)lx, (int)ly + 86, "处方编号", 1);
+    Workbench_draw_status_badge(app, (Rectangle){ lx + 120, ly + 82, left.width - 152, 28 }, st->prescription_id[0] != '\0' ? st->prescription_id : "请在右侧搜索并选择处方", Workbench_get(USER_ROLE_PHARMACY)->accent);
 
     Workbench_draw_form_label(app, (int)lx, (int)ly + 118, "已选药品", 1);
     Workbench_draw_status_badge(app, (Rectangle){ lx + 120, ly + 114, left.width - 152, 28 }, st->medicine_id[0] != '\0' ? st->medicine_id : "请在右侧搜索并选择药品", Workbench_get(USER_ROLE_PHARMACY)->accent);
@@ -359,18 +404,26 @@ static void draw_dispense(DesktopApp *app, Rectangle panel) {
             if (result.success) {
                 app->state.dashboard.loaded = 0;
                 WorkbenchSearchSelectState_mark_dirty(&g_pharmacy_patient_select);
+                WorkbenchSearchSelectState_mark_dirty(&g_pharmacy_visit_select);
                 WorkbenchSearchSelectState_mark_dirty(&g_pharmacy_medicine_select);
             }
         }
     }
 
-    DrawText("患者搜索与选择", (int)right.x + 14, (int)right.y + 16, 20, app->theme.text_primary);
+    DrawText("患者搜索与选择", (int)right.x + 14, (int)sec0_y + 8, 20, app->theme.text_primary);
     Workbench_draw_search_select(app, patient_search, patient_list, &g_pharmacy_patient_select, &st->active_field, 63);
     if (g_pharmacy_patient_select.active_index >= 0 && g_pharmacy_patient_select.active_index < g_pharmacy_patient_select.option_count) {
         sscanf(g_pharmacy_patient_select.labels[g_pharmacy_patient_select.active_index], "%15s", st->patient_id);
     }
-    DrawText("药品搜索与选择", (int)right.x + 14, (int)(right.y + right.height * 0.42f - 28), 20, app->theme.text_primary);
-    Workbench_draw_search_select(app, medicine_search, medicine_list, &g_pharmacy_medicine_select, &st->active_field, 64);
+
+    DrawText("处方搜索与选择", (int)right.x + 14, (int)sec1_y + 8, 20, app->theme.text_primary);
+    Workbench_draw_search_select(app, visit_search, visit_list, &g_pharmacy_visit_select, &st->active_field, 65);
+    if (g_pharmacy_visit_select.active_index >= 0 && g_pharmacy_visit_select.active_index < g_pharmacy_visit_select.option_count) {
+        sscanf(g_pharmacy_visit_select.labels[g_pharmacy_visit_select.active_index], "%15s", st->prescription_id);
+    }
+
+    DrawText("药品搜索与选择", (int)right.x + 14, (int)sec2_y + 8, 20, app->theme.text_primary);
+    Workbench_draw_search_select(app, medicine_search, medicine_list, &g_pharmacy_medicine_select, &st->active_field, 66);
     if (g_pharmacy_medicine_select.active_index >= 0 && g_pharmacy_medicine_select.active_index < g_pharmacy_medicine_select.option_count) {
         sscanf(g_pharmacy_medicine_select.labels[g_pharmacy_medicine_select.active_index], "%15s", st->medicine_id);
     }
@@ -587,6 +640,7 @@ void PharmacyWorkbench_draw(DesktopApp *app, Rectangle panel, int page) {
         WorkbenchSearchSelectState_mark_dirty(&g_pharmacy_department_select);
         WorkbenchSearchSelectState_mark_dirty(&g_pharmacy_medicine_select);
         WorkbenchSearchSelectState_mark_dirty(&g_pharmacy_patient_select);
+        WorkbenchSearchSelectState_mark_dirty(&g_pharmacy_visit_select);
         initialized = 1;
     }
     switch (page) {

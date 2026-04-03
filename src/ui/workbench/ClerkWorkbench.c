@@ -7,6 +7,7 @@
 #include "domain/Department.h"
 #include "domain/Doctor.h"
 #include "raygui.h"
+#include "repository/RegistrationRepository.h"
 #include "ui/DesktopAdapters.h"
 #include "ui/DesktopApp.h"
 
@@ -34,6 +35,8 @@ static ClerkRegistrationViewState g_clerk_registration_view;
 static WorkbenchSearchSelectState g_clerk_patient_select;
 static WorkbenchSearchSelectState g_clerk_department_select;
 static WorkbenchSearchSelectState g_clerk_doctor_select;
+static WorkbenchSearchSelectState g_clerk_registration_select;
+static WorkbenchSearchSelectState g_clerk_reg_patient_select;
 static int g_clerk_initialized = 0;
 
 static void clerk_refresh_patient_select(DesktopApp *app, DesktopRegistrationPageState *state) {
@@ -138,6 +141,70 @@ static void clerk_refresh_doctor_select(DesktopApp *app, DesktopRegistrationPage
     WorkbenchSearchSelectState_finalize(&g_clerk_doctor_select);
     g_clerk_doctor_select.active_index = selected_index;
     DoctorService_clear_list(&doctors);
+}
+
+static void clerk_refresh_registration_select(DesktopApp *app, WorkbenchSearchSelectState *picker, const char *selected_id) {
+    LinkedList registrations;
+    const LinkedListNode *current = 0;
+    int selected_index = -1;
+
+    if (!WorkbenchSearchSelectState_needs_refresh(picker)) return;
+
+    WorkbenchSearchSelectState_reset(picker);
+    LinkedList_init(&registrations);
+    if (RegistrationRepository_load_all(&app->application.registration_repository, &registrations).success != 1) return;
+
+    current = registrations.head;
+    while (current != 0) {
+        const Registration *r = (const Registration *)current->data;
+        char label[WORKBENCH_SELECT_LABEL_CAPACITY];
+        const char *status_text = r->status == REG_STATUS_PENDING ? "待诊" :
+                                  r->status == REG_STATUS_DIAGNOSED ? "已诊" : "已取消";
+        snprintf(label, sizeof(label), "%s | 患者=%s | %s | %s", r->registration_id, r->patient_id, status_text, r->registered_at);
+        if (Workbench_text_contains_ignore_case(label, picker->query)) {
+            if (selected_id != 0 && strcmp(selected_id, r->registration_id) == 0) {
+                selected_index = picker->option_count;
+            }
+            WorkbenchSearchSelectState_add_option(picker, label);
+        }
+        current = current->next;
+    }
+
+    WorkbenchSearchSelectState_finalize(picker);
+    picker->active_index = selected_index;
+    RegistrationRepository_clear_list(&registrations);
+}
+
+static void clerk_refresh_reg_patient_select(DesktopApp *app, const char *selected_id) {
+    LinkedList patients;
+    const LinkedListNode *current = 0;
+    int selected_index = -1;
+    Result result;
+
+    if (!WorkbenchSearchSelectState_needs_refresh(&g_clerk_reg_patient_select)) return;
+
+    WorkbenchSearchSelectState_reset(&g_clerk_reg_patient_select);
+    LinkedList_init(&patients);
+    result = DesktopAdapters_search_patients(&app->application, DESKTOP_PATIENT_SEARCH_BY_NAME, "", &patients);
+    if (result.success != 1) return;
+
+    current = patients.head;
+    while (current != 0) {
+        const Patient *patient = (const Patient *)current->data;
+        char label[WORKBENCH_SELECT_LABEL_CAPACITY];
+        snprintf(label, sizeof(label), "%s | %s | %d岁", patient->patient_id, patient->name, patient->age);
+        if (Workbench_text_contains_ignore_case(label, g_clerk_reg_patient_select.query)) {
+            if (selected_id != 0 && strcmp(selected_id, patient->patient_id) == 0) {
+                selected_index = g_clerk_reg_patient_select.option_count;
+            }
+            WorkbenchSearchSelectState_add_option(&g_clerk_reg_patient_select, label);
+        }
+        current = current->next;
+    }
+
+    WorkbenchSearchSelectState_finalize(&g_clerk_reg_patient_select);
+    g_clerk_reg_patient_select.active_index = selected_index;
+    LinkedList_clear(&patients, free);
 }
 
 static int parse_age(const char *text) {
@@ -563,6 +630,15 @@ static void clerk_draw_reg_query(DesktopApp *app, Rectangle panel) {
     Result result;
     int search_clicked = 0;
 
+    Rectangle reg_search = { split.detail_bounds.x + 16, split.detail_bounds.y + 50, split.detail_bounds.width - 32, 34 };
+    Rectangle reg_list = { split.detail_bounds.x + 16, split.detail_bounds.y + 92, split.detail_bounds.width - 32, split.detail_bounds.height * 0.35f };
+    Rectangle patient_search = { split.detail_bounds.x + 16, split.detail_bounds.y + split.detail_bounds.height * 0.48f, split.detail_bounds.width - 32, 34 };
+    Rectangle patient_list = { split.detail_bounds.x + 16, split.detail_bounds.y + split.detail_bounds.height * 0.48f + 42, split.detail_bounds.width - 32, split.detail_bounds.height * 0.30f };
+
+    clerk_refresh_registration_select(app, &g_clerk_registration_select, query_registration_id);
+    clerk_refresh_reg_patient_select(app, query_patient_id);
+
+    /* Left panel */
     DrawRectangleRounded(split.list_bounds, 0.12f, 8, app->theme.panel);
     DrawRectangleRoundedLinesEx(split.list_bounds, 0.12f, 8, 1.0f, Fade(app->theme.border, 0.85f));
     DrawText("挂号查询与取消", (int)split.list_bounds.x + 16, (int)split.list_bounds.y + 14, 24, app->theme.text_primary);
@@ -570,63 +646,87 @@ static void clerk_draw_reg_query(DesktopApp *app, Rectangle panel) {
     /* Query by Registration ID */
     Workbench_draw_section_header(app, (int)split.list_bounds.x + 16, (int)split.list_bounds.y + 54, "按挂号编号查询");
 
-    Workbench_draw_search_box(
+    Workbench_draw_form_label(app, (int)split.list_bounds.x + 16, (int)split.list_bounds.y + 88, "已选挂号", 1);
+    Workbench_draw_status_badge(
         app,
-        (Rectangle){ split.list_bounds.x + 16, split.list_bounds.y + 88, split.list_bounds.width - 32, 34 },
-        query_registration_id, sizeof(query_registration_id),
-        &active_field, 1,
-        &search_clicked
+        (Rectangle){ split.list_bounds.x + 120, split.list_bounds.y + 84, split.list_bounds.width - 136, 28 },
+        query_registration_id[0] != '\0' ? query_registration_id : "请在右侧搜索并选择挂号记录",
+        app->theme.nav_active
     );
 
-    if (search_clicked) {
+    if (GuiButton((Rectangle){ split.list_bounds.x + 16, split.list_bounds.y + 122, split.list_bounds.width - 32, 36 }, "按挂号编号查询")) {
         result = DesktopAdapters_query_registration(&app->application, query_registration_id, output, sizeof(output));
         Workbench_show_result(app, result);
-        search_clicked = 0;
     }
 
     /* Query by Patient ID */
-    Workbench_draw_section_header(app, (int)split.list_bounds.x + 16, (int)split.list_bounds.y + 136, "按患者编号查询");
+    Workbench_draw_section_header(app, (int)split.list_bounds.x + 16, (int)split.list_bounds.y + 172, "按患者编号查询");
 
-    search_clicked = 0;
-    Workbench_draw_search_box(
+    Workbench_draw_form_label(app, (int)split.list_bounds.x + 16, (int)split.list_bounds.y + 206, "已选患者", 1);
+    Workbench_draw_status_badge(
         app,
-        (Rectangle){ split.list_bounds.x + 16, split.list_bounds.y + 170, split.list_bounds.width - 32, 34 },
-        query_patient_id, sizeof(query_patient_id),
-        &active_field, 2,
-        &search_clicked
+        (Rectangle){ split.list_bounds.x + 120, split.list_bounds.y + 202, split.list_bounds.width - 136, 28 },
+        query_patient_id[0] != '\0' ? query_patient_id : "请在右侧搜索并选择患者",
+        app->theme.nav_active
     );
 
-    if (search_clicked) {
+    search_clicked = 0;
+    if (GuiButton((Rectangle){ split.list_bounds.x + 16, split.list_bounds.y + 240, split.list_bounds.width - 32, 36 }, "按患者编号查询")) {
         result = DesktopAdapters_query_registrations_by_patient(&app->application, query_patient_id, output, sizeof(output));
         Workbench_show_result(app, result);
     }
 
     /* Cancel Registration */
-    Workbench_draw_section_header(app, (int)split.list_bounds.x + 16, (int)split.list_bounds.y + 218, "取消挂号");
+    Workbench_draw_section_header(app, (int)split.list_bounds.x + 16, (int)split.list_bounds.y + 290, "取消挂号");
 
-    Workbench_draw_form_label(app, (int)split.list_bounds.x + 16, (int)split.list_bounds.y + 252, "挂号编号", 1);
-    Workbench_draw_text_input((Rectangle){ split.list_bounds.x + 16, split.list_bounds.y + 274, split.list_bounds.width - 32, 34 }, cancel_registration_id, sizeof(cancel_registration_id), 1, &active_field, 3);
+    Workbench_draw_form_label(app, (int)split.list_bounds.x + 16, (int)split.list_bounds.y + 324, "挂号编号", 1);
+    Workbench_draw_status_badge(
+        app,
+        (Rectangle){ split.list_bounds.x + 120, split.list_bounds.y + 320, split.list_bounds.width - 136, 28 },
+        cancel_registration_id[0] != '\0' ? cancel_registration_id : "选择挂号记录后自动填入",
+        app->theme.nav_active
+    );
 
-    Workbench_draw_form_label(app, (int)split.list_bounds.x + 16, (int)split.list_bounds.y + 318, "取消时间", 1);
+    Workbench_draw_form_label(app, (int)split.list_bounds.x + 16, (int)split.list_bounds.y + 358, "取消时间", 1);
     {
         static WorkbenchDatePickerState clerk_cancel_dp;
         static int clerk_cancel_dp_init = 0;
         if (!clerk_cancel_dp_init) { WorkbenchDatePickerState_init(&clerk_cancel_dp); clerk_cancel_dp_init = 1; }
-        Workbench_draw_date_picker(app, (Rectangle){ split.list_bounds.x + 16, split.list_bounds.y + 340, split.list_bounds.width - 32, 34 }, &clerk_cancel_dp, cancel_time, sizeof(cancel_time), &active_field, 4);
+        Workbench_draw_date_picker(app, (Rectangle){ split.list_bounds.x + 16, split.list_bounds.y + 380, split.list_bounds.width - 32, 34 }, &clerk_cancel_dp, cancel_time, sizeof(cancel_time), &active_field, 4);
     }
 
-    if (GuiButton((Rectangle){ split.list_bounds.x + 16, split.list_bounds.y + 388, 120, 36 }, "取消挂号")) {
+    if (GuiButton((Rectangle){ split.list_bounds.x + 16, split.list_bounds.y + 428, 120, 36 }, "取消挂号")) {
         result = DesktopAdapters_cancel_registration(&app->application, cancel_registration_id, cancel_time, output, sizeof(output));
         Workbench_show_result(app, result);
+        if (result.success) {
+            WorkbenchSearchSelectState_mark_dirty(&g_clerk_registration_select);
+        }
     }
 
     Workbench_draw_output_panel(
         app,
-        split.detail_bounds,
-        "挂号查询结果",
+        (Rectangle){ split.list_bounds.x + 16, split.list_bounds.y + 478, split.list_bounds.width - 32, split.list_bounds.height - 494 },
+        "查询结果",
         output,
         "可按挂号编号查询，也可按患者编号查询并执行取消。"
     );
+
+    /* Right panel */
+    DrawRectangleRounded(split.detail_bounds, 0.12f, 8, app->theme.panel);
+    DrawRectangleRoundedLinesEx(split.detail_bounds, 0.12f, 8, 1.0f, Fade(app->theme.border, 0.85f));
+
+    DrawText("挂号记录搜索", (int)split.detail_bounds.x + 16, (int)split.detail_bounds.y + 16, 20, app->theme.text_primary);
+    Workbench_draw_search_select(app, reg_search, reg_list, &g_clerk_registration_select, &active_field, 21);
+    if (g_clerk_registration_select.active_index >= 0 && g_clerk_registration_select.active_index < g_clerk_registration_select.option_count) {
+        sscanf(g_clerk_registration_select.labels[g_clerk_registration_select.active_index], "%15s", query_registration_id);
+        sscanf(g_clerk_registration_select.labels[g_clerk_registration_select.active_index], "%15s", cancel_registration_id);
+    }
+
+    DrawText("患者搜索", (int)split.detail_bounds.x + 16, (int)(split.detail_bounds.y + split.detail_bounds.height * 0.48f - 28), 20, app->theme.text_primary);
+    Workbench_draw_search_select(app, patient_search, patient_list, &g_clerk_reg_patient_select, &active_field, 22);
+    if (g_clerk_reg_patient_select.active_index >= 0 && g_clerk_reg_patient_select.active_index < g_clerk_reg_patient_select.option_count) {
+        sscanf(g_clerk_reg_patient_select.labels[g_clerk_reg_patient_select.active_index], "%15s", query_patient_id);
+    }
 }
 
 void ClerkWorkbench_draw(DesktopApp *app, Rectangle panel, int page) {
@@ -634,6 +734,8 @@ void ClerkWorkbench_draw(DesktopApp *app, Rectangle panel, int page) {
         WorkbenchSearchSelectState_mark_dirty(&g_clerk_patient_select);
         WorkbenchSearchSelectState_mark_dirty(&g_clerk_department_select);
         WorkbenchSearchSelectState_mark_dirty(&g_clerk_doctor_select);
+        WorkbenchSearchSelectState_mark_dirty(&g_clerk_registration_select);
+        WorkbenchSearchSelectState_mark_dirty(&g_clerk_reg_patient_select);
         g_clerk_initialized = 1;
     }
     switch (page) {

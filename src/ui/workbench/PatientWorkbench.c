@@ -7,8 +7,10 @@
 #include <string.h>
 #include <time.h>
 
+#include "domain/Medicine.h"
 #include "repository/DepartmentRepository.h"
 #include "repository/DoctorRepository.h"
+#include "repository/MedicineRepository.h"
 #include "raygui.h"
 #include "ui/DesktopAdapters.h"
 #include "ui/DesktopApp.h"
@@ -20,6 +22,7 @@ typedef struct PatientRegistrationViewState {
 static PatientRegistrationViewState g_patient_registration_view;
 static WorkbenchSearchSelectState g_patient_department_select;
 static WorkbenchSearchSelectState g_patient_doctor_select;
+static WorkbenchSearchSelectState g_patient_medicine_select;
 
 static void patient_refresh_department_select(DesktopApp *app, DesktopRegistrationPageState *state) {
     LinkedList departments;
@@ -97,6 +100,38 @@ static void patient_refresh_doctor_select(DesktopApp *app, DesktopRegistrationPa
     WorkbenchSearchSelectState_finalize(&g_patient_doctor_select);
     g_patient_doctor_select.active_index = selected_index;
     DoctorService_clear_list(&doctors);
+}
+
+static void patient_refresh_medicine_select(DesktopApp *app, const char *selected_id) {
+    LinkedList medicines;
+    const LinkedListNode *current = 0;
+    int selected_index = -1;
+
+    if (!WorkbenchSearchSelectState_needs_refresh(&g_patient_medicine_select)) return;
+
+    WorkbenchSearchSelectState_reset(&g_patient_medicine_select);
+    LinkedList_init(&medicines);
+    if (MedicineRepository_load_all(&app->application.pharmacy_service.medicine_repository, &medicines).success != 1) {
+        return;
+    }
+
+    current = medicines.head;
+    while (current != 0) {
+        const Medicine *m = (const Medicine *)current->data;
+        char label[WORKBENCH_SELECT_LABEL_CAPACITY];
+        snprintf(label, sizeof(label), "%s | %s | %.2f元", m->medicine_id, m->name, m->price);
+        if (Workbench_text_contains_ignore_case(label, g_patient_medicine_select.query)) {
+            if (selected_id != 0 && strcmp(selected_id, m->medicine_id) == 0) {
+                selected_index = g_patient_medicine_select.option_count;
+            }
+            WorkbenchSearchSelectState_add_option(&g_patient_medicine_select, label);
+        }
+        current = current->next;
+    }
+
+    WorkbenchSearchSelectState_finalize(&g_patient_medicine_select);
+    g_patient_medicine_select.active_index = selected_index;
+    MedicineRepository_clear_list(&medicines);
 }
 
 static void auto_bind_patient_id(DesktopApp *app) {
@@ -584,49 +619,54 @@ static void patient_draw_dispense(DesktopApp *app, Rectangle panel) {
     DrawRectangleRoundedLinesEx(split.detail_bounds, 0.12f, 8, 1.0f, Fade(app->theme.border, 0.85f));
     DrawText("药品说明查询", (int)split.detail_bounds.x + 16, (int)split.detail_bounds.y + 14, 24, app->theme.text_primary);
 
-    Workbench_draw_form_label(app, (int)split.detail_bounds.x + 16, (int)split.detail_bounds.y + 56, "药品编号", 0);
-    Workbench_draw_text_input(
-        (Rectangle){ split.detail_bounds.x + 16, split.detail_bounds.y + 78, split.detail_bounds.width - 152, 34 },
-        medicine_state->stock_query_medicine_id,
-        sizeof(medicine_state->stock_query_medicine_id),
-        1,
-        &medicine_state->active_field,
-        1
-    );
-    if (GuiButton((Rectangle){ split.detail_bounds.x + split.detail_bounds.width - 118, split.detail_bounds.y + 78, 102, 34 }, "查询说明")) {
-        result = DesktopAdapters_query_medicine_detail(
-            &app->application,
-            medicine_state->stock_query_medicine_id,
-            1,
-            medicine_state->output,
-            sizeof(medicine_state->output)
-        );
-        Workbench_show_result(app, result);
-    }
+    {
+        Rectangle medicine_search = { split.detail_bounds.x + 16, split.detail_bounds.y + 50, split.detail_bounds.width - 32, 34 };
+        Rectangle medicine_list = { split.detail_bounds.x + 16, split.detail_bounds.y + 92, split.detail_bounds.width - 32, split.detail_bounds.height * 0.36f };
+        float button_y = split.detail_bounds.y + 92 + split.detail_bounds.height * 0.36f + 8;
+        float info_y = button_y + 44;
 
-    /* Medicine information display */
-    DrawRectangleRounded(
-        (Rectangle){ split.detail_bounds.x + 12, split.detail_bounds.y + 128, split.detail_bounds.width - 24, split.detail_bounds.height - 140 },
-        0.12f, 8, Fade(app->theme.border, 0.05f)
-    );
-    DrawRectangleRoundedLinesEx(
-        (Rectangle){ split.detail_bounds.x + 12, split.detail_bounds.y + 128, split.detail_bounds.width - 24, split.detail_bounds.height - 140 },
-        0.12f, 8, 1.0f, Fade(app->theme.border, 0.3f)
-    );
-    DrawText(
-        "药品说明",
-        (int)split.detail_bounds.x + 24,
-        (int)split.detail_bounds.y + 140,
-        18,
-        app->theme.text_primary
-    );
-    DrawText(
-        medicine_state->output[0] != '\0' ? medicine_state->output : "输入药品编号后点击【查询说明】查看药品的详细信息，包括名称、规格、用法用量等。",
-        (int)split.detail_bounds.x + 24,
-        (int)split.detail_bounds.y + 168,
-        17,
-        app->theme.text_secondary
-    );
+        patient_refresh_medicine_select(app, medicine_state->stock_query_medicine_id);
+        Workbench_draw_search_select(app, medicine_search, medicine_list, &g_patient_medicine_select, &medicine_state->active_field, 23);
+        if (g_patient_medicine_select.active_index >= 0 &&
+            g_patient_medicine_select.active_index < g_patient_medicine_select.option_count) {
+            sscanf(g_patient_medicine_select.labels[g_patient_medicine_select.active_index], "%15s", medicine_state->stock_query_medicine_id);
+        }
+
+        if (GuiButton((Rectangle){ split.detail_bounds.x + 16, button_y, 102, 34 }, "查询说明")) {
+            result = DesktopAdapters_query_medicine_detail(
+                &app->application,
+                medicine_state->stock_query_medicine_id,
+                1,
+                medicine_state->output,
+                sizeof(medicine_state->output)
+            );
+            Workbench_show_result(app, result);
+        }
+
+        /* Medicine information display */
+        DrawRectangleRounded(
+            (Rectangle){ split.detail_bounds.x + 12, info_y, split.detail_bounds.width - 24, split.detail_bounds.y + split.detail_bounds.height - info_y - 12 },
+            0.12f, 8, Fade(app->theme.border, 0.05f)
+        );
+        DrawRectangleRoundedLinesEx(
+            (Rectangle){ split.detail_bounds.x + 12, info_y, split.detail_bounds.width - 24, split.detail_bounds.y + split.detail_bounds.height - info_y - 12 },
+            0.12f, 8, 1.0f, Fade(app->theme.border, 0.3f)
+        );
+        DrawText(
+            "药品说明",
+            (int)split.detail_bounds.x + 24,
+            (int)info_y + 12,
+            18,
+            app->theme.text_primary
+        );
+        DrawText(
+            medicine_state->output[0] != '\0' ? medicine_state->output : "选择药品后点击【查询说明】查看药品的详细信息，包括名称、规格、用法用量等。",
+            (int)split.detail_bounds.x + 24,
+            (int)info_y + 40,
+            17,
+            app->theme.text_secondary
+        );
+    }
 }
 
 void PatientWorkbench_draw(DesktopApp *app, Rectangle panel, int page) {
@@ -634,6 +674,7 @@ void PatientWorkbench_draw(DesktopApp *app, Rectangle panel, int page) {
     if (!initialized) {
         WorkbenchSearchSelectState_mark_dirty(&g_patient_department_select);
         WorkbenchSearchSelectState_mark_dirty(&g_patient_doctor_select);
+        WorkbenchSearchSelectState_mark_dirty(&g_patient_medicine_select);
         initialized = 1;
     }
     switch (page) {
