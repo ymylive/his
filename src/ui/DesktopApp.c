@@ -461,17 +461,12 @@ int DesktopApp_run(const DesktopAppConfig *config) {
     }
 
     SetConfigFlags(FLAG_WINDOW_RESIZABLE | FLAG_VSYNC_HINT | FLAG_MSAA_4X_HINT | FLAG_WINDOW_HIGHDPI);
-    DesktopApp_resolve_initial_window_size(
-        config->width,
-        config->height,
-        0,
-        0,
-        &window_width,
-        &window_height
-    );
+    /* On macOS with HIGHDPI, GLFW_SCALE_TO_MONITOR may scale the initial window
+     * size. Start with a small safe size, then resize after querying the monitor
+     * to keep screen/render ratio consistent and avoid mouse offset. */
     InitWindow(
-        window_width,
-        window_height,
+        800,
+        600,
         config->title != 0 ? config->title : "Lightweight HIS Desktop"
     );
     {
@@ -498,9 +493,7 @@ int DesktopApp_run(const DesktopAppConfig *config) {
         );
 
         SetWindowMinSize(min_window_width, min_window_height);
-        if (GetScreenWidth() != window_width || GetScreenHeight() != window_height) {
-            SetWindowSize(window_width, window_height);
-        }
+        SetWindowSize(window_width, window_height);
         SetWindowPosition(
             (int)monitor_position.x + (monitor_width - window_width) / 2,
             (int)monitor_position.y + (monitor_height - window_height) / 2
