@@ -411,6 +411,9 @@ void Workbench_draw_sidebar(DesktopApp *app, const WorkbenchDef *wb) {
     DrawRectangle(0, app->theme.topbar_height, 4,
                   GetScreenHeight() - app->theme.topbar_height, wb->accent);
 
+    /* Role icon indicator */
+    DrawCircle(12, app->theme.topbar_height + 22, 5.0f, wb->accent);
+
     /* Role title */
     DrawText(wb->title, 18, app->theme.topbar_height + 18, 20, app->theme.text_primary);
     DrawText(wb->subtitle, 18, app->theme.topbar_height + 44, 16, app->theme.text_secondary);
@@ -427,11 +430,19 @@ void Workbench_draw_sidebar(DesktopApp *app, const WorkbenchDef *wb) {
         if (app->state.workbench_page == wb->nav[i].page_id) {
             DrawRectangleRounded(btn, 0.22f, 8, Fade(wb->accent, 0.14f));
             DrawRectangle((int)btn.x, (int)btn.y + 4, 3, (int)btn.height - 8, wb->accent);
+        } else if (CheckCollisionPointRec(GetMousePosition(), btn)) {
+            DrawRectangleRounded(btn, 0.22f, 8, Fade(wb->accent, 0.06f));
         }
 
         if (GuiButton(btn, wb->nav[i].label)) {
             app->state.workbench_page = wb->nav[i].page_id;
         }
+    }
+
+    /* Bottom separator after nav section */
+    {
+        int nav_bottom_y = app->theme.topbar_height + 78 + wb->nav_count * 52 + 8;
+        DrawLine(18, nav_bottom_y, app->theme.sidebar_width - 18, nav_bottom_y, Fade(app->theme.border, 0.3f));
     }
 }
 

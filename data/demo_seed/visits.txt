@@ -13,3 +13,5 @@ VIS0011|REG0015|PAT0016|DOC0008|DEP0005|chest pain after exercise|stable angina|
 VIS0012|REG0017|PAT0018|DOC0009|DEP0006|shoulder pain|rotator cuff strain|physical therapy and analgesic|0|0|1|2026-03-28 10:05
 VIS0013|REG0018|PAT0019|DOC0004|DEP0004|night cough|copd exacerbation|admit for oxygen observation|1|1|1|2026-03-28 10:45
 VIS0014|REG0020|PAT0024|DOC0009|DEP0006|lumbar pain|lumbar muscle strain|pain control and medicine review|0|0|1|2026-03-28 14:45
+VIS0015|REG0023|PAT0027|DOC0008|DEP0005|chest tightness and dizziness|hypertensive heart disease|admit for cardiac monitoring|1|1|1|2026-03-29 09:50
+VIS0016|REG0027|PAT0001|DOC0008|DEP0005|occasional palpitation|sinus tachycardia|ecg monitoring and follow-up|1|0|1|2026-03-29 14:30

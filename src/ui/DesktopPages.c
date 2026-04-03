@@ -156,7 +156,7 @@ DesktopLoginLayout DesktopPages_compute_login_layout(
     password_y = user_y + field_height + 32.0f;
     role_y = password_y + field_height + 32.0f;
     login_y = role_y + field_height + 32.0f;
-    card_height = login_y + 48.0f + 80.0f;
+    card_height = login_y + 48.0f + 200.0f;
     card_height = DesktopPages_clampf(card_height, 480.0f, (float)screen_height - margin * 2.0f);
     card_x = ((float)screen_width - card_width) * 0.5f;
     card_y = ((float)screen_height - card_height) * 0.5f;
@@ -196,14 +196,26 @@ static void DesktopPages_show_result_message(DesktopApp *app, const Result resul
 static void DesktopPages_draw_message_bar(DesktopApp *app) {
     Rectangle rect;
     Color background;
+    Color icon_color;
+    double elapsed;
+    float alpha;
 
     if (app->state.message.visible == 0) {
         return;
     }
 
-    if (GetTime() - app->state.message.show_time >= 3.0) {
+    elapsed = GetTime() - app->state.message.show_time;
+
+    if (elapsed >= 3.0) {
         app->state.message.visible = 0;
         return;
+    }
+
+    /* Fade-out during the last 0.5 seconds */
+    if (elapsed < 2.5) {
+        alpha = 1.0f;
+    } else {
+        alpha = (float)(3.0 - elapsed) / 0.5f;
     }
 
     rect = (Rectangle){
@@ -216,23 +228,29 @@ static void DesktopPages_draw_message_bar(DesktopApp *app) {
     switch (app->state.message.kind) {
         case DESKTOP_MESSAGE_SUCCESS:
             background = app->theme.success;
+            icon_color = app->theme.success;
             break;
         case DESKTOP_MESSAGE_WARNING:
             background = app->theme.warning;
+            icon_color = app->theme.warning;
             break;
         case DESKTOP_MESSAGE_ERROR:
             background = app->theme.error;
+            icon_color = app->theme.error;
             break;
         default:
             background = app->theme.accent;
+            icon_color = app->theme.accent;
             break;
     }
 
-    DrawRectangleRounded(rect, 0.2f, 8, Fade(background, 0.18f));
-    DrawRectangleRoundedLinesEx(rect, 0.2f, 8, 1.0f, Fade(background, 0.35f));
+    DrawRectangleRounded(rect, 0.2f, 8, Fade(background, 0.18f * alpha));
+    DrawRectangleRoundedLinesEx(rect, 0.2f, 8, 1.0f, Fade(background, 0.35f * alpha));
     /* Left accent stripe */
-    DrawRectangle((int)rect.x + 2, (int)rect.y + 4, 3, (int)rect.height - 8, background);
-    DrawText(app->state.message.text, (int)rect.x + 20, (int)rect.y + 9, 18, app->theme.text_primary);
+    DrawRectangle((int)rect.x + 2, (int)rect.y + 4, 3, (int)rect.height - 8, Fade(background, alpha));
+    /* Icon dot indicating message kind */
+    DrawCircle((int)rect.x + 12, (int)(rect.y + rect.height / 2), 4, Fade(icon_color, alpha));
+    DrawText(app->state.message.text, (int)rect.x + 26, (int)rect.y + 9, 18, Fade(app->theme.text_primary, alpha));
 }
 
 static void DesktopPages_release_focus_on_click(
@@ -402,8 +420,20 @@ static void DesktopPages_draw_login(DesktopApp *app) {
             app->state.login_form.role_index + 1);
     }
 
-    /* ── Login button (filled accent) ── */
-    DrawRectangleRounded(login_button, 0.18f, 8, app->theme.nav_active);
+    /* ── Login button (filled accent with hover) ── */
+    {
+        int login_hovered = CheckCollisionPointRec(GetMousePosition(), login_button);
+        Color login_bg = app->theme.nav_active;
+        if (login_hovered) {
+            login_bg = (Color){
+                (unsigned char)DesktopPages_minf(login_bg.r + 30, 255),
+                (unsigned char)DesktopPages_minf(login_bg.g + 30, 255),
+                (unsigned char)DesktopPages_minf(login_bg.b + 30, 255),
+                login_bg.a
+            };
+        }
+        DrawRectangleRounded(login_button, 0.18f, 8, login_bg);
+    }
     {
         const char *btn_text = "登录";
         int tw = MeasureText(btn_text, 22);
@@ -441,8 +471,12 @@ static void DesktopPages_draw_login(DesktopApp *app) {
     GuiSetStyle(BUTTON, BASE_COLOR_PRESSED, saved_base_p);
     GuiSetStyle(BUTTON, TEXT_COLOR_NORMAL, saved_text_n);
 
-    /* ── Reset button (ghost/outline) ── */
-    DrawRectangleRounded(reset_button, 0.18f, 8, BLANK);
+    /* ── Reset button (ghost/outline with hover) ── */
+    {
+        int reset_hovered = CheckCollisionPointRec(GetMousePosition(), reset_button);
+        DrawRectangleRounded(reset_button, 0.18f, 8,
+                             reset_hovered ? Fade(app->theme.border, 0.10f) : BLANK);
+    }
     DrawRectangleRoundedLinesEx(reset_button, 0.18f, 8, 1.0f,
                                 Fade(app->theme.border, 0.5f));
     {
@@ -483,14 +517,46 @@ static void DesktopPages_draw_login(DesktopApp *app) {
     GuiSetStyle(BUTTON, BASE_COLOR_PRESSED, saved_base_p);
     GuiSetStyle(BUTTON, TEXT_COLOR_NORMAL, saved_text_n);
 
-    /* ── Footer demo hint ── */
+    /* ── Demo accounts reference panel ── */
     {
-        const char *hint = "演示账号: PAT0001 / patient123";
-        int hw = MeasureText(hint, 15);
-        DrawText(hint,
-                 (int)(card.x + card.width / 2 - hw / 2),
-                 (int)(card.y + card.height - 28), 15,
-                 Fade(app->theme.text_secondary, 0.5f));
+        Color hint_color = Fade(app->theme.text_secondary, 0.45f);
+        float panel_x = reset_button.x;
+        float panel_y = reset_button.y + reset_button.height + 16.0f;
+        float col_width = (login_button.width) / 2.0f;
+        int font_size = 14;
+        int line_h = 20;
+        int i;
+
+        /* Section title */
+        DrawText("演示账号",
+                 (int)panel_x, (int)panel_y, 15, hint_color);
+        panel_y += 22.0f;
+
+        /* 7 accounts in 2 columns (4 left, 3 right) */
+        {
+            const char *left_col[] = {
+                "患者: PAT0001 / patient123",
+                "医生: DOC0001 / doctor123",
+                "管理员: ADM0001 / admin123",
+                "挂号员: CLK0001 / clerk123"
+            };
+            const char *right_col[] = {
+                "住院登记: INP0001 / inpatient123",
+                "病区管理: WRD0001 / ward123",
+                "药房: PHA0001 / pharmacy123"
+            };
+
+            for (i = 0; i < 4; i++) {
+                DrawText(left_col[i],
+                         (int)panel_x, (int)(panel_y + i * line_h),
+                         font_size, hint_color);
+            }
+            for (i = 0; i < 3; i++) {
+                DrawText(right_col[i],
+                         (int)(panel_x + col_width), (int)(panel_y + i * line_h),
+                         font_size, hint_color);
+            }
+        }
     }
 }
 
