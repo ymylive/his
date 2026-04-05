@@ -4,6 +4,29 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## [2.5.0] - 2026-04-05
+
+### Added
+
+- **全平台自适应渲染引擎** - 基于 1366×768 参考分辨率的动态缩放系统
+  - 新增 `scale_factor` 自动计算，所有 UI 尺寸按窗口实际大小等比缩放
+  - `DrawText` / `MeasureText` 宏自动应用文字缩放，覆盖全部 117+ 处绘制调用
+  - CJK 字体按 DPI 倍率加载，高分辨率屏幕文字清晰无模糊
+
+### Fixed
+
+- **中文文字居中/对齐错位** - `MeasureText` 使用默认字体测量而 `DrawText` 使用 CJK 字体渲染
+  - 新增 `DesktopTheme_measure_text()` 并统一覆盖 `MeasureText` 宏
+  - 角色选择器、登录按钮、状态徽章等所有居中文字修复
+
+### Changed
+
+- **响应式布局** - 多个关键组件适配窄屏与大屏
+  - 首页统计卡片窄屏自动 4 列→2 列切换
+  - 病床网格按可用宽度自适应列数，不再固定 10 列
+  - 侧边栏、顶栏、日历弹窗、搜索框按比例缩放
+  - 登录页卡片、字段、按钮、演示账号面板全部自适应
+
 ## [2.4.0] - 2026-04-02
 
 ### Changed
