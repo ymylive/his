@@ -485,8 +485,14 @@ int DesktopApp_run(const DesktopAppConfig *config) {
         );
     }
     SetTargetFPS(60);
-    if (DesktopTheme_enable_cjk_font(40, loaded_font_path, sizeof(loaded_font_path)) == 0) {
-        fprintf(stderr, "未找到可用 CJK 字体，回退到默认字体\n");
+    DesktopTheme_update_scale(&app.theme, window_width, window_height);
+    {
+        int font_size = DesktopTheme_scaled(&app.theme, 40);
+        if (font_size < 28) font_size = 28;
+        if (font_size > 80) font_size = 80;
+        if (DesktopTheme_enable_cjk_font(font_size, loaded_font_path, sizeof(loaded_font_path)) == 0) {
+            fprintf(stderr, "未找到可用 CJK 字体，回退到默认字体\n");
+        }
     }
     DesktopTheme_apply_raygui_style(&app.theme);
     if (config->smoke_mode != 0) {
@@ -500,6 +506,7 @@ int DesktopApp_run(const DesktopAppConfig *config) {
     }
 
     while (!WindowShouldClose() && app.state.should_close == 0) {
+        DesktopTheme_update_scale(&app.theme, GetScreenWidth(), GetScreenHeight());
         BeginDrawing();
         ClearBackground(app.theme.background);
         DesktopPages_draw(&app);

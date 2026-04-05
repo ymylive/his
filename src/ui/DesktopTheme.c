@@ -8,6 +8,7 @@
 
 static Font g_desktop_font;
 static int g_desktop_font_loaded = 0;
+static float g_desktop_text_scale = 1.0f;
 
 /* Platform-specific font paths */
 #ifdef _WIN32
@@ -160,8 +161,65 @@ DesktopTheme DesktopTheme_make_default(void) {
     theme.sidebar_width = 248;
     theme.topbar_height = 84;
     theme.card_height = 132;
+    theme.scale_factor = 1.0f;
 
     return theme;
+}
+
+void DesktopTheme_update_scale(DesktopTheme *theme, int screen_width, int screen_height) {
+    float scale = 1.0f;
+    float width_scale = 1.0f;
+    float height_scale = 1.0f;
+
+    if (theme == 0 || screen_width <= 0 || screen_height <= 0) {
+        return;
+    }
+
+    /* Scale relative to 1366x768 reference resolution */
+    width_scale = (float)screen_width / 1366.0f;
+    height_scale = (float)screen_height / 768.0f;
+    /* Use the smaller axis to ensure everything fits */
+    scale = width_scale < height_scale ? width_scale : height_scale;
+
+    /* Clamp scale to reasonable range */
+    if (scale < 0.65f) {
+        scale = 0.65f;
+    }
+    if (scale > 2.0f) {
+        scale = 2.0f;
+    }
+
+    theme->scale_factor = scale;
+    g_desktop_text_scale = scale;
+    theme->margin = (int)(28.0f * scale + 0.5f);
+    theme->spacing = (int)(18.0f * scale + 0.5f);
+    theme->sidebar_width = (int)(248.0f * scale + 0.5f);
+    theme->topbar_height = (int)(84.0f * scale + 0.5f);
+    theme->card_height = (int)(132.0f * scale + 0.5f);
+
+    /* Enforce minimum sidebar and topbar sizes */
+    if (theme->sidebar_width < 160) {
+        theme->sidebar_width = 160;
+    }
+    if (theme->topbar_height < 56) {
+        theme->topbar_height = 56;
+    }
+    if (theme->margin < 12) {
+        theme->margin = 12;
+    }
+    if (theme->spacing < 8) {
+        theme->spacing = 8;
+    }
+}
+
+int DesktopTheme_scaled(const DesktopTheme *theme, int base_value) {
+    float scale = (theme != 0) ? theme->scale_factor : 1.0f;
+    return (int)((float)base_value * scale + 0.5f);
+}
+
+float DesktopTheme_scaledf(const DesktopTheme *theme, float base_value) {
+    float scale = (theme != 0) ? theme->scale_factor : 1.0f;
+    return base_value * scale;
 }
 
 const char *DesktopTheme_resolve_cjk_font_path(DesktopThemeFileExistsFn file_exists) {
@@ -248,7 +306,11 @@ void DesktopTheme_apply_raygui_style(const DesktopTheme *theme) {
     GuiSetStyle(DEFAULT, TEXT_COLOR_DISABLED, ColorToInt(theme->text_secondary));
     GuiSetStyle(DEFAULT, LINE_COLOR, ColorToInt(theme->border));
     GuiSetStyle(DEFAULT, BACKGROUND_COLOR, ColorToInt(theme->background));
-    GuiSetStyle(DEFAULT, TEXT_SIZE, 20);
+    {
+        int text_size = (int)(20.0f * theme->scale_factor + 0.5f);
+        if (text_size < 14) text_size = 14;
+        GuiSetStyle(DEFAULT, TEXT_SIZE, text_size);
+    }
     GuiSetStyle(DEFAULT, TEXT_SPACING, 1);
     GuiSetStyle(LABEL, TEXT_ALIGNMENT, TEXT_ALIGN_LEFT);
     GuiSetStyle(TEXTBOX, TEXT_ALIGNMENT, TEXT_ALIGN_LEFT);
@@ -297,13 +359,28 @@ void DesktopTheme_apply_raygui_style(const DesktopTheme *theme) {
 void DesktopTheme_draw_text(const char *text, int pos_x, int pos_y, int font_size, Color color) {
     Font font = g_desktop_font_loaded != 0 ? g_desktop_font : GetFontDefault();
     const char *safe_text = text != 0 ? text : "";
+    float scaled_size = (float)font_size * g_desktop_text_scale;
 
     DrawTextEx(
         font,
         safe_text,
         (Vector2){ (float)pos_x, (float)pos_y },
-        (float)font_size,
+        scaled_size,
         1.0f,
         color
     );
+}
+
+int DesktopTheme_measure_text(const char *text, int font_size) {
+    Font font = g_desktop_font_loaded != 0 ? g_desktop_font : GetFontDefault();
+    const char *safe_text = text != 0 ? text : "";
+    float scaled_size = (float)font_size * g_desktop_text_scale;
+    Vector2 size;
+
+    if (safe_text[0] == '\0') {
+        return 0;
+    }
+
+    size = MeasureTextEx(font, safe_text, scaled_size, 1.0f);
+    return (int)(size.x + 0.5f);
 }

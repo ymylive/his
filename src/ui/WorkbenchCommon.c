@@ -388,23 +388,39 @@ void Workbench_draw_sidebar(DesktopApp *app, const WorkbenchDef *wb) {
     DrawRectangle(app->theme.sidebar_width + 2, app->theme.topbar_height, 1, GetScreenHeight() - app->theme.topbar_height, Fade(app->theme.border, 0.05f));
 
     /* Role accent stripe */
-    DrawRectangle(0, app->theme.topbar_height, 4,
-                  GetScreenHeight() - app->theme.topbar_height, wb->accent);
+    {
+        int stripe_w = (int)(4.0f * app->theme.scale_factor + 0.5f);
+        if (stripe_w < 2) stripe_w = 2;
+        DrawRectangle(0, app->theme.topbar_height, stripe_w,
+                      GetScreenHeight() - app->theme.topbar_height, wb->accent);
+    }
 
     /* Role icon indicator */
-    DrawCircle(12, app->theme.topbar_height + 22, 5.0f, wb->accent);
+    DrawCircle((int)(12.0f * app->theme.scale_factor), app->theme.topbar_height + (int)(22.0f * app->theme.scale_factor), 5.0f * app->theme.scale_factor, wb->accent);
 
     /* Role title */
-    DrawText(wb->title, 18, app->theme.topbar_height + 18, 20, app->theme.text_primary);
-    DrawText(wb->subtitle, 18, app->theme.topbar_height + 44, 16, app->theme.text_secondary);
-    DrawLine(18, app->theme.topbar_height + 68, app->theme.sidebar_width - 18, app->theme.topbar_height + 68, Fade(app->theme.border, 0.3f));
+    {
+        float s = app->theme.scale_factor;
+        int pad = (int)(18.0f * s + 0.5f);
+        int title_fs = 20;
+        int sub_fs = 16;
+        int nav_fs_height = (int)(40.0f * s + 0.5f);
+        int nav_gap = (int)(52.0f * s + 0.5f);
+        int header_y1 = app->theme.topbar_height + (int)(18.0f * s);
+        int header_y2 = app->theme.topbar_height + (int)(44.0f * s);
+        int line_y = app->theme.topbar_height + (int)(68.0f * s);
+        int nav_start_y = app->theme.topbar_height + (int)(78.0f * s);
+
+        DrawText(wb->title, pad, header_y1, title_fs, app->theme.text_primary);
+        DrawText(wb->subtitle, pad, header_y2, sub_fs, app->theme.text_secondary);
+        DrawLine(pad, line_y, app->theme.sidebar_width - pad, line_y, Fade(app->theme.border, 0.3f));
 
     for (i = 0; i < wb->nav_count; i++) {
         btn = (Rectangle){
-            18.0f,
-            (float)(app->theme.topbar_height + 78 + i * 52),
-            (float)(app->theme.sidebar_width - 36),
-            40.0f
+            (float)pad,
+            (float)(nav_start_y + i * nav_gap),
+            (float)(app->theme.sidebar_width - pad * 2),
+            (float)nav_fs_height
         };
 
         if (app->state.workbench_page == wb->nav[i].page_id) {
@@ -421,9 +437,10 @@ void Workbench_draw_sidebar(DesktopApp *app, const WorkbenchDef *wb) {
 
     /* Bottom separator after nav section */
     {
-        int nav_bottom_y = app->theme.topbar_height + 78 + wb->nav_count * 52 + 8;
-        DrawLine(18, nav_bottom_y, app->theme.sidebar_width - 18, nav_bottom_y, Fade(app->theme.border, 0.3f));
+        int nav_bottom_y = nav_start_y + wb->nav_count * nav_gap + (int)(8.0f * s);
+        DrawLine(pad, nav_bottom_y, app->theme.sidebar_width - pad, nav_bottom_y, Fade(app->theme.border, 0.3f));
     }
+    } /* end of scaled sidebar scope */
 }
 
 /* ── Metric card (text value variant) ── */
@@ -432,13 +449,19 @@ void Workbench_draw_metric_card(
     const DesktopApp *app, Rectangle rect,
     const char *label, const char *value, Color accent
 ) {
+    float s;
+    int inset;
+
     if (app == 0) return;
+
+    s = app->theme.scale_factor;
+    inset = (int)(20.0f * s + 0.5f);
 
     DrawRectangleRounded(rect, 0.18f, 8, app->theme.panel);
     DrawRectangleRoundedLinesEx(rect, 0.18f, 8, 1.0f, Fade(app->theme.border, 0.7f));
     DrawRectangle((int)rect.x, (int)rect.y + 4, 5, (int)rect.height - 8, accent);
-    DrawText(label, (int)rect.x + 20, (int)rect.y + 14, 17, app->theme.text_secondary);
-    DrawText(value != 0 ? value : "--", (int)rect.x + 20, (int)rect.y + 42, 30, app->theme.text_primary);
+    DrawText(label, (int)rect.x + inset, (int)rect.y + (int)(14.0f * s), 17, app->theme.text_secondary);
+    DrawText(value != 0 ? value : "--", (int)rect.x + inset, (int)rect.y + (int)(42.0f * s), 30, app->theme.text_primary);
 }
 
 /* ── Section header ── */
@@ -446,9 +469,11 @@ void Workbench_draw_metric_card(
 void Workbench_draw_section_header(
     const DesktopApp *app, int x, int y, const char *title
 ) {
+    float s;
     if (app == 0) return;
+    s = app->theme.scale_factor;
     DrawText(title, x, y, 20, app->theme.text_primary);
-    DrawLine(x, y + 26, x + 320, y + 26, Fade(app->theme.border, 0.6f));
+    DrawLine(x, y + (int)(26.0f * s), x + (int)(320.0f * s), y + (int)(26.0f * s), Fade(app->theme.border, 0.6f));
 }
 
 /* ── Quick action button ── */
@@ -471,12 +496,14 @@ void Workbench_draw_info_row(
     const char *label, const char *value
 ) {
     WorkbenchInfoRowLayout layout;
+    float s;
 
     if (app == 0) return;
+    s = app->theme.scale_factor;
     layout = Workbench_compute_info_row_layout(
-        (Rectangle){ (float)x, (float)y, (float)(GetScreenWidth() - x - 32), 28.0f },
-        110.0f,
-        10.0f
+        (Rectangle){ (float)x, (float)y, (float)(GetScreenWidth() - x - (int)(32.0f * s)), 28.0f * s },
+        110.0f * s,
+        10.0f * s
     );
     DrawText(label, (int)layout.label_bounds.x, (int)layout.label_bounds.y, 18, app->theme.text_secondary);
     DrawText(
@@ -495,13 +522,23 @@ void Workbench_draw_home_cards(
     const char *labels[4], const char *values[4], Color accent
 ) {
     int i = 0;
-    float cw = (panel.width - 18.0f * 3) / 4.0f;
-    float ch = 80.0f;
+    float gap = DesktopTheme_scaledf(&app->theme, 18.0f);
+    int cols = 4;
+    float cw = 0.0f;
+    float ch = DesktopTheme_scaledf(&app->theme, 80.0f);
+
+    /* Switch to 2 columns when cards would be too narrow */
+    if ((panel.width - gap * 3) / 4.0f < 140.0f) {
+        cols = 2;
+    }
+    cw = (panel.width - gap * (float)(cols - 1)) / (float)cols;
 
     for (i = 0; i < 4; i++) {
+        int row = i / cols;
+        int col = i % cols;
         Rectangle card = {
-            panel.x + i * (cw + 18.0f),
-            panel.y,
+            panel.x + col * (cw + gap),
+            panel.y + row * (ch + gap),
             cw, ch
         };
         Workbench_draw_metric_card(app, card, labels[i], values[i], accent);
@@ -529,11 +566,14 @@ void Workbench_draw_status_badge(
     const DesktopApp *app, Rectangle rect,
     const char *text, Color bg_color
 ) {
+    int text_width;
+    int scaled_h;
     if (app == 0 || text == 0) return;
     DrawRectangleRounded(rect, 0.35f, 8, bg_color);
-    int text_width = MeasureText(text, 16);
+    text_width = MeasureText(text, 16);
+    scaled_h = (int)(16.0f * app->theme.scale_factor + 0.5f);
     DrawText(text, (int)(rect.x + (rect.width - text_width) / 2),
-             (int)(rect.y + (rect.height - 16) / 2), 16, WHITE);
+             (int)(rect.y + (rect.height - scaled_h) / 2), 16, WHITE);
 }
 
 /* Bed grid visualization for ward management */
@@ -545,15 +585,17 @@ void Workbench_draw_bed_grid(
     int i = 0;
     int j = 0;
     int is_occupied = 0;
-    float bed_width = 68.0f;
-    float bed_height = 48.0f;
-    float gap = 12.0f;
-    int cols = 10;
-    int rows = (bed_count + cols - 1) / cols;
+    float bed_width = DesktopTheme_scaledf(&app->theme, 68.0f);
+    float bed_height = DesktopTheme_scaledf(&app->theme, 48.0f);
+    float gap = DesktopTheme_scaledf(&app->theme, 12.0f);
+    int cols = (int)((panel.width + gap) / (bed_width + gap));
+    int rows;
     Color available_color = { 34, 197, 94, 255 };
     Color occupied_color = { 239, 68, 68, 255 };
 
     if (app == 0) return;
+    if (cols < 1) cols = 1;
+    rows = (bed_count + cols - 1) / cols;
 
     DrawText(ward_name, (int)panel.x, (int)panel.y, 20, app->theme.text_primary);
 
@@ -562,7 +604,7 @@ void Workbench_draw_bed_grid(
         int col = i % cols;
         Rectangle bed_rect = {
             panel.x + col * (bed_width + gap),
-            panel.y + 36 + row * (bed_height + gap),
+            panel.y + DesktopTheme_scaledf(&app->theme, 36.0f) + row * (bed_height + gap),
             bed_width,
             bed_height
         };
@@ -579,13 +621,17 @@ void Workbench_draw_bed_grid(
         DrawRectangleRounded(bed_rect, 0.15f, 8, bed_color);
         DrawRectangleRoundedLinesEx(bed_rect, 0.15f, 8, 1.0f, Fade(bed_color, 0.7f));
 
-        char bed_num[8];
-        snprintf(bed_num, sizeof(bed_num), "%02d", i + 1);
-        int num_width = MeasureText(bed_num, 18);
-        DrawText(bed_num,
-                 (int)(bed_rect.x + (bed_rect.width - num_width) / 2),
-                 (int)(bed_rect.y + (bed_rect.height - 18) / 2),
-                 18, WHITE);
+        {
+            char bed_num[8];
+            int num_width;
+            int scaled_h = (int)(18.0f * app->theme.scale_factor + 0.5f);
+            snprintf(bed_num, sizeof(bed_num), "%02d", i + 1);
+            num_width = MeasureText(bed_num, 18);
+            DrawText(bed_num,
+                     (int)(bed_rect.x + (bed_rect.width - num_width) / 2),
+                     (int)(bed_rect.y + (bed_rect.height - scaled_h) / 2),
+                     18, WHITE);
+        }
     }
 }
 
@@ -692,9 +738,13 @@ void Workbench_draw_search_box(
 
     if (app == 0 || text == 0 || active_field == 0 || search_clicked == 0) return;
 
-    input_rect = rect;
-    input_rect.width = rect.width - 110;
-    button_rect = (Rectangle){ rect.x + rect.width - 100, rect.y, 100, rect.height };
+    {
+        float btn_w = DesktopTheme_scaledf(&app->theme, 100.0f);
+        float btn_gap = DesktopTheme_scaledf(&app->theme, 10.0f);
+        input_rect = rect;
+        input_rect.width = rect.width - btn_w - btn_gap;
+        button_rect = (Rectangle){ rect.x + rect.width - btn_w, rect.y, btn_w, rect.height };
+    }
 
     edit_mode = (*active_field == field_id);
     if (GuiTextBox(input_rect, text, text_size, edit_mode)) {
@@ -1087,8 +1137,9 @@ void Workbench_draw_pending_calendar_popup(DesktopApp *app) {
     char *out_time;
     int out_time_capacity;
 
-    float popup_w = 280.0f;
-    float popup_h = 220.0f;
+    float cal_scale = (app != 0 && app->theme.scale_factor > 0.0f) ? app->theme.scale_factor : 1.0f;
+    float popup_w = 280.0f * cal_scale;
+    float popup_h = 220.0f * cal_scale;
     Rectangle popup_rect;
     char header_text[32];
     Rectangle left_arrow_rect;
@@ -1151,10 +1202,10 @@ void Workbench_draw_pending_calendar_popup(DesktopApp *app) {
              state->year, state->month);
 
     left_arrow_rect = (Rectangle){
-        popup_rect.x + 8.0f, popup_rect.y + 6.0f, 28.0f, 24.0f
+        popup_rect.x + 8.0f * cal_scale, popup_rect.y + 6.0f * cal_scale, 28.0f * cal_scale, 24.0f * cal_scale
     };
     right_arrow_rect = (Rectangle){
-        popup_rect.x + popup_w - 36.0f, popup_rect.y + 6.0f, 28.0f, 24.0f
+        popup_rect.x + popup_w - 36.0f * cal_scale, popup_rect.y + 6.0f * cal_scale, 28.0f * cal_scale, 24.0f * cal_scale
     };
 
     if (GuiButton(left_arrow_rect, "<")) {
@@ -1183,14 +1234,14 @@ void Workbench_draw_pending_calendar_popup(DesktopApp *app) {
     {
         int hw = MeasureText(header_text, 17);
         int hx = (int)(popup_rect.x + (popup_w - (float)hw) / 2.0f);
-        DrawText(header_text, hx, (int)(popup_rect.y + 10.0f), 17, app->theme.text_primary);
+        DrawText(header_text, hx, (int)(popup_rect.y + 10.0f * cal_scale), 17, app->theme.text_primary);
     }
 
     /* Day-of-week header row */
-    cell_w = (popup_w - 16.0f) / 7.0f;
-    cell_h = 24.0f;
-    grid_x = popup_rect.x + 8.0f;
-    grid_y = popup_rect.y + 36.0f;
+    cell_w = (popup_w - 16.0f * cal_scale) / 7.0f;
+    cell_h = 24.0f * cal_scale;
+    grid_x = popup_rect.x + 8.0f * cal_scale;
+    grid_y = popup_rect.y + 36.0f * cal_scale;
 
     for (col = 0; col < 7; col++) {
         int lw = MeasureText(dow_labels[col], 14);
@@ -1199,8 +1250,8 @@ void Workbench_draw_pending_calendar_popup(DesktopApp *app) {
     }
 
     /* Day grid */
-    grid_y += cell_h + 2.0f;
-    cell_h = 26.0f;
+    grid_y += cell_h + 2.0f * cal_scale;
+    cell_h = 26.0f * cal_scale;
     first_dow = datepicker_day_of_week(state->year, state->month, 1);
     dim = datepicker_days_in_month(state->year, state->month);
     day_num = 1;

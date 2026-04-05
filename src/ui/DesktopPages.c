@@ -60,25 +60,26 @@ DesktopTopbarLayout DesktopPages_compute_topbar_layout(
     float time_width
 ) {
     DesktopTopbarLayout layout;
-    float padding = 24.0f;
-    float topbar_height = 84.0f;
-    float gap = 18.0f;
-    float title_x = 24.0f;
-    float title_max_width = title_width > 0.0f ? title_width : 280.0f;
-    float session_max_width = session_width > 0.0f ? session_width : 360.0f;
-    float time_actual_width = time_width > 0.0f ? time_width : 148.0f;
-    float logout_width = 88.0f;
-    float logout_height = 34.0f;
-    float title_min_width = 180.0f;
+    float scale = (theme != 0 && theme->scale_factor > 0.0f) ? theme->scale_factor : 1.0f;
+    float padding = 24.0f * scale;
+    float topbar_height = 84.0f * scale;
+    float gap = 18.0f * scale;
+    float title_x = 24.0f * scale;
+    float title_max_width = title_width > 0.0f ? title_width : 280.0f * scale;
+    float session_max_width = session_width > 0.0f ? session_width : 360.0f * scale;
+    float time_actual_width = time_width > 0.0f ? time_width : 148.0f * scale;
+    float logout_width = 88.0f * scale;
+    float logout_height = 34.0f * scale;
+    float title_min_width = 180.0f * scale;
     float title_available = 0.0f;
     float session_x = 0.0f;
     float session_available = 0.0f;
 
     memset(&layout, 0, sizeof(layout));
     if (theme != 0) {
-        padding = (float)(theme->margin > 0 ? theme->margin : 24);
-        topbar_height = (float)(theme->topbar_height > 0 ? theme->topbar_height : 84);
-        gap = (float)(theme->spacing > 0 ? theme->spacing : 18);
+        padding = (float)(theme->margin > 0 ? theme->margin : (int)(24 * scale));
+        topbar_height = (float)(theme->topbar_height > 0 ? theme->topbar_height : (int)(84 * scale));
+        gap = (float)(theme->spacing > 0 ? theme->spacing : (int)(18 * scale));
     }
 
     layout.gap = gap;
@@ -91,9 +92,9 @@ DesktopTopbarLayout DesktopPages_compute_topbar_layout(
     };
     layout.time_bounds = (Rectangle){
         layout.logout_bounds.x - gap - time_actual_width,
-        (topbar_height - 18.0f) * 0.5f,
+        (topbar_height - 18.0f * scale) * 0.5f,
         time_actual_width,
-        18.0f
+        18.0f * scale
     };
 
     title_available = layout.time_bounds.x - gap - title_x - 120.0f;
@@ -103,9 +104,9 @@ DesktopTopbarLayout DesktopPages_compute_topbar_layout(
     title_max_width = DesktopPages_minf(title_max_width, title_available);
     layout.title_bounds = (Rectangle){
         title_x,
-        (topbar_height - 28.0f) * 0.5f,
+        (topbar_height - 28.0f * scale) * 0.5f,
         title_max_width,
-        28.0f
+        28.0f * scale
     };
 
     session_x = layout.title_bounds.x + layout.title_bounds.width + gap;
@@ -115,9 +116,9 @@ DesktopTopbarLayout DesktopPages_compute_topbar_layout(
     }
     layout.session_bounds = (Rectangle){
         session_x,
-        (topbar_height - 18.0f) * 0.5f,
+        (topbar_height - 18.0f * scale) * 0.5f,
         DesktopPages_minf(session_max_width, session_available),
-        18.0f
+        18.0f * scale
     };
 
     return layout;
@@ -129,12 +130,13 @@ DesktopLoginLayout DesktopPages_compute_login_layout(
     const DesktopTheme *theme
 ) {
     DesktopLoginLayout layout;
-    float margin = 32.0f;
-    float gap = 18.0f;
+    float scale = (theme != 0 && theme->scale_factor > 0.0f) ? theme->scale_factor : 1.0f;
+    float margin = 32.0f * scale;
+    float gap = 18.0f * scale;
     float card_width = 620.0f;
-    float padding = 36.0f;
-    float field_height = 44.0f;
-    float role_button_width = 42.0f;
+    float padding = 36.0f * scale;
+    float field_height = 44.0f * scale;
+    float role_button_width = 42.0f * scale;
     float card_x = 0.0f;
     float card_y = 0.0f;
     float user_y = 0.0f;
@@ -143,6 +145,7 @@ DesktopLoginLayout DesktopPages_compute_login_layout(
     float login_y = 0.0f;
     float card_height = 0.0f;
     float role_value_width = 0.0f;
+    float field_gap = 32.0f * scale;
 
     memset(&layout, 0, sizeof(layout));
     if (theme != 0) {
@@ -150,14 +153,14 @@ DesktopLoginLayout DesktopPages_compute_login_layout(
         gap = (float)(theme->spacing > 0 ? theme->spacing : 18);
     }
 
-    card_width = DesktopPages_clampf((float)screen_width - margin * 2.0f, 460.0f, 620.0f);
-    padding = screen_width <= 1440 ? 32.0f : 36.0f;
-    user_y = 120.0f;
-    password_y = user_y + field_height + 32.0f;
-    role_y = password_y + field_height + 32.0f;
-    login_y = role_y + field_height + 32.0f;
-    card_height = login_y + 48.0f + 200.0f;
-    card_height = DesktopPages_clampf(card_height, 480.0f, (float)screen_height - margin * 2.0f);
+    card_width = DesktopPages_clampf((float)screen_width - margin * 2.0f, 360.0f * scale, 620.0f * scale);
+    padding = screen_width <= 1440 ? 32.0f * scale : 36.0f * scale;
+    user_y = 120.0f * scale;
+    password_y = user_y + field_height + field_gap;
+    role_y = password_y + field_height + field_gap;
+    login_y = role_y + field_height + field_gap;
+    card_height = login_y + 48.0f * scale + 200.0f * scale;
+    card_height = DesktopPages_clampf(card_height, 400.0f * scale, (float)screen_height - margin * 2.0f);
     card_x = ((float)screen_width - card_width) * 0.5f;
     card_y = ((float)screen_height - card_height) * 0.5f;
     role_value_width = card_width - padding * 2.0f - role_button_width * 2.0f - gap * 2.0f;
@@ -183,7 +186,7 @@ DesktopLoginLayout DesktopPages_compute_login_layout(
         card_x + padding,
         card_y + login_y,
         card_width - padding * 2.0f,
-        48.0f
+        48.0f * scale
     };
     return layout;
 }
@@ -220,9 +223,9 @@ static void DesktopPages_draw_message_bar(DesktopApp *app) {
 
     rect = (Rectangle){
         (float)(app->theme.sidebar_width + app->theme.margin),
-        (float)(app->theme.topbar_height - 14),
+        (float)(app->theme.topbar_height - (int)(14.0f * app->theme.scale_factor)),
         (float)(GetScreenWidth() - app->theme.sidebar_width - app->theme.margin * 2),
-        36.0f
+        36.0f * app->theme.scale_factor
     };
 
     switch (app->state.message.kind) {
@@ -287,11 +290,12 @@ static void DesktopPages_draw_login(DesktopApp *app) {
     Rectangle role_prev = layout.role_prev_bounds;
     Rectangle role_next = layout.role_next_bounds;
     Rectangle login_button = layout.login_button_bounds;
+    float login_scale = (app->theme.scale_factor > 0.0f) ? app->theme.scale_factor : 1.0f;
     Rectangle reset_button = (Rectangle){
         login_button.x,
-        login_button.y + login_button.height + 12.0f,
+        login_button.y + login_button.height + 12.0f * login_scale,
         login_button.width,
-        40.0f
+        40.0f * login_scale
     };
     Rectangle input_fields[] = { layout.user_box, layout.password_box };
     User user;
@@ -331,29 +335,38 @@ static void DesktopPages_draw_login(DesktopApp *app) {
 
     /* ── Medical cross hint (geometric, top-right area) ── */
     {
-        int cx = (int)(card.x + card.width - 52);
-        int cy = (int)(card.y + 48);
+        float s = app->theme.scale_factor;
+        int cx = (int)(card.x + card.width - 52.0f * s);
+        int cy = (int)(card.y + 48.0f * s);
+        int arm = (int)(12.0f * s + 0.5f);
+        int thick = (int)(3.0f * s + 0.5f);
         Color cross_color = Fade(app->theme.nav_active, 0.10f);
-        DrawRectangle(cx - 3, cy - 12, 6, 24, cross_color);
-        DrawRectangle(cx - 12, cy - 3, 24, 6, cross_color);
+        DrawRectangle(cx - thick, cy - arm, thick * 2, arm * 2, cross_color);
+        DrawRectangle(cx - arm, cy - thick, arm * 2, thick * 2, cross_color);
     }
 
     /* ── Title ── */
-    DrawText("轻量级 HIS 桌面控制页",
-             (int)card.x + 36, (int)card.y + 32, 30, app->theme.text_primary);
-
-    /* ── Version badge ── */
     {
-        Rectangle ver_badge = { card.x + card.width - 100, card.y + 32, 68, 24 };
-        DrawRectangleRounded(ver_badge, 0.4f, 8, Fade(app->theme.nav_active, 0.12f));
-        DrawText("v2.4.0", (int)ver_badge.x + 10, (int)ver_badge.y + 4, 16,
-                 app->theme.nav_active);
-    }
+        float s = app->theme.scale_factor;
+        int inset = (int)(36.0f * s + 0.5f);
+        DrawText("轻量级 HIS 桌面控制页",
+                 (int)card.x + inset, (int)card.y + (int)(32.0f * s), 30, app->theme.text_primary);
 
-    /* ── Subtitle ── */
-    DrawText("原生工作台 / 自动识别账号角色 / 现代医疗后台",
-             (int)card.x + 36, (int)card.y + 70, 17,
-             Fade(app->theme.text_secondary, 0.8f));
+        /* ── Version badge ── */
+        {
+            float bw = 68.0f * s;
+            float bh = 24.0f * s;
+            Rectangle ver_badge = { card.x + card.width - bw - (int)(32.0f * s), card.y + (int)(32.0f * s), bw, bh };
+            DrawRectangleRounded(ver_badge, 0.4f, 8, Fade(app->theme.nav_active, 0.12f));
+            DrawText("v2.4.0", (int)ver_badge.x + (int)(10.0f * s), (int)ver_badge.y + (int)(4.0f * s), 16,
+                     app->theme.nav_active);
+        }
+
+        /* ── Subtitle ── */
+        DrawText("原生工作台 / 自动识别账号角色 / 现代医疗后台",
+                 (int)card.x + inset, (int)card.y + (int)(70.0f * s), 17,
+                 Fade(app->theme.text_secondary, 0.8f));
+    }
 
     /* ── Focus management ── */
     DesktopPages_release_focus_on_click(
@@ -363,7 +376,7 @@ static void DesktopPages_draw_login(DesktopApp *app) {
     );
 
     /* ── User ID field ── */
-    Workbench_draw_form_label(app, (int)user_box.x, (int)user_box.y - 26,
+    Workbench_draw_form_label(app, (int)user_box.x, (int)user_box.y - (int)(26.0f * app->theme.scale_factor),
                               "用户编号", 1);
     Workbench_draw_text_input(
         user_box,
@@ -375,7 +388,7 @@ static void DesktopPages_draw_login(DesktopApp *app) {
     );
 
     /* ── Password field ── */
-    Workbench_draw_form_label(app, (int)password_box.x, (int)password_box.y - 26,
+    Workbench_draw_form_label(app, (int)password_box.x, (int)password_box.y - (int)(26.0f * app->theme.scale_factor),
                               "密码", 1);
     Workbench_draw_text_input(
         password_box,
@@ -387,7 +400,7 @@ static void DesktopPages_draw_login(DesktopApp *app) {
     );
 
     /* ── Role selector ── */
-    Workbench_draw_form_label(app, (int)role_box.x, (int)role_box.y - 26,
+    Workbench_draw_form_label(app, (int)role_box.x, (int)role_box.y - (int)(26.0f * app->theme.scale_factor),
                               "角色", 1);
 
     /* Left arrow pill */
@@ -406,9 +419,10 @@ static void DesktopPages_draw_login(DesktopApp *app) {
         const char *role_name = DesktopPages_role_name_from_index(
             app->state.login_form.role_index);
         int rw = MeasureText(role_name, 20);
+        int scaled_h = (int)(20.0f * app->theme.scale_factor + 0.5f);
         DrawText(role_name,
                  (int)(role_box.x + (role_box.width - rw) / 2),
-                 (int)(role_box.y + 12), 20, app->theme.nav_active);
+                 (int)(role_box.y + (role_box.height - scaled_h) / 2), 20, app->theme.nav_active);
     }
 
     /* Right arrow pill */
@@ -437,9 +451,10 @@ static void DesktopPages_draw_login(DesktopApp *app) {
     {
         const char *btn_text = "登录";
         int tw = MeasureText(btn_text, 22);
+        int scaled_h = (int)(22.0f * app->theme.scale_factor + 0.5f);
         DrawText(btn_text,
                  (int)(login_button.x + (login_button.width - tw) / 2),
-                 (int)(login_button.y + 13), 22, WHITE);
+                 (int)(login_button.y + (login_button.height - scaled_h) / 2), 22, WHITE);
     }
     /* Invisible click area */
     saved_border_w = GuiGetStyle(BUTTON, BORDER_WIDTH);
@@ -482,9 +497,10 @@ static void DesktopPages_draw_login(DesktopApp *app) {
     {
         const char *reset_text = "重置演示数据";
         int tw = MeasureText(reset_text, 18);
+        int scaled_h = (int)(18.0f * app->theme.scale_factor + 0.5f);
         DrawText(reset_text,
                  (int)(reset_button.x + (reset_button.width - tw) / 2),
-                 (int)(reset_button.y + 11), 18, app->theme.text_secondary);
+                 (int)(reset_button.y + (reset_button.height - scaled_h) / 2), 18, app->theme.text_secondary);
     }
     /* Invisible click area for reset */
     saved_border_w = GuiGetStyle(BUTTON, BORDER_WIDTH);
@@ -519,18 +535,19 @@ static void DesktopPages_draw_login(DesktopApp *app) {
 
     /* ── Demo accounts reference panel ── */
     {
+        float s = app->theme.scale_factor;
         Color hint_color = Fade(app->theme.text_secondary, 0.45f);
         float panel_x = reset_button.x;
-        float panel_y = reset_button.y + reset_button.height + 16.0f;
+        float panel_y = reset_button.y + reset_button.height + 16.0f * s;
         float col_width = (login_button.width) / 2.0f;
         int font_size = 14;
-        int line_h = 20;
+        int line_h = (int)(20.0f * s + 0.5f);
         int i;
 
         /* Section title */
         DrawText("演示账号",
                  (int)panel_x, (int)panel_y, 15, hint_color);
-        panel_y += 22.0f;
+        panel_y += 22.0f * s;
 
         /* 5 accounts in 2 columns (3 left, 2 right) */
         {
@@ -569,7 +586,7 @@ static void DesktopPages_draw_topbar(DesktopApp *app) {
     DesktopTopbarLayout layout;
     time_t now = time(0);
 
-    if (cached_title_width == 0) {
+    {
         cached_title_width = MeasureText(title, 28);
     }
 
@@ -599,7 +616,7 @@ static void DesktopPages_draw_topbar(DesktopApp *app) {
 
     DrawRectangleRec(layout.bar_bounds, app->theme.panel_alt);
     /* Accent bar at top */
-    DrawRectangle(0, 0, GetScreenWidth(), 3, wb != 0 ? wb->accent : app->theme.nav_active);
+    DrawRectangle(0, 0, GetScreenWidth(), (int)(3.0f * app->theme.scale_factor + 0.5f), wb != 0 ? wb->accent : app->theme.nav_active);
     /* Subtle bottom shadow */
     DrawRectangle(0, app->theme.topbar_height, GetScreenWidth(), 1, Fade(app->theme.border, 0.5f));
     DrawRectangle(0, app->theme.topbar_height + 1, GetScreenWidth(), 1, Fade(app->theme.border, 0.2f));
