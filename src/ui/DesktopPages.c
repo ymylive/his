@@ -47,8 +47,8 @@ static Rectangle DesktopPages_main_panel(const DesktopApp *app) {
     return (Rectangle){
         (float)(app->theme.sidebar_width + app->theme.margin),
         (float)(app->theme.topbar_height + app->theme.margin),
-        (float)(GetScreenWidth() - app->theme.sidebar_width - app->theme.margin * 2),
-        (float)(GetScreenHeight() - app->theme.topbar_height - app->theme.margin * 2)
+        (float)(GetRenderWidth() - app->theme.sidebar_width - app->theme.margin * 2),
+        (float)(GetRenderHeight() - app->theme.topbar_height - app->theme.margin * 2)
     };
 }
 
@@ -224,7 +224,7 @@ static void DesktopPages_draw_message_bar(DesktopApp *app) {
     rect = (Rectangle){
         (float)(app->theme.sidebar_width + app->theme.margin),
         (float)(app->theme.topbar_height - (int)(14.0f * app->theme.scale_factor)),
-        (float)(GetScreenWidth() - app->theme.sidebar_width - app->theme.margin * 2),
+        (float)(GetRenderWidth() - app->theme.sidebar_width - app->theme.margin * 2),
         36.0f * app->theme.scale_factor
     };
 
@@ -279,8 +279,8 @@ static void DesktopPages_release_focus_on_click(
 
 static void DesktopPages_draw_login(DesktopApp *app) {
     DesktopLoginLayout layout = DesktopPages_compute_login_layout(
-        GetScreenWidth(),
-        GetScreenHeight(),
+        GetRenderWidth(),
+        GetRenderHeight(),
         &app->theme
     );
     Rectangle card = layout.card_bounds;
@@ -308,7 +308,7 @@ static void DesktopPages_draw_login(DesktopApp *app) {
     int saved_text_n;
 
     /* ── Background ── */
-    DrawRectangleGradientV(0, 0, GetScreenWidth(), GetScreenHeight(),
+    DrawRectangleGradientV(0, 0, GetRenderWidth(), GetRenderHeight(),
                            (Color){ 246, 249, 255, 255 }, app->theme.background);
     DrawCircleGradient((int)(card.x - 30), (int)(card.y + 60), 140.0f,
                        Fade(app->theme.nav_active, 0.08f), BLANK);
@@ -607,7 +607,7 @@ static void DesktopPages_draw_topbar(DesktopApp *app) {
     );
 
     layout = DesktopPages_compute_topbar_layout(
-        GetScreenWidth(),
+        GetRenderWidth(),
         &app->theme,
         (float)cached_title_width,
         (float)MeasureText(session_text, 18),
@@ -616,11 +616,11 @@ static void DesktopPages_draw_topbar(DesktopApp *app) {
 
     DrawRectangleRec(layout.bar_bounds, app->theme.panel_alt);
     /* Accent bar at top */
-    DrawRectangle(0, 0, GetScreenWidth(), (int)(3.0f * app->theme.scale_factor + 0.5f), wb != 0 ? wb->accent : app->theme.nav_active);
+    DrawRectangle(0, 0, GetRenderWidth(), (int)(3.0f * app->theme.scale_factor + 0.5f), wb != 0 ? wb->accent : app->theme.nav_active);
     /* Subtle bottom shadow */
-    DrawRectangle(0, app->theme.topbar_height, GetScreenWidth(), 1, Fade(app->theme.border, 0.5f));
-    DrawRectangle(0, app->theme.topbar_height + 1, GetScreenWidth(), 1, Fade(app->theme.border, 0.2f));
-    DrawRectangle(0, app->theme.topbar_height + 2, GetScreenWidth(), 1, Fade(app->theme.border, 0.08f));
+    DrawRectangle(0, app->theme.topbar_height, GetRenderWidth(), 1, Fade(app->theme.border, 0.5f));
+    DrawRectangle(0, app->theme.topbar_height + 1, GetRenderWidth(), 1, Fade(app->theme.border, 0.2f));
+    DrawRectangle(0, app->theme.topbar_height + 2, GetRenderWidth(), 1, Fade(app->theme.border, 0.08f));
     DrawText(title, (int)layout.title_bounds.x, (int)layout.title_bounds.y, 28, app->theme.text_primary);
     DrawCircle((int)layout.session_bounds.x - 12, (int)(layout.session_bounds.y + 9), 4, app->theme.success);
     DrawText(

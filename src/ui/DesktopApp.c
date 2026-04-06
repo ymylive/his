@@ -485,7 +485,19 @@ int DesktopApp_run(const DesktopAppConfig *config) {
         );
     }
     SetTargetFPS(60);
-    DesktopTheme_update_scale(&app.theme, window_width, window_height);
+    /* Use render (framebuffer) dimensions for HiDPI-correct scaling.
+     * GetRenderWidth/Height may not reflect the new size immediately after
+     * SetWindowSize, so fall back to window_width/height when they are
+     * still at the initial 800x600. */
+    {
+        int rw = GetRenderWidth();
+        int rh = GetRenderHeight();
+        if (rw <= 800 || rh <= 600) {
+            rw = window_width;
+            rh = window_height;
+        }
+        DesktopTheme_update_scale(&app.theme, rw, rh);
+    }
     {
         int font_size = DesktopTheme_scaled(&app.theme, 40);
         if (font_size < 28) font_size = 28;
@@ -506,7 +518,7 @@ int DesktopApp_run(const DesktopAppConfig *config) {
     }
 
     while (!WindowShouldClose() && app.state.should_close == 0) {
-        DesktopTheme_update_scale(&app.theme, GetScreenWidth(), GetScreenHeight());
+        DesktopTheme_update_scale(&app.theme, GetRenderWidth(), GetRenderHeight());
         BeginDrawing();
         ClearBackground(app.theme.background);
         DesktopPages_draw(&app);

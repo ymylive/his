@@ -381,18 +381,18 @@ void Workbench_draw_sidebar(DesktopApp *app, const WorkbenchDef *wb) {
     }
 
     DrawRectangle(0, app->theme.topbar_height, app->theme.sidebar_width,
-                  GetScreenHeight() - app->theme.topbar_height, app->theme.nav_background);
+                  GetRenderHeight() - app->theme.topbar_height, app->theme.nav_background);
     /* Right shadow */
-    DrawRectangle(app->theme.sidebar_width, app->theme.topbar_height, 1, GetScreenHeight() - app->theme.topbar_height, Fade(app->theme.border, 0.4f));
-    DrawRectangle(app->theme.sidebar_width + 1, app->theme.topbar_height, 1, GetScreenHeight() - app->theme.topbar_height, Fade(app->theme.border, 0.15f));
-    DrawRectangle(app->theme.sidebar_width + 2, app->theme.topbar_height, 1, GetScreenHeight() - app->theme.topbar_height, Fade(app->theme.border, 0.05f));
+    DrawRectangle(app->theme.sidebar_width, app->theme.topbar_height, 1, GetRenderHeight() - app->theme.topbar_height, Fade(app->theme.border, 0.4f));
+    DrawRectangle(app->theme.sidebar_width + 1, app->theme.topbar_height, 1, GetRenderHeight() - app->theme.topbar_height, Fade(app->theme.border, 0.15f));
+    DrawRectangle(app->theme.sidebar_width + 2, app->theme.topbar_height, 1, GetRenderHeight() - app->theme.topbar_height, Fade(app->theme.border, 0.05f));
 
     /* Role accent stripe */
     {
         int stripe_w = (int)(4.0f * app->theme.scale_factor + 0.5f);
         if (stripe_w < 2) stripe_w = 2;
         DrawRectangle(0, app->theme.topbar_height, stripe_w,
-                      GetScreenHeight() - app->theme.topbar_height, wb->accent);
+                      GetRenderHeight() - app->theme.topbar_height, wb->accent);
     }
 
     /* Role icon indicator */
@@ -501,7 +501,7 @@ void Workbench_draw_info_row(
     if (app == 0) return;
     s = app->theme.scale_factor;
     layout = Workbench_compute_info_row_layout(
-        (Rectangle){ (float)x, (float)y, (float)(GetScreenWidth() - x - (int)(32.0f * s)), 28.0f * s },
+        (Rectangle){ (float)x, (float)y, (float)(GetRenderWidth() - x - (int)(32.0f * s)), 28.0f * s },
         110.0f * s,
         10.0f * s
     );
