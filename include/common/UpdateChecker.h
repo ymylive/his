@@ -3,7 +3,7 @@
 
 #include <stdio.h>
 
-#define HIS_VERSION "3.1.1"
+#define HIS_VERSION "3.1.2"
 
 typedef struct UpdateInfo {
     int has_update;
