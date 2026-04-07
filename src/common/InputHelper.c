@@ -154,7 +154,7 @@ static void InputHelper_drain_escape_sequence(void) {
     tcsetattr(STDIN_FILENO, TCSANOW, &raw_settings);
 
     tv.tv_sec = 0;
-    tv.tv_usec = 50000;
+    tv.tv_usec = 100000;
     FD_ZERO(&fds);
     FD_SET(STDIN_FILENO, &fds);
     while (select(STDIN_FILENO + 1, &fds, 0, 0, &tv) > 0) {

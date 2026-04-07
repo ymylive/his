@@ -8,10 +8,12 @@
 #ifdef _WIN32
 #include <direct.h>
 #include <windows.h>
+#include <shellapi.h>
 #define popen  _popen
 #define pclose _pclose
 #else
 #include <unistd.h>
+#include <sys/wait.h>
 #ifdef __APPLE__
 #include <mach-o/dyld.h>
 #endif
@@ -286,7 +288,15 @@ static int do_download_and_install(FILE *out, const UpdateInfo *info) {
         last_slash = strrchr(exe_dir, '\\');
         if (last_slash) *(last_slash + 1) = '\0';
 
-        snprintf(bat_path, sizeof(bat_path), "%s\\his_update\\his_updater.bat", getenv("TEMP") ? getenv("TEMP") : ".");
+        {
+            const char *tmp_env = getenv("TEMP");
+            if (tmp_env == 0) tmp_env = ".";
+            if (strlen(tmp_env) + 40 > sizeof(bat_path)) {
+                tui_print_error(out, "TEMP路径过长。");
+                return 0;
+            }
+            snprintf(bat_path, sizeof(bat_path), "%s\\his_update\\his_updater.bat", tmp_env);
+        }
         bat = fopen(bat_path, "w");
         if (bat == 0) {
             tui_print_error(out, "无法创建更新脚本。");
@@ -517,24 +527,24 @@ int UpdateChecker_prompt(FILE *out, FILE *in, const UpdateInfo *info) {
 
     if ((has_direct_download && answer[0] == '2') ||
         (!has_direct_download && answer[0] == '1')) {
-        /* Open in browser */
+        /* Open in browser (avoid command injection via system()) */
 #ifdef __APPLE__
         {
-            char cmd[320];
-            snprintf(cmd, sizeof(cmd), "open \"%s\" 2>/dev/null", info->download_url);
-            system(cmd);
+            pid_t pid = fork();
+            if (pid == 0) {
+                execlp("open", "open", info->download_url, (char *)NULL);
+                _exit(127);
+            }
         }
 #elif defined(_WIN32)
-        {
-            char cmd[320];
-            snprintf(cmd, sizeof(cmd), "start \"\" \"%s\"", info->download_url);
-            system(cmd);
-        }
+        ShellExecuteA(NULL, "open", info->download_url, NULL, NULL, SW_SHOWNORMAL);
 #else
         {
-            char cmd[320];
-            snprintf(cmd, sizeof(cmd), "xdg-open \"%s\" 2>/dev/null", info->download_url);
-            system(cmd);
+            pid_t pid = fork();
+            if (pid == 0) {
+                execlp("xdg-open", "xdg-open", info->download_url, (char *)NULL);
+                _exit(127);
+            }
         }
 #endif
         tui_print_success(out, "已在浏览器中打开下载页面");

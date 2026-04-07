@@ -6,6 +6,10 @@
 #include <math.h>
 #include <time.h>
 
+#ifndef M_PI
+#define M_PI 3.14159265358979323846
+#endif
+
 /* ═══════════════════════════════════════════════════════════════
  *  Role Theme System
  * ═══════════════════════════════════════════════════════════════ */
@@ -127,6 +131,23 @@ static void tui_repeat(FILE *out, const char *str, int count) {
     for (i = 0; i < count; i++) fputs(str, out);
 }
 
+/* Output one UTF-8 character and advance pointer. Returns bytes consumed. */
+static int tui_fputc_utf8(FILE *out, const unsigned char *p) {
+    if (*p < 0x80) {
+        fputc(*p, out);
+        return 1;
+    } else if (*p < 0xE0) {
+        fputc(p[0], out); fputc(p[1], out);
+        return 2;
+    } else if (*p < 0xF0) {
+        fputc(p[0], out); fputc(p[1], out); fputc(p[2], out);
+        return 3;
+    } else {
+        fputc(p[0], out); fputc(p[1], out); fputc(p[2], out); fputc(p[3], out);
+        return 4;
+    }
+}
+
 /* ═══════════════════════════════════════════════════════════════
  *  Logo & Banner
  * ═══════════════════════════════════════════════════════════════ */
@@ -182,28 +203,11 @@ void tui_print_gradient_text(FILE *out, const char *text) {
     if (out == 0 || text == 0) return;
 
     while (*p != 0) {
+        int bytes;
         fputs(GRADIENT_COLORS[idx % GRADIENT_COUNT], out);
-        if (*p < 0x80) {
-            fputc(*p, out);
-            p += 1;
-        } else if (*p < 0xE0) {
-            fputc(p[0], out);
-            fputc(p[1], out);
-            p += 2;
-        } else if (*p < 0xF0) {
-            fputc(p[0], out);
-            fputc(p[1], out);
-            fputc(p[2], out);
-            p += 3;
-            idx++;
-        } else {
-            fputc(p[0], out);
-            fputc(p[1], out);
-            fputc(p[2], out);
-            fputc(p[3], out);
-            p += 4;
-            idx++;
-        }
+        bytes = tui_fputc_utf8(out, p);
+        if (bytes >= 3) idx++; /* CJK: extra column */
+        p += bytes;
         if (*p >= 0x80) idx++;
     }
     fputs(TUI_RESET, out);
@@ -1128,15 +1132,7 @@ void tui_animate_typewriter(FILE *out, const char *text, int char_delay_ms) {
 
     p = (const unsigned char *)text;
     while (*p != 0) {
-        if (*p < 0x80) {
-            fputc(*p, out); p += 1;
-        } else if (*p < 0xE0) {
-            fputc(p[0], out); fputc(p[1], out); p += 2;
-        } else if (*p < 0xF0) {
-            fputc(p[0], out); fputc(p[1], out); fputc(p[2], out); p += 3;
-        } else {
-            fputc(p[0], out); fputc(p[1], out); fputc(p[2], out); fputc(p[3], out); p += 4;
-        }
+        p += tui_fputc_utf8(out, p);
         fflush(out);
         tui_sleep_ms(char_delay_ms);
     }
@@ -1496,19 +1492,8 @@ void tui_animate_rainbow(FILE *out, const char *text, int cycles, int frame_dela
         while (*p != 0) {
             fputs(GRADIENT_COLORS[offset % GRADIENT_COUNT], out);
             fputs(TUI_BOLD, out);
-            if (*p < 0x80) {
-                fputc(*p, out); p += 1;
-                offset++;
-            } else if (*p < 0xE0) {
-                fputc(p[0], out); fputc(p[1], out); p += 2;
-                offset++;
-            } else if (*p < 0xF0) {
-                fputc(p[0], out); fputc(p[1], out); fputc(p[2], out); p += 3;
-                offset++;
-            } else {
-                fputc(p[0], out); fputc(p[1], out); fputc(p[2], out); fputc(p[3], out); p += 4;
-                offset++;
-            }
+            p += tui_fputc_utf8(out, p);
+            offset++;
         }
         fputs(TUI_RESET, out);
         /* pad to clear any leftover */
@@ -1525,7 +1510,7 @@ void tui_animate_rainbow(FILE *out, const char *text, int cycles, int frame_dela
  *  Advanced Animation Effects
  * ═══════════════════════════════════════════════════════════════ */
 
-/* Simple pseudo-random using linear congruential generator */
+/* Simple pseudo-random using xorshift32 */
 static unsigned int tui_rand_state = 0;
 
 static void tui_rand_seed(void) {
@@ -1533,8 +1518,10 @@ static void tui_rand_seed(void) {
 }
 
 static int tui_rand(void) {
-    tui_rand_state = tui_rand_state * 1103515245 + 12345;
-    return (int)((tui_rand_state >> 16) & 0x7FFF);
+    tui_rand_state ^= tui_rand_state << 13;
+    tui_rand_state ^= tui_rand_state >> 17;
+    tui_rand_state ^= tui_rand_state << 5;
+    return (int)(tui_rand_state & 0x7FFF);
 }
 
 /* 256-color helpers */
@@ -1544,6 +1531,24 @@ static void tui_set_fg256(FILE *out, int color) {
 
 static void tui_set_bg256(FILE *out, int color) {
     fprintf(out, "\033[48;5;%dm", color);
+}
+
+/* Pre-computed sine table for animation performance (256 entries, range -1.0 to 1.0) */
+static double SIN_LUT[256];
+static int g_sin_lut_ready = 0;
+
+static void tui_init_sin_lut(void) {
+    int i;
+    if (g_sin_lut_ready) return;
+    for (i = 0; i < 256; i++) {
+        SIN_LUT[i] = sin(i * 2.0 * M_PI / 256.0);
+    }
+    g_sin_lut_ready = 1;
+}
+
+static double tui_fast_sin(double x) {
+    int idx = ((int)(x * 256.0 / (2.0 * M_PI)) % 256 + 256) % 256;
+    return SIN_LUT[idx];
 }
 
 /* ── Matrix Digital Rain ─────────────────────────────────────── */
@@ -1685,7 +1690,7 @@ void tui_animate_particle_explosion(FILE *out, int width, int height) {
     for (i = 0; i < MAX_PARTICLES; i++) {
         px[i] = cx;
         py[i] = cy;
-        angle = (tui_rand() % 360) * 3.14159265 / 180.0;
+        angle = (tui_rand() % 360) * M_PI / 180.0;
         speed = 0.3 + (tui_rand() % 100) / 100.0 * 1.5;
         vx[i] = cos(angle) * speed;
         vy[i] = sin(angle) * speed * 0.5; /* aspect ratio correction */
@@ -2008,7 +2013,7 @@ void tui_animate_fireworks(FILE *out, int width, int height, int count) {
             int spark_sym[FW_MAX_SPARKS];
 
             for (i = 0; i < FW_MAX_SPARKS; i++) {
-                double angle = (tui_rand() % 360) * 3.14159265 / 180.0;
+                double angle = (tui_rand() % 360) * M_PI / 180.0;
                 double spd = 0.4 + (tui_rand() % 100) / 100.0 * 1.2;
                 sx[i] = (double)launch_x;
                 sy[i] = (double)burst_y;
@@ -2077,6 +2082,7 @@ void tui_animate_dna_helix(FILE *out, int height, int frames) {
     if (height <= 0) height = 12;
     if (frames <= 0) frames = 30;
 
+    tui_init_sin_lut();
     tui_rand_seed();
     tui_hide_cursor(out);
 
@@ -2089,7 +2095,7 @@ void tui_animate_dna_helix(FILE *out, int height, int frames) {
     for (frame = 0; frame < frames; frame++) {
         for (row = 0; row < height; row++) {
             double phase = (row + frame) * 0.5;
-            double x = sin(phase) * 10.0;
+            double x = tui_fast_sin(phase) * 10.0;
             int left_pos = 20 + (int)(x);
             int right_pos = 20 - (int)(x);
             int pair_idx = (row + frame) % 4;
@@ -2196,15 +2202,7 @@ void tui_animate_fade_reveal(FILE *out, const char *text, int steps) {
         while (*p != 0) {
             fputs(GRADIENT_COLORS[idx % GRADIENT_COUNT], out);
             fputs(TUI_BOLD, out);
-            if (*p < 0x80) {
-                fputc(*p, out); p += 1;
-            } else if (*p < 0xE0) {
-                fputc(p[0], out); fputc(p[1], out); p += 2;
-            } else if (*p < 0xF0) {
-                fputc(p[0], out); fputc(p[1], out); fputc(p[2], out); p += 3;
-            } else {
-                fputc(p[0], out); fputc(p[1], out); fputc(p[2], out); fputc(p[3], out); p += 4;
-            }
+            p += tui_fputc_utf8(out, p);
             fputs(TUI_RESET, out);
             fflush(out);
             tui_sleep_ms(20);
@@ -2230,6 +2228,7 @@ void tui_animate_wave_text(FILE *out, const char *text, int cycles, int frame_de
 
     total_frames = cycles * 20;
 
+    tui_init_sin_lut();
     tui_hide_cursor(out);
 
     /* Reserve space for wave (max_height * 2 + 1 rows) */
@@ -2251,7 +2250,7 @@ void tui_animate_wave_text(FILE *out, const char *text, int cycles, int frame_de
         p = (const unsigned char *)text;
         char_idx = 0;
         while (*p != 0) {
-            double wave_y = sin((char_idx * 0.6) + (frame * 0.3)) * max_height;
+            double wave_y = tui_fast_sin((char_idx * 0.6) + (frame * 0.3)) * max_height;
             int row_offset = max_height + (int)(wave_y + 0.5);
             int col = char_idx * 2 + 3;
             char ch_buf[5];
@@ -2311,6 +2310,7 @@ void tui_animate_plasma(FILE *out, int width, int height, int frames) {
     if (height <= 0) height = 8;
     if (frames <= 0) frames = 30;
 
+    tui_init_sin_lut();
     tui_hide_cursor(out);
 
     /* Reserve space */
@@ -2325,17 +2325,17 @@ void tui_animate_plasma(FILE *out, int width, int height, int frames) {
                 double v = 0.0;
                 int color256 = 0;
 
-                v = sin(col * 0.15 + frame * 0.2);
-                v += sin(row * 0.2 + frame * 0.15);
-                v += sin((col + row) * 0.1 + frame * 0.1);
-                v += sin(sqrt((double)(col * col + row * row)) * 0.1);
+                v = tui_fast_sin(col * 0.15 + frame * 0.2);
+                v += tui_fast_sin(row * 0.2 + frame * 0.15);
+                v += tui_fast_sin((col + row) * 0.1 + frame * 0.1);
+                v += tui_fast_sin((double)(col * col + row * row) * 0.01);
                 v = v / 4.0; /* normalize to -1..1 */
 
                 /* Map to 256-color: use color range 16-231 (color cube) */
                 {
-                    int r_val = (int)((sin(v * 3.14159) + 1.0) * 2.5);
-                    int g_val = (int)((sin(v * 3.14159 + 2.094) + 1.0) * 2.5);
-                    int b_val = (int)((sin(v * 3.14159 + 4.189) + 1.0) * 2.5);
+                    int r_val = (int)((tui_fast_sin(v * M_PI) + 1.0) * 2.5);
+                    int g_val = (int)((tui_fast_sin(v * M_PI + 2.094) + 1.0) * 2.5);
+                    int b_val = (int)((tui_fast_sin(v * M_PI + 4.189) + 1.0) * 2.5);
                     if (r_val > 5) r_val = 5;
                     if (g_val > 5) g_val = 5;
                     if (b_val > 5) b_val = 5;
@@ -2371,6 +2371,7 @@ void tui_animate_entrance(FILE *out, TuiRoleTheme theme) {
 
     if (out == 0 || !tui_is_interactive()) return;
 
+    tui_init_sin_lut();
     tui_hide_cursor(out);
 
     /* Phase 1: Plasma flash (brief) */
@@ -2382,7 +2383,7 @@ void tui_animate_entrance(FILE *out, TuiRoleTheme theme) {
             for (row = 0; row < 6; row++) {
                 tui_move_cursor(out, row + 1, 3);
                 for (i = 0; i < 44; i++) {
-                    double v = sin(i * 0.2 + f * 0.5) + sin(row * 0.3 + f * 0.4);
+                    double v = tui_fast_sin(i * 0.2 + f * 0.5) + tui_fast_sin(row * 0.3 + f * 0.4);
                     int bright = (int)((v + 2.0) * 32.0);
                     if (bright > 255) bright = 255;
                     if (bright < 0) bright = 0;

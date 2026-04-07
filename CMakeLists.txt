@@ -55,7 +55,7 @@ add_library(his_common
 
 target_include_directories(his_common PUBLIC include)
 
-# Link libm on platforms where math functions are in a separate library
+# Link libm for sin(), cos(), sqrt() used in TUI animations (Linux requires explicit -lm)
 if(UNIX AND NOT APPLE)
     target_link_libraries(his_common PUBLIC m)
 endif()
@@ -219,6 +219,14 @@ target_link_libraries(test_auth_service PRIVATE his_common)
 
 add_test(NAME test_auth_service COMMAND test_auth_service)
 
+add_executable(test_tui_style
+    tests/test_tui_style.c
+)
+
+target_link_libraries(test_tui_style PRIVATE his_common)
+
+add_test(NAME test_tui_style COMMAND test_tui_style)
+
 set(HIS_TEST_TARGETS
     test_result
     test_common
@@ -239,6 +247,7 @@ set(HIS_TEST_TARGETS
     test_menu_application
     test_demo_data_integrity
     test_auth_service
+    test_tui_style
 )
 
 foreach(test_target IN LISTS HIS_TEST_TARGETS)
