@@ -196,6 +196,8 @@ int main(void) {
 
         {
             UserRole required_role = role_to_user_role(role);
+            int login_ok = 0;
+
             if (required_role == USER_ROLE_UNKNOWN) {
                 tui_print_warning(stdout, "角色未配置登录映射。");
                 tui_delay(800);
@@ -203,10 +205,16 @@ int main(void) {
                 continue;
             }
 
-            snprintf(prompt_buf, sizeof(prompt_buf), "请输入[%s]用户编号 (ESC返回): ", MenuController_role_label(role));
-            tui_print_prompt(stdout, prompt_buf);
-            {
-                int read_result = InputHelper_read_line(stdin, input, sizeof(input));
+            /* Login loop: ESC at user-ID → back to role selection,
+               ESC at password → back to user-ID prompt */
+            for (;;) {
+                int read_result = 0;
+
+                snprintf(prompt_buf, sizeof(prompt_buf),
+                    "请输入[%s]用户编号 (ESC返回): ",
+                    MenuController_role_label(role));
+                tui_print_prompt(stdout, prompt_buf);
+                read_result = InputHelper_read_line(stdin, input, sizeof(input));
                 if (read_result == 0) {
                     tui_clear_screen();
                     tui_animate_goodbye(stdout);
@@ -214,19 +222,16 @@ int main(void) {
                     return 0;
                 }
                 if (read_result == -2) {
-                    continue;
+                    break; /* back to role selection */
                 }
                 if (read_result < 0) {
                     tui_print_warning(stdout, "输入过长，请重新输入。");
                     tui_delay(800);
-                    tui_delay(500);
-                    continue;
+                    continue; /* retry user-ID */
                 }
-            }
 
-            tui_print_prompt(stdout, "请输入密码 (ESC返回): ");
-            {
-                int read_result = InputHelper_read_line(stdin, password, sizeof(password));
+                tui_print_prompt(stdout, "请输入密码 (ESC返回): ");
+                read_result = InputHelper_read_line(stdin, password, sizeof(password));
                 if (read_result == 0) {
                     tui_clear_screen();
                     tui_animate_goodbye(stdout);
@@ -234,22 +239,28 @@ int main(void) {
                     return 0;
                 }
                 if (read_result == -2) {
-                    continue;
+                    continue; /* back to user-ID prompt */
                 }
                 if (read_result < 0) {
                     tui_print_warning(stdout, "输入过长，请重新输入。");
                     tui_delay(800);
-                    tui_delay(500);
-                    continue;
+                    continue; /* retry from user-ID */
                 }
+
+                result = MenuApplication_login(&application, input, password, required_role);
+                memset(password, 0, sizeof(password));
+                if (result.success == 0) {
+                    tui_animate_error(stdout, result.message);
+                    tui_delay(500);
+                    continue; /* retry from user-ID */
+                }
+
+                login_ok = 1;
+                break;
             }
 
-            result = MenuApplication_login(&application, input, password, required_role);
-            memset(password, 0, sizeof(password));
-            if (result.success == 0) {
-                tui_animate_error(stdout, result.message);
-                tui_delay(500);
-                continue;
+            if (!login_ok) {
+                continue; /* back to role selection */
             }
         }
 
