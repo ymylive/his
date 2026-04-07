@@ -77,8 +77,35 @@ jobs:
           name: macos-portable-${{ matrix.os }}
           path: dist/*.zip
 
+  build-linux:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y cmake ninja-build zip
+
+      - name: Sync glyph seed if needed
+        run: |
+          python3 ./scripts/sync-desktop-glyph-seed.py --write || true
+
+      - name: Build and package portable
+        run: |
+          chmod +x ./scripts/package-release-linux.sh
+          ./scripts/package-release-linux.sh ${{ github.ref_name }}
+
+      - name: Upload Linux artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-portable
+          path: dist/*.zip
+
   publish-release:
-    needs: [build-windows, build-macos]
+    needs: [build-windows, build-macos, build-linux]
     runs-on: ubuntu-latest
     if: startsWith(github.ref, 'refs/tags/')
 

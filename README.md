@@ -2,9 +2,29 @@
 
 面向课程设计答辩演示的轻量级医院信息系统，纯终端 TUI 界面，覆盖挂号、接诊、检查、住院、药房和管理员总览场景。
 
+支持 **Windows**、**macOS**、**Linux** 三平台。
+
 ## 快速开始
 
-### macOS — 一键安装
+### Windows 用户
+
+> **Windows 请勿使用 `curl ... | bash` 命令，那是 macOS/Linux 专用的。**
+
+打开 **PowerShell**（推荐使用 Windows Terminal），粘贴：
+
+```powershell
+irm https://raw.githubusercontent.com/ymylive/his/main/install.ps1 | iex
+```
+
+卸载：
+
+```powershell
+irm https://raw.githubusercontent.com/ymylive/his/main/install.ps1 | iex -Args uninstall
+```
+
+> 请使用 Windows Terminal 或支持 ANSI/UTF-8 的终端，cmd.exe 可能无法正确显示颜色和 Unicode 字符。
+
+### macOS / Linux 用户
 
 打开终端，粘贴：
 
@@ -12,37 +32,28 @@
 curl -fsSL https://raw.githubusercontent.com/ymylive/his/main/install.sh | bash
 ```
 
-安装完成后，随时输入 `his` 即可启动。
-
-### macOS — 卸载
+卸载：
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/ymylive/his/main/install.sh | bash -s uninstall
 ```
 
-### Windows — 一键安装
+> install.sh 自动识别 macOS / Linux，无需区分。
 
-打开 **PowerShell**，粘贴：
+### 手动安装
 
-```powershell
-irm https://raw.githubusercontent.com/ymylive/his/main/install.ps1 | iex
-```
+从 [最新 Release](https://github.com/ymylive/his/releases/latest) 下载对应平台的 zip 包：
 
-安装完成后，随时输入 `his` 即可启动。
+| 平台 | 文件名 |
+|------|--------|
+| Windows x64 | `lightweight-his-portable-vX.Y.Z-win64.zip` |
+| macOS Apple Silicon | `lightweight-his-portable-vX.Y.Z-macos-arm64.zip` |
+| Linux x86_64 | `lightweight-his-portable-vX.Y.Z-linux-x86_64.zip` |
 
-### Windows — 卸载
-
-```powershell
-irm https://raw.githubusercontent.com/ymylive/his/main/install.ps1 | iex -Args uninstall
-```
-
-> ⚠️ Windows 请使用 Windows Terminal 或支持 ANSI/UTF-8 的终端，cmd.exe 可能无法正确显示颜色和 Unicode 字符。
-
-### Windows — 手动安装
-
-1. 从 [最新 Release](https://github.com/ymylive/his/releases/latest) 下载 `lightweight-his-portable-vX.Y.Z-win64.zip`
-2. 解压到任意目录
-3. 双击 `run_console.bat` 或在终端中运行 `his.exe`
+解压后运行：
+- **Windows**: 双击 `run_console.bat` 或运行 `his.exe`
+- **macOS**: 先执行 `./setup-macos.sh`，然后 `./run_console.sh`
+- **Linux**: `chmod +x his && ./his`
 
 ### 源码构建
 
@@ -77,11 +88,11 @@ cmake --build .
 
 | 角色 | 功能 |
 |------|------|
-| 🛡️ 管理员 | 患者/科室/医生/病房/药品总览与维护 |
-| ⚕️ 医生 | 待诊列表、接诊录入、检查管理、处方与发药 |
-| ♥️ 患者 | 自助挂号、看诊/检查/住院/发药记录查询、药品说明 |
-| 🏥 住院管理 | 入院出院办理、病房床位调度、转床、出院检查 |
-| 💊 药房 | 药品建档、入库补货、发药处理、库存预警 |
+| 管理员 | 患者/科室/医生/病房/药品总览与维护 |
+| 医生 | 待诊列表、接诊录入、检查管理、处方与发药 |
+| 患者 | 自助挂号、看诊/检查/住院/发药记录查询、药品说明 |
+| 住院管理 | 入院出院办理、病房床位调度、转床、出院检查 |
+| 药房 | 药品建档、入库补货、发药处理、库存预警 |
 
 ## TUI 界面特性
 
@@ -106,6 +117,7 @@ cmake --build .
 - **构建**: CMake 3.20+
 - **界面**: 纯终端 TUI（ANSI + Unicode）
 - **存储**: 文本文件仓库（管道分隔格式）
+- **平台**: Windows / macOS / Linux
 - **依赖**: 无外部依赖
 - **测试**: 19 个测试用例
 
