@@ -10,9 +10,7 @@
 
 set -e
 
-VERSION="v3.1.0"
 REPO="ymylive/his"
-DMG_NAME="his-${VERSION}-macos-arm64.dmg"
 INSTALL_DIR="$HOME/.his"
 BIN_LINK="/usr/local/bin/his"
 
@@ -33,7 +31,7 @@ fail()    { printf "  ${RED}✗${RESET} %s\n" "$1"; exit 1; }
 print_banner() {
     echo ""
     printf "  ${CYAN}╔══════════════════════════════════════════╗${RESET}\n"
-    printf "  ${CYAN}║${RESET}  ${BOLD}HIS${RESET} ${DIM}轻量级医院信息系统${RESET}  ${DIM}${VERSION}${RESET}          ${CYAN}║${RESET}\n"
+    printf "  ${CYAN}║${RESET}  ${BOLD}HIS${RESET} ${DIM}轻量级医院信息系统${RESET}                  ${CYAN}║${RESET}\n"
     printf "  ${CYAN}╚══════════════════════════════════════════╝${RESET}\n"
     echo ""
 }
@@ -74,10 +72,20 @@ do_install() {
     OS="$(uname -s)"
     ARCH="$(uname -m)"
 
-    if [ "$OS" != "Darwin" ]; then
-        fail "此脚本仅支持 macOS，当前系统: $OS"
-    fi
-    info "系统: macOS ($ARCH)"
+    case "$OS" in
+        Darwin) PLATFORM_KEY="macos" ;;
+        Linux)  PLATFORM_KEY="linux" ;;
+        *)      fail "不支持的系统: $OS" ;;
+    esac
+
+    case "$ARCH" in
+        arm64|aarch64) ARCH_KEY="arm64" ;;
+        x86_64)        ARCH_KEY="x86_64" ;;
+        *)             ARCH_KEY="$ARCH" ;;
+    esac
+
+    ASSET_KEYWORD="${PLATFORM_KEY}-${ARCH_KEY}"
+    info "系统: $OS ($ARCH)"
 
     # ── 已安装? ──
     if [ -f "$INSTALL_DIR/his" ]; then
@@ -91,42 +99,74 @@ do_install() {
         fi
     fi
 
-    # ── 下载 ──
-    DOWNLOAD_URL="https://github.com/${REPO}/releases/download/${VERSION}/${DMG_NAME}"
-    mkdir -p "$INSTALL_DIR"
-    TMPDIR_DL="$(mktemp -d)"
-    DMG_PATH="${TMPDIR_DL}/${DMG_NAME}"
+    # ── 查询最新 Release ──
+    info "正在查询最新版本..."
+    API_URL="https://api.github.com/repos/${REPO}/releases/latest"
+    API_RESPONSE="$(curl -s -m 10 -H "Accept: application/vnd.github.v3+json" "$API_URL" 2>/dev/null)" || true
 
-    info "正在下载 ${VERSION}..."
-    curl -fSL --progress-bar -o "$DMG_PATH" "$DOWNLOAD_URL" || fail "下载失败，请检查网络连接"
-    success "下载完成"
+    VERSION=""
+    DOWNLOAD_URL=""
 
-    # ── 解包 ──
-    info "正在安装..."
-    MOUNT_OUTPUT="$(hdiutil attach "$DMG_PATH" -nobrowse 2>/dev/null)"
-    MOUNT_POINT="$(echo "$MOUNT_OUTPUT" | awk -F'\t' '/\/Volumes\//{print $NF}' | head -1)"
+    if [ -n "$API_RESPONSE" ]; then
+        # 提取 tag_name
+        VERSION="$(echo "$API_RESPONSE" | grep '"tag_name"' | head -1 | sed 's/.*"tag_name"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/')"
 
-    if [ -z "$MOUNT_POINT" ] || [ ! -d "$MOUNT_POINT" ]; then
-        fail "DMG 挂载失败"
+        # 查找匹配平台的 zip 资产 URL
+        DOWNLOAD_URL="$(echo "$API_RESPONSE" | grep '"browser_download_url"' | grep "$ASSET_KEYWORD" | grep '\.zip"' | head -1 | sed 's/.*"browser_download_url"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/')"
     fi
 
-    cp -f "$MOUNT_POINT/his" "$INSTALL_DIR/his"
-    rm -rf "$INSTALL_DIR/data"
-    cp -r "$MOUNT_POINT/data" "$INSTALL_DIR/" 2>/dev/null || true
+    # 回退: 如果 API 失败，使用硬编码
+    if [ -z "$VERSION" ]; then
+        VERSION="v3.1.0"
+        warn "无法连接 GitHub API，使用默认版本 $VERSION"
+    fi
 
-    hdiutil detach "$MOUNT_POINT" -quiet 2>/dev/null || true
+    if [ -z "$DOWNLOAD_URL" ]; then
+        NORM_VER="${VERSION#v}"
+        ZIP_NAME="lightweight-his-portable-v${NORM_VER}-${ASSET_KEYWORD}.zip"
+        DOWNLOAD_URL="https://github.com/${REPO}/releases/download/${VERSION}/${ZIP_NAME}"
+    fi
+
+    info "版本: $VERSION"
+
+    # ── 下载 ──
+    mkdir -p "$INSTALL_DIR"
+    TMPDIR_DL="$(mktemp -d)"
+    ZIP_PATH="${TMPDIR_DL}/his_release.zip"
+
+    info "正在下载..."
+    curl -fSL --progress-bar -o "$ZIP_PATH" "$DOWNLOAD_URL" || fail "下载失败，请检查网络连接\n  URL: $DOWNLOAD_URL"
+    success "下载完成"
+
+    # ── 解压 ──
+    info "正在解压..."
+    EXTRACT_DIR="${TMPDIR_DL}/extracted"
+    mkdir -p "$EXTRACT_DIR"
+    unzip -q -o "$ZIP_PATH" -d "$EXTRACT_DIR" || fail "解压失败"
+
+    # 找到解压后的顶层目录（zip 内通常有一层文件夹）
+    INNER_DIR="$(find "$EXTRACT_DIR" -mindepth 1 -maxdepth 1 -type d | head -1)"
+    if [ -z "$INNER_DIR" ]; then
+        INNER_DIR="$EXTRACT_DIR"
+    fi
+
+    # ── 安装文件 ──
+    info "正在安装到 $INSTALL_DIR ..."
+    cp -Rf "$INNER_DIR"/* "$INSTALL_DIR/" 2>/dev/null || true
     rm -rf "$TMPDIR_DL"
 
     # ── 授权 ──
-    info "正在授权..."
-    xattr -cr "$INSTALL_DIR" 2>/dev/null || true
-    chmod +x "$INSTALL_DIR/his"
-    success "安全限制已解除"
+    if [ "$OS" = "Darwin" ]; then
+        info "正在授权..."
+        xattr -cr "$INSTALL_DIR" 2>/dev/null || true
+    fi
+    chmod +x "$INSTALL_DIR/his" 2>/dev/null || true
+    chmod +x "$INSTALL_DIR/his_desktop" 2>/dev/null || true
+    success "权限已设置"
 
     # ── 创建全局命令 ──
     info "正在创建 his 命令..."
 
-    # 写一个 wrapper 脚本确保 data/ 路径正确
     cat > "$INSTALL_DIR/his-wrapper" <<'WRAPPER'
 #!/bin/bash
 cd "$HOME/.his" && exec ./his "$@"
@@ -145,7 +185,6 @@ WRAPPER
     if [ "$LINK_OK" = "1" ] && command -v his >/dev/null 2>&1; then
         success "已创建全局命令: his"
     else
-        # 备用方案: 写入 shell 配置
         SHELL_RC="$HOME/.zshrc"
         [ -n "$BASH_VERSION" ] && SHELL_RC="$HOME/.bashrc"
         EXPORT_LINE='export PATH="$HOME/.his:$PATH"'
@@ -156,14 +195,13 @@ WRAPPER
         else
             success "PATH 已配置"
         fi
-        # 同时把 wrapper 软链到 .his 目录本身以便 PATH 方案也能用 his 命令
         ln -sf "$INSTALL_DIR/his-wrapper" "$INSTALL_DIR/his-cmd" 2>/dev/null || true
     fi
 
     # ── 完成 ──
     echo ""
     printf "  ${GREEN}══════════════════════════════════════${RESET}\n"
-    success "安装完成！"
+    success "安装完成！ ($VERSION)"
     printf "  ${GREEN}══════════════════════════════════════${RESET}\n"
     echo ""
     info "安装位置:  ~/.his/"
