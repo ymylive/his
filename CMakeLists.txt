@@ -8,10 +8,6 @@ set(CMAKE_C_EXTENSIONS OFF)
 
 include(CTest)
 
-set(BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
-set(BUILD_SHARED_LIBS OFF CACHE BOOL "" FORCE)
-add_subdirectory(third_party/raylib_vendor EXCLUDE_FROM_ALL)
-
 add_library(his_common
     src/common/IdGenerator.c
     src/common/InputHelper.c
@@ -53,6 +49,7 @@ add_library(his_common
     src/ui/DemoData.c
     src/ui/MenuApplication.c
     src/ui/MenuController.c
+    src/ui/TuiStyle.c
 )
 
 target_include_directories(his_common PUBLIC include)
@@ -62,40 +59,6 @@ add_executable(his
 )
 
 target_link_libraries(his PRIVATE his_common)
-
-add_library(desktop_core
-    src/ui/DesktopApp.c
-    src/ui/DesktopTheme.c
-    src/ui/DesktopPages.c
-    src/ui/DesktopAdapters.c
-    src/ui/WorkbenchCommon.c
-    src/ui/workbench/AdminWorkbench.c
-    src/ui/workbench/AdminWorkbenchSupport.c
-    src/ui/workbench/DoctorWorkbench.c
-    src/ui/workbench/PatientWorkbench.c
-    src/ui/workbench/InpatientWorkbench.c
-    src/ui/workbench/WardWorkbench.c
-    src/ui/workbench/PharmacyWorkbench.c
-)
-
-target_include_directories(desktop_core
-    PUBLIC
-        include
-        third_party
-)
-
-target_link_libraries(desktop_core
-    PUBLIC
-        his_common
-        raylib
-)
-
-add_executable(his_desktop
-    src/desktop/main.c
-)
-
-target_include_directories(his_desktop PRIVATE third_party)
-target_link_libraries(his_desktop PRIVATE desktop_core)
 
 add_executable(test_result
     tests/test_result.c
@@ -234,78 +197,6 @@ target_link_libraries(test_menu_application PRIVATE his_common)
 
 add_test(NAME test_menu_application COMMAND test_menu_application)
 
-add_executable(test_desktop_state
-    tests/test_desktop_state.c
-)
-
-target_link_libraries(test_desktop_state PRIVATE desktop_core)
-
-add_test(NAME test_desktop_state COMMAND test_desktop_state)
-
-add_executable(test_desktop_adapters
-    tests/test_desktop_adapters.c
-)
-
-target_link_libraries(test_desktop_adapters PRIVATE desktop_core)
-
-add_test(NAME test_desktop_adapters COMMAND test_desktop_adapters)
-
-add_executable(test_desktop_workflows
-    tests/test_desktop_workflows.c
-)
-
-target_link_libraries(test_desktop_workflows PRIVATE desktop_core)
-
-add_test(NAME test_desktop_workflows COMMAND test_desktop_workflows)
-
-add_executable(test_desktop_layout_rules
-    tests/test_desktop_layout_rules.c
-)
-
-target_link_libraries(test_desktop_layout_rules PRIVATE desktop_core)
-
-add_test(NAME test_desktop_layout_rules COMMAND test_desktop_layout_rules)
-
-add_executable(test_patient_workbench_flow
-    tests/test_patient_workbench_flow.c
-)
-
-target_link_libraries(test_patient_workbench_flow PRIVATE desktop_core)
-
-add_test(NAME test_patient_workbench_flow COMMAND test_patient_workbench_flow)
-
-add_executable(test_doctor_workbench_flow
-    tests/test_doctor_workbench_flow.c
-)
-
-target_link_libraries(test_doctor_workbench_flow PRIVATE desktop_core)
-
-add_test(NAME test_doctor_workbench_flow COMMAND test_doctor_workbench_flow)
-
-add_executable(test_inpatient_ward_workbench_flow
-    tests/test_inpatient_ward_workbench_flow.c
-)
-
-target_link_libraries(test_inpatient_ward_workbench_flow PRIVATE desktop_core)
-
-add_test(NAME test_inpatient_ward_workbench_flow COMMAND test_inpatient_ward_workbench_flow)
-
-add_executable(test_pharmacy_admin_workbench_flow
-    tests/test_pharmacy_admin_workbench_flow.c
-)
-
-target_link_libraries(test_pharmacy_admin_workbench_flow PRIVATE desktop_core)
-
-add_test(NAME test_pharmacy_admin_workbench_flow COMMAND test_pharmacy_admin_workbench_flow)
-
-add_executable(test_admin_workbench_support
-    tests/test_admin_workbench_support.c
-)
-
-target_link_libraries(test_admin_workbench_support PRIVATE desktop_core)
-
-add_test(NAME test_admin_workbench_support COMMAND test_admin_workbench_support)
-
 add_executable(test_demo_data_integrity
     tests/test_demo_data_integrity.c
 )
@@ -340,15 +231,6 @@ set(HIS_TEST_TARGETS
     test_medical_record_service
     test_menu_controller
     test_menu_application
-    test_desktop_state
-    test_desktop_adapters
-    test_desktop_workflows
-    test_desktop_layout_rules
-    test_patient_workbench_flow
-    test_doctor_workbench_flow
-    test_inpatient_ward_workbench_flow
-    test_pharmacy_admin_workbench_flow
-    test_admin_workbench_support
     test_demo_data_integrity
     test_auth_service
 )

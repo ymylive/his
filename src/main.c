@@ -4,6 +4,7 @@
 #include "ui/DemoData.h"
 #include "ui/MenuApplication.h"
 #include "ui/MenuController.h"
+#include "ui/TuiStyle.h"
 
 static UserRole role_to_user_role(MenuRole role) {
     switch (role) {
@@ -19,6 +20,23 @@ static UserRole role_to_user_role(MenuRole role) {
             return USER_ROLE_PHARMACY;
         default:
             return USER_ROLE_UNKNOWN;
+    }
+}
+
+static TuiRoleTheme role_to_theme(MenuRole role) {
+    switch (role) {
+        case MENU_ROLE_ADMIN:
+            return TUI_THEME_ADMIN;
+        case MENU_ROLE_DOCTOR:
+            return TUI_THEME_DOCTOR;
+        case MENU_ROLE_PATIENT:
+            return TUI_THEME_PATIENT;
+        case MENU_ROLE_INPATIENT_MANAGER:
+            return TUI_THEME_INPATIENT;
+        case MENU_ROLE_PHARMACY:
+            return TUI_THEME_PHARMACY;
+        default:
+            return TUI_THEME_DEFAULT;
     }
 }
 
@@ -61,6 +79,8 @@ int main(void) {
     char menu_text[2048];
     char input[128];
     char password[128];
+    char prompt_buf[256];
+    char user_id[128];
     MenuApplication application;
     MenuApplicationPaths paths = {
         "data/users.txt",
@@ -83,10 +103,13 @@ int main(void) {
         return 1;
     }
 
-    puts("轻量级 HIS 控制台已启动。");
+    tui_clear_screen();
+    tui_animate_logo(stdout);
+    tui_animate_banner(stdout, "轻量级医院信息系统 (HIS)");
 
     for (;;) {
         MenuRole role = MENU_ROLE_INVALID;
+        TuiRoleTheme theme = TUI_THEME_DEFAULT;
         Result result = MenuController_render_main_menu(menu_text, sizeof(menu_text));
 
         if (result.success == 0) {
@@ -94,72 +117,97 @@ int main(void) {
             return 1;
         }
 
-        puts(menu_text);
-        printf("请选择角色编号: ");
+        tui_clear_screen();
+        tui_animate_logo(stdout);
+        tui_animate_lines(stdout, menu_text, 30);
+        tui_print_prompt(stdout, "请选择角色编号: ");
         result = Result_make_success("line ready");
         {
             int read_result = read_line(input, sizeof(input));
             if (read_result == 0) {
-                puts("输入流结束，系统退出。");
+                tui_clear_screen();
+                tui_animate_goodbye(stdout);
+                tui_show_cursor(stdout);
                 return 0;
             }
             if (read_result < 0) {
-                puts("输入过长，请重新输入。");
+                tui_print_warning(stdout, "输入过长，请重新输入。");
+                tui_delay(800);
+                tui_delay(500);
                 continue;
             }
         }
 
         result = MenuController_parse_main_selection(input, &role);
         if (result.success == 0) {
-            puts("输入无效，请重新输入菜单编号。");
+            tui_print_warning(stdout, "输入无效，请重新输入菜单编号。");
+            tui_delay(800);
+            tui_delay(500);
             continue;
         }
 
         if (MenuController_is_exit_role(role)) {
-            puts("系统已退出。");
+            tui_clear_screen();
+            tui_animate_goodbye(stdout);
+            tui_show_cursor(stdout);
             return 0;
         }
 
         if (role == MENU_ROLE_RESET_DEMO) {
             char reset_message[RESULT_MESSAGE_CAPACITY];
+            tui_print_section(stdout, TUI_SPARKLE, "重置演示数据");
+            tui_spinner_run(stdout, "正在重置数据...", 800);
             result = DemoData_reset(&paths, reset_message, sizeof(reset_message));
             if (result.success == 0) {
-                printf("重置失败: %s\n", reset_message[0] != '\0' ? reset_message : result.message);
+                tui_animate_error(stdout, reset_message[0] != '\0' ? reset_message : result.message);
             } else {
-                printf("%s\n", reset_message);
+                tui_animate_success(stdout, reset_message);
             }
             continue;
         }
 
+        theme = role_to_theme(role);
+
         {
             UserRole required_role = role_to_user_role(role);
             if (required_role == USER_ROLE_UNKNOWN) {
-                puts("角色未配置登录映射。");
+                tui_print_warning(stdout, "角色未配置登录映射。");
+                tui_delay(800);
+                tui_delay(500);
                 continue;
             }
 
-            printf("请输入[%s]用户编号: ", MenuController_role_label(role));
+            snprintf(prompt_buf, sizeof(prompt_buf), "请输入[%s]用户编号: ", MenuController_role_label(role));
+            tui_print_prompt(stdout, prompt_buf);
             {
                 int read_result = read_line(input, sizeof(input));
                 if (read_result == 0) {
-                    puts("输入流结束，系统退出。");
+                    tui_clear_screen();
+                    tui_animate_goodbye(stdout);
+                    tui_show_cursor(stdout);
                     return 0;
                 }
                 if (read_result < 0) {
-                    puts("输入过长，请重新输入。");
+                    tui_print_warning(stdout, "输入过长，请重新输入。");
+                    tui_delay(800);
+                    tui_delay(500);
                     continue;
                 }
             }
 
-            printf("请输入密码: ");
+            tui_print_prompt(stdout, "请输入密码: ");
             {
                 int read_result = read_line(password, sizeof(password));
                 if (read_result == 0) {
-                    puts("输入流结束，系统退出。");
+                    tui_clear_screen();
+                    tui_animate_goodbye(stdout);
+                    tui_show_cursor(stdout);
                     return 0;
                 }
                 if (read_result < 0) {
-                    puts("输入过长，请重新输入。");
+                    tui_print_warning(stdout, "输入过长，请重新输入。");
+                    tui_delay(800);
+                    tui_delay(500);
                     continue;
                 }
             }
@@ -167,10 +215,20 @@ int main(void) {
             result = MenuApplication_login(&application, input, password, required_role);
             memset(password, 0, sizeof(password));
             if (result.success == 0) {
-                printf("登录失败: %s\n", result.message);
+                tui_animate_error(stdout, result.message);
+                tui_delay(500);
                 continue;
             }
         }
+
+        strncpy(user_id, input, sizeof(user_id) - 1);
+        user_id[sizeof(user_id) - 1] = '\0';
+
+        tui_clear_screen();
+        tui_animate_welcome(stdout, theme, user_id);
+        tui_print_info(stdout, "按回车键进入系统...");
+        read_line(input, sizeof(input));
+        tui_animate_transition(stdout);
 
         for (;;) {
             MenuAction action = MENU_ACTION_INVALID;
@@ -181,23 +239,29 @@ int main(void) {
                 return 1;
             }
 
-            puts(menu_text);
-            printf("[%s] 请选择操作编号: ", MenuController_role_label(role));
+            tui_clear_screen();
+            tui_print_status_bar_themed(stdout, theme, user_id);
+            tui_animate_lines(stdout, menu_text, 25);
+            tui_print_prompt(stdout, "请选择操作: ");
             {
                 int read_result = read_line(input, sizeof(input));
                 if (read_result == 0) {
-                    puts("输入流结束，系统退出。");
+                    tui_clear_screen();
+                    tui_animate_goodbye(stdout);
+                    tui_show_cursor(stdout);
                     return 0;
                 }
                 if (read_result < 0) {
-                    puts("输入过长，请重新输入。");
+                    tui_print_warning(stdout, "输入过长，请重新输入。");
+                    tui_delay(800);
                     continue;
                 }
             }
 
             result = MenuController_parse_role_selection(role, input, &action);
             if (result.success == 0) {
-                puts("输入无效，请重新选择。");
+                tui_print_warning(stdout, "输入无效，请重新输入菜单编号。");
+                tui_delay(800);
                 continue;
             }
 
@@ -208,8 +272,13 @@ int main(void) {
             result = MenuApplication_execute_action(&application, action, stdin, stdout);
             if (result.success == 0 &&
                 strcmp(result.message, "action not implemented yet") != 0) {
-                printf("操作未完成: %s\n", result.message);
+                tui_print_error(stdout, result.message);
             }
+
+            tui_delay(300);
+            printf("\n");
+            tui_print_info(stdout, "按回车键继续...");
+            read_line(input, sizeof(input));
         }
 
         MenuApplication_logout(&application);

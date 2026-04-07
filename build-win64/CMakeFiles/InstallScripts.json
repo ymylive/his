@@ -1,0 +1,11 @@
+{
+	"InstallScripts" : 
+	[
+		"/Users/cornna/project/his/his/build-win64/cmake_install.cmake",
+		"/Users/cornna/project/his/his/build-win64/third_party/raylib_vendor/cmake_install.cmake",
+		"/Users/cornna/project/his/his/build-win64/third_party/raylib_vendor/raylib/cmake_install.cmake",
+		"/Users/cornna/project/his/his/build-win64/third_party/raylib_vendor/raylib/external/glfw/cmake_install.cmake",
+		"/Users/cornna/project/his/his/build-win64/third_party/raylib_vendor/raylib/external/glfw/src/cmake_install.cmake"
+	],
+	"Parallel" : false
+}

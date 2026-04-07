@@ -1,0 +1,11 @@
+patient_id|name|gender|age|contact|id_card|allergy|medical_history|is_inpatient|remarks
+PAT0001|LinYue|2|28|13800000001|110101199801010011|None|Healthy|0|patient account demo
+PAT0002|ChenBo|1|34|13800000002|110101199201010022|Penicillin|Gastritis history|0|pending registration sample
+PAT0003|WangXin|2|19|13800000003|110101200601010033|Seafood|Seasonal allergy|0|cancelled registration sample
+PAT0004|ZhouQing|1|47|13800000004|110101197901010044|None|Bronchitis follow-up|1|active inpatient sample
+PAT0005|LiNa|2|52|13800000005|110101197401010055|Sulfa|Hypertension|0|outpatient medication chain
+PAT0006|GuoLei|1|41|13800000006|110101198501010066|None|Migraine|0|doctor pending queue
+PAT0007|HeTing|2|8|13800000007|110101201701010077|Dust|Pediatric fever|0|examination complete sample
+PAT0008|SunYi|1|63|13800000008|110101196201010088|None|Post-op recovery|0|discharged admission history
+PAT0009|QiaoRan|2|31|13800000009|110101199301010099|None|Thyroid follow-up|0|registration and pharmacy sample
+PAT0010|DengKe|1|56|13800000010|110101196801010101|Aspirin|Diabetes|0|admin search sample

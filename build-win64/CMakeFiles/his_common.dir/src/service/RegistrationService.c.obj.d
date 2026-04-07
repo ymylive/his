@@ -1,0 +1,36 @@
+CMakeFiles/his_common.dir/src/service/RegistrationService.c.obj: \
+ /Users/cornna/project/his/his/src/service/RegistrationService.c \
+ /Users/cornna/project/his/his/include/service/RegistrationService.h \
+ /Users/cornna/project/his/his/include/common/LinkedList.h \
+ /opt/homebrew/Cellar/mingw-w64/14.0.0/toolchain-x86_64/lib/gcc/x86_64-w64-mingw32/15.2.0/include/stddef.h \
+ /opt/homebrew/Cellar/mingw-w64/14.0.0/toolchain-x86_64/x86_64-w64-mingw32/include/stddef.h \
+ /opt/homebrew/Cellar/mingw-w64/14.0.0/toolchain-x86_64/x86_64-w64-mingw32/include/crtdefs.h \
+ /opt/homebrew/Cellar/mingw-w64/14.0.0/toolchain-x86_64/x86_64-w64-mingw32/include/corecrt.h \
+ /opt/homebrew/Cellar/mingw-w64/14.0.0/toolchain-x86_64/x86_64-w64-mingw32/include/_mingw.h \
+ /opt/homebrew/Cellar/mingw-w64/14.0.0/toolchain-x86_64/x86_64-w64-mingw32/include/_mingw_mac.h \
+ /opt/homebrew/Cellar/mingw-w64/14.0.0/toolchain-x86_64/x86_64-w64-mingw32/include/_mingw_secapi.h \
+ /opt/homebrew/Cellar/mingw-w64/14.0.0/toolchain-x86_64/x86_64-w64-mingw32/include/vadefs.h \
+ /Users/cornna/project/his/his/include/common/Result.h \
+ /Users/cornna/project/his/his/include/domain/Registration.h \
+ /Users/cornna/project/his/his/include/domain/DomainTypes.h \
+ /Users/cornna/project/his/his/include/repository/DepartmentRepository.h \
+ /Users/cornna/project/his/his/include/domain/Department.h \
+ /Users/cornna/project/his/his/include/repository/TextFileRepository.h \
+ /Users/cornna/project/his/his/include/repository/DoctorRepository.h \
+ /Users/cornna/project/his/his/include/domain/Doctor.h \
+ /Users/cornna/project/his/his/include/repository/PatientRepository.h \
+ /Users/cornna/project/his/his/include/domain/Patient.h \
+ /Users/cornna/project/his/his/include/repository/RegistrationRepository.h \
+ /opt/homebrew/Cellar/mingw-w64/14.0.0/toolchain-x86_64/x86_64-w64-mingw32/include/errno.h \
+ /opt/homebrew/Cellar/mingw-w64/14.0.0/toolchain-x86_64/x86_64-w64-mingw32/include/stdlib.h \
+ /opt/homebrew/Cellar/mingw-w64/14.0.0/toolchain-x86_64/x86_64-w64-mingw32/include/corecrt_wstdlib.h \
+ /opt/homebrew/Cellar/mingw-w64/14.0.0/toolchain-x86_64/lib/gcc/x86_64-w64-mingw32/15.2.0/include/limits.h \
+ /opt/homebrew/Cellar/mingw-w64/14.0.0/toolchain-x86_64/lib/gcc/x86_64-w64-mingw32/15.2.0/include/syslimits.h \
+ /opt/homebrew/Cellar/mingw-w64/14.0.0/toolchain-x86_64/x86_64-w64-mingw32/include/limits.h \
+ /opt/homebrew/Cellar/mingw-w64/14.0.0/toolchain-x86_64/x86_64-w64-mingw32/include/sec_api/stdlib_s.h \
+ /opt/homebrew/Cellar/mingw-w64/14.0.0/toolchain-x86_64/x86_64-w64-mingw32/include/malloc.h \
+ /opt/homebrew/Cellar/mingw-w64/14.0.0/toolchain-x86_64/lib/gcc/x86_64-w64-mingw32/15.2.0/include/mm_malloc.h \
+ /opt/homebrew/Cellar/mingw-w64/14.0.0/toolchain-x86_64/x86_64-w64-mingw32/include/string.h \
+ /opt/homebrew/Cellar/mingw-w64/14.0.0/toolchain-x86_64/x86_64-w64-mingw32/include/sec_api/string_s.h \
+ /Users/cornna/project/his/his/include/common/IdGenerator.h \
+ /Users/cornna/project/his/his/include/repository/RepositoryUtils.h

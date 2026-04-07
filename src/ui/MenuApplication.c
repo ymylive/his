@@ -1,6 +1,7 @@
 #include "ui/MenuApplication.h"
 
 #include <ctype.h>
+#include "ui/TuiStyle.h"
 #include <limits.h>
 #include <stdlib.h>
 #include <stdarg.h>
@@ -281,7 +282,7 @@ static Result MenuApplication_write_failure(
     size_t capacity
 ) {
     if (buffer != 0 && capacity > 0 && message != 0) {
-        (void)MenuApplication_write_text(buffer, capacity, "操作失败: %s", message);
+        (void)MenuApplication_write_text(buffer, capacity, TUI_CROSS " 操作失败: %s", message);
     }
 
     if (message == 0) {
@@ -289,6 +290,17 @@ static Result MenuApplication_write_failure(
     }
 
     return Result_make_failure(message);
+}
+
+static void MenuApplication_print_result(FILE *out, const char *text, int success) {
+    if (out == 0 || text == 0 || text[0] == '\0') {
+        return;
+    }
+    if (success) {
+        tui_animate_success(out, text);
+    } else {
+        tui_animate_error(out, text);
+    }
 }
 
 static const char *MenuApplication_gender_label(PatientGender gender) {
@@ -1803,7 +1815,7 @@ static Result MenuApplication_prompt_line(
         return Result_make_failure("prompt buffer invalid");
     }
 
-    fputs(prompt, context->output);
+    tui_print_prompt(context->output, prompt);
     fflush(context->output);
     if (fgets(buffer, (int)capacity, context->input) == 0) {
         return Result_make_failure("input ended");
@@ -1942,7 +1954,7 @@ static Result MenuApplication_prompt_select_option(
     selected_index = MenuApplication_find_exact_selection(options, option_count, query);
     if (selected_index >= 0) {
         MenuApplication_copy_text(out_id, out_id_capacity, options[selected_index].id);
-        fprintf(context->output, "已选择: %s\n", options[selected_index].label);
+        fprintf(context->output, TUI_BOLD_GREEN " %s 已选择: " TUI_RESET "%s\n", TUI_CHECK, options[selected_index].label);
         return Result_make_success("selection chosen");
     }
 
@@ -1958,11 +1970,11 @@ static Result MenuApplication_prompt_select_option(
         return Result_make_failure("selection candidates not found");
     }
 
-    fprintf(context->output, "候选列表:\n");
+    fprintf(context->output, TUI_BOLD_CYAN "\n候选列表:\n" TUI_RESET);
     for (option_index = 0; option_index < filtered_count; option_index++) {
         fprintf(
             context->output,
-            "%d. %s\n",
+            "  " TUI_BOLD_YELLOW "%d" TUI_RESET ". %s\n",
             option_index + 1,
             options[filtered_indices[option_index]].label
         );
@@ -1978,7 +1990,7 @@ static Result MenuApplication_prompt_select_option(
 
     selected_index = filtered_indices[selected_number - 1];
     MenuApplication_copy_text(out_id, out_id_capacity, options[selected_index].id);
-    fprintf(context->output, "已选择: %s\n", options[selected_index].label);
+    fprintf(context->output, TUI_BOLD_GREEN " %s 已选择: " TUI_RESET "%s\n", TUI_CHECK, options[selected_index].label);
     return Result_make_success("selection chosen");
 }
 
@@ -3230,6 +3242,206 @@ Result MenuApplication_discharge_check(
     );
 }
 
+static void MenuApplication_print_ward_table(MenuApplication *application, FILE *out) {
+    LinkedList wards;
+    const LinkedListNode *current = 0;
+    TuiTable table;
+
+    LinkedList_init(&wards);
+    if (BedService_list_wards(&application->bed_service, &wards).success == 0) {
+        return;
+    }
+
+    tui_print_section(out, TUI_CIRCLE, "\xe7\x97\x85\xe6\x88\xbf\xe5\x88\x97\xe8\xa1\xa8");
+    TuiTable_init(&table, 5);
+    TuiTable_set_header(&table, 0, "\xe7\xbc\x96\xe5\x8f\xb7", 8);
+    TuiTable_set_header(&table, 1, "\xe5\x90\x8d\xe7\xa7\xb0", 12);
+    TuiTable_set_header(&table, 2, "\xe4\xbd\x8d\xe7\xbd\xae", 10);
+    TuiTable_set_header(&table, 3, "\xe5\x8d\xa0\xe7\x94\xa8/\xe5\xae\xb9\xe9\x87\x8f", 10);
+    TuiTable_set_header(&table, 4, "\xe7\x8a\xb6\xe6\x80\x81", 6);
+    TuiTable_print_top(&table, out);
+    TuiTable_print_header_row(&table, out);
+    TuiTable_print_separator(&table, out);
+
+    current = wards.head;
+    while (current != 0) {
+        const Ward *ward = (const Ward *)current->data;
+        char occ[32];
+        const char *vals[5];
+        const char *colors[5] = {TUI_CYAN, 0, TUI_DIM, 0, 0};
+        snprintf(occ, sizeof(occ), "%d/%d", ward->occupied_beds, ward->capacity);
+        vals[0] = ward->ward_id;
+        vals[1] = ward->name;
+        vals[2] = ward->location;
+        vals[3] = occ;
+        vals[4] = ward->status == WARD_STATUS_ACTIVE
+            ? "\xe2\x9c\x93 \xe5\x90\xaf\xe7\x94\xa8"
+            : "\xe2\x9c\x97 \xe5\x81\x9c\xe7\x94\xa8";
+        colors[4] = ward->status == WARD_STATUS_ACTIVE ? TUI_GREEN : TUI_RED;
+        TuiTable_print_row_colored(&table, out, vals, colors, 5);
+        current = current->next;
+    }
+    TuiTable_print_bottom(&table, out);
+    BedService_clear_wards(&wards);
+}
+
+static void MenuApplication_print_bed_table(MenuApplication *application, FILE *out, const char *ward_id) {
+    LinkedList beds;
+    const LinkedListNode *current = 0;
+    TuiTable table;
+
+    LinkedList_init(&beds);
+    if (BedService_list_beds_by_ward(&application->bed_service, ward_id, &beds).success == 0) {
+        return;
+    }
+
+    tui_print_section(out, TUI_DIAMOND, "\xe5\xba\x8a\xe4\xbd\x8d\xe7\x8a\xb6\xe6\x80\x81");
+    TuiTable_init(&table, 4);
+    TuiTable_set_header(&table, 0, "\xe5\xba\x8a\xe4\xbd\x8d\xe7\xbc\x96\xe5\x8f\xb7", 10);
+    TuiTable_set_header(&table, 1, "\xe6\x88\xbf\xe9\x97\xb4\xe5\x8f\xb7", 8);
+    TuiTable_set_header(&table, 2, "\xe5\xba\x8a\xe5\x8f\xb7", 6);
+    TuiTable_set_header(&table, 3, "\xe7\x8a\xb6\xe6\x80\x81", 8);
+    TuiTable_print_top(&table, out);
+    TuiTable_print_header_row(&table, out);
+    TuiTable_print_separator(&table, out);
+
+    current = beds.head;
+    while (current != 0) {
+        const Bed *bed = (const Bed *)current->data;
+        const char *vals[4];
+        const char *colors[4] = {TUI_CYAN, 0, 0, 0};
+        vals[0] = bed->bed_id;
+        vals[1] = bed->room_no;
+        vals[2] = bed->bed_no;
+        if (bed->status == BED_STATUS_AVAILABLE) {
+            vals[3] = "\xe2\x97\x8b \xe7\xa9\xba\xe9\x97\xb2";
+            colors[3] = TUI_GREEN;
+        } else if (bed->status == BED_STATUS_OCCUPIED) {
+            vals[3] = "\xe2\x97\x89 \xe5\x8d\xa0\xe7\x94\xa8";
+            colors[3] = TUI_RED;
+        } else {
+            vals[3] = "\xe2\x9a\x99 \xe7\xbb\xb4\xe6\x8a\xa4";
+            colors[3] = TUI_YELLOW;
+        }
+        TuiTable_print_row_colored(&table, out, vals, colors, 4);
+        current = current->next;
+    }
+    TuiTable_print_bottom(&table, out);
+    BedService_clear_beds(&beds);
+}
+
+static void MenuApplication_print_low_stock_table(MenuApplication *application, FILE *out) {
+    LinkedList medicines;
+    const LinkedListNode *current = 0;
+    TuiTable table;
+
+    LinkedList_init(&medicines);
+    if (PharmacyService_find_low_stock_medicines(&application->pharmacy_service, &medicines).success == 0) {
+        return;
+    }
+
+    tui_print_section(out, TUI_LIGHTNING, "\xe5\xba\x93\xe5\xad\x98\xe4\xb8\x8d\xe8\xb6\xb3\xe8\x8d\xaf\xe5\x93\x81");
+    TuiTable_init(&table, 4);
+    TuiTable_set_header(&table, 0, "\xe7\xbc\x96\xe5\x8f\xb7", 8);
+    TuiTable_set_header(&table, 1, "\xe5\x90\x8d\xe7\xa7\xb0", 14);
+    TuiTable_set_header(&table, 2, "\xe5\xba\x93\xe5\xad\x98", 6);
+    TuiTable_set_header(&table, 3, "\xe9\x98\x88\xe5\x80\xbc", 6);
+    TuiTable_set_colors(&table, TUI_BOLD_RED, TUI_BOLD_WHITE);
+    TuiTable_print_top(&table, out);
+    TuiTable_print_header_row(&table, out);
+    TuiTable_print_separator(&table, out);
+
+    current = medicines.head;
+    while (current != 0) {
+        const Medicine *m = (const Medicine *)current->data;
+        char stock_s[16];
+        char thresh_s[16];
+        const char *vals[4];
+        const char *colors[4] = {TUI_CYAN, 0, TUI_BOLD_RED, TUI_DIM};
+        snprintf(stock_s, sizeof(stock_s), "%d", m->stock);
+        snprintf(thresh_s, sizeof(thresh_s), "%d", m->low_stock_threshold);
+        vals[0] = m->medicine_id;
+        vals[1] = m->name;
+        vals[2] = stock_s;
+        vals[3] = thresh_s;
+        TuiTable_print_row_colored(&table, out, vals, colors, 4);
+        current = current->next;
+    }
+    TuiTable_print_bottom(&table, out);
+    PharmacyService_clear_medicine_results(&medicines);
+}
+
+static void MenuApplication_print_patient_card(MenuApplication *application, FILE *out, const char *patient_id) {
+    Patient patient;
+    char age_s[16];
+
+    if (PatientService_find_patient_by_id(&application->patient_service, patient_id, &patient).success == 0) {
+        return;
+    }
+
+    tui_print_section(out, TUI_HEART, "\xe6\x82\xa3\xe8\x80\x85\xe4\xbf\xa1\xe6\x81\xaf\xe5\x8d\xa1");
+    tui_print_kv_colored(out, "\xe7\xbc\x96\xe5\x8f\xb7", patient.patient_id, TUI_BOLD_CYAN);
+    tui_print_kv_colored(out, "\xe5\xa7\x93\xe5\x90\x8d", patient.name, TUI_BOLD_WHITE);
+    tui_print_kv_colored(out, "\xe6\x80\xa7\xe5\x88\xab",
+        patient.gender == PATIENT_GENDER_MALE ? "\xe7\x94\xb7" :
+        patient.gender == PATIENT_GENDER_FEMALE ? "\xe5\xa5\xb3" : "\xe6\x9c\xaa\xe7\x9f\xa5",
+        TUI_BOLD_YELLOW);
+    snprintf(age_s, sizeof(age_s), "%d \xe5\xb2\x81", patient.age);
+    tui_print_kv_colored(out, "\xe5\xb9\xb4\xe9\xbe\x84", age_s, TUI_RESET);
+    tui_print_kv_colored(out, "\xe8\x81\x94\xe7\xb3\xbb\xe6\x96\xb9\xe5\xbc\x8f", patient.contact, TUI_RESET);
+    tui_print_kv_colored(out, "\xe8\xba\xab\xe4\xbb\xbd\xe8\xaf\x81", patient.id_card, TUI_DIM);
+    tui_print_kv_colored(out, "\xe4\xbd\x8f\xe9\x99\xa2\xe7\x8a\xb6\xe6\x80\x81",
+        patient.is_inpatient
+            ? "\xe2\x97\x89 \xe4\xbd\x8f\xe9\x99\xa2\xe4\xb8\xad"
+            : "\xe2\x97\x8b \xe9\x97\xa8\xe8\xaf\x8a",
+        patient.is_inpatient ? TUI_BOLD_RED : TUI_BOLD_GREEN);
+}
+
+static void MenuApplication_print_pending_table(MenuApplication *application, FILE *out, const char *doctor_id) {
+    RegistrationRepositoryFilter filter;
+    LinkedList registrations;
+    const LinkedListNode *current = 0;
+    TuiTable table;
+    char count_msg[64];
+
+    LinkedList_init(&registrations);
+    RegistrationRepositoryFilter_init(&filter);
+    filter.use_status = 1;
+    filter.status = REG_STATUS_PENDING;
+
+    if (RegistrationService_find_by_doctor_id(
+            &application->registration_service, doctor_id, &filter, &registrations).success == 0) {
+        return;
+    }
+
+    tui_print_section(out, TUI_LOZENGE, "\xe5\xbe\x85\xe8\xaf\x8a\xe5\x88\x97\xe8\xa1\xa8");
+    TuiTable_init(&table, 4);
+    TuiTable_set_header(&table, 0, "\xe6\x8c\x82\xe5\x8f\xb7\xe7\xbc\x96\xe5\x8f\xb7", 10);
+    TuiTable_set_header(&table, 1, "\xe6\x82\xa3\xe8\x80\x85\xe7\xbc\x96\xe5\x8f\xb7", 10);
+    TuiTable_set_header(&table, 2, "\xe7\xa7\x91\xe5\xae\xa4\xe7\xbc\x96\xe5\x8f\xb7", 10);
+    TuiTable_set_header(&table, 3, "\xe6\x8c\x82\xe5\x8f\xb7\xe6\x97\xb6\xe9\x97\xb4", 20);
+    TuiTable_set_colors(&table, TUI_BOLD_GREEN, TUI_BOLD_WHITE);
+    TuiTable_print_top(&table, out);
+    TuiTable_print_header_row(&table, out);
+    TuiTable_print_separator(&table, out);
+
+    current = registrations.head;
+    while (current != 0) {
+        const Registration *r = (const Registration *)current->data;
+        const char *vals[4] = {r->registration_id, r->patient_id, r->department_id, r->registered_at};
+        const char *colors[4] = {TUI_CYAN, TUI_BOLD_YELLOW, TUI_DIM, TUI_DIM};
+        TuiTable_print_row_colored(&table, out, vals, colors, 4);
+        current = current->next;
+    }
+    TuiTable_print_bottom(&table, out);
+
+    snprintf(count_msg, sizeof(count_msg),
+        "\xe5\x85\xb1 %zu \xe4\xbd\x8d\xe6\x82\xa3\xe8\x80\x85\xe7\xad\x89\xe5\xbe\x85\xe5\xb0\xb1\xe8\xaf\x8a",
+        LinkedList_count(&registrations));
+    tui_print_info(out, count_msg);
+    RegistrationRepository_clear_list(&registrations);
+}
+
 Result MenuApplication_execute_action(
     MenuApplication *application,
     MenuAction action,
@@ -3271,7 +3483,7 @@ Result MenuApplication_execute_action(
         case MENU_ACTION_ADMIN_PATIENT_MANAGEMENT:
             result = MenuApplication_prompt_line(
                 &context,
-                "1.添加 2.修改 3.删除 4.查询\n请选择: ",
+                TUI_BOLD_YELLOW "1" TUI_RESET ".添加  " TUI_BOLD_YELLOW "2" TUI_RESET ".修改  " TUI_BOLD_YELLOW "3" TUI_RESET ".删除  " TUI_BOLD_YELLOW "4" TUI_RESET ".查询\n请选择: ",
                 first_id,
                 sizeof(first_id)
             );
@@ -3337,15 +3549,13 @@ Result MenuApplication_execute_action(
             } else {
                 return Result_make_failure("invalid admin patient action");
             }
-            if (output_buffer[0] != '\0') {
-                fprintf(output, "%s\n", output_buffer);
-            }
+            MenuApplication_print_result(output, output_buffer, result.success);
             return result;
 
         case MENU_ACTION_ADMIN_DOCTOR_DEPARTMENT:
             result = MenuApplication_prompt_line(
                 &context,
-                "1.新增科室 2.修改科室 3.添加医生 4.查询医生 5.按科室查看医生\n请选择: ",
+                TUI_BOLD_YELLOW "1" TUI_RESET ".新增科室  " TUI_BOLD_YELLOW "2" TUI_RESET ".修改科室  " TUI_BOLD_YELLOW "3" TUI_RESET ".添加医生  " TUI_BOLD_YELLOW "4" TUI_RESET ".查询医生  " TUI_BOLD_YELLOW "5" TUI_RESET ".按科室查看医生\n请选择: ",
                 first_id,
                 sizeof(first_id)
             );
@@ -3419,9 +3629,7 @@ Result MenuApplication_execute_action(
             } else {
                 return Result_make_failure("invalid admin doctor department action");
             }
-            if (output_buffer[0] != '\0') {
-                fprintf(output, "%s\n", output_buffer);
-            }
+            MenuApplication_print_result(output, output_buffer, result.success);
             return result;
 
         case MENU_ACTION_ADMIN_MEDICAL_RECORDS:
@@ -3450,46 +3658,30 @@ Result MenuApplication_execute_action(
                 output_buffer,
                 sizeof(output_buffer)
             );
-            if (output_buffer[0] != '\0') {
-                fprintf(output, "%s\n", output_buffer);
-            }
+            MenuApplication_print_result(output, output_buffer, result.success);
             return result;
 
         case MENU_ACTION_ADMIN_WARD_BED_OVERVIEW:
-            result = MenuApplication_list_wards(
-                application,
-                output_buffer,
-                sizeof(output_buffer)
-            );
-            if (output_buffer[0] != '\0') {
-                fprintf(output, "%s\n", output_buffer);
-            }
-            memset(output_buffer, 0, sizeof(output_buffer));
+            tui_spinner_run(output, "正在加载病房数据...", 500);
+            MenuApplication_print_ward_table(application, output);
             result = MenuApplication_prompt_select_ward(
                 application,
                 &context,
-                "病区搜索关键字/编号(回车列出全部): ",
+                "\xe7\x97\x85\xe5\x8c\xba\xe6\x90\x9c\xe7\xb4\xa2\xe5\x85\xb3\xe9\x94\xae\xe5\xad\x97/\xe7\xbc\x96\xe5\x8f\xb7(\xe5\x9b\x9e\xe8\xbd\xa6\xe5\x88\x97\xe5\x87\xba\xe5\x85\xa8\xe9\x83\xa8): ",
                 first_id,
                 sizeof(first_id)
             );
             if (result.success == 0) {
                 return result;
             }
-            result = MenuApplication_list_beds_by_ward(
-                application,
-                first_id,
-                output_buffer,
-                sizeof(output_buffer)
-            );
-            if (output_buffer[0] != '\0') {
-                fprintf(output, "%s\n", output_buffer);
-            }
-            return result;
+            tui_spinner_run(output, "正在加载床位数据...", 400);
+            MenuApplication_print_bed_table(application, output, first_id);
+            return Result_make_success("ward bed overview displayed");
 
         case MENU_ACTION_ADMIN_MEDICINE_OVERVIEW:
             result = MenuApplication_prompt_line(
                 &context,
-                "1.药品详情 2.低库存提醒\n请选择: ",
+                TUI_BOLD_YELLOW "1" TUI_RESET ".药品详情  " TUI_BOLD_YELLOW "2" TUI_RESET ".低库存提醒\n请选择: ",
                 first_id,
                 sizeof(first_id)
             );
@@ -3516,17 +3708,13 @@ Result MenuApplication_execute_action(
                     0
                 );
             } else if (strcmp(first_id, "2") == 0) {
-                result = MenuApplication_find_low_stock_medicines(
-                    application,
-                    output_buffer,
-                    sizeof(output_buffer)
-                );
+                tui_spinner_run(output, "正在检查库存...", 500);
+                MenuApplication_print_low_stock_table(application, output);
+                return Result_make_success("low stock medicines displayed");
             } else {
                 return Result_make_failure("invalid admin medicine action");
             }
-            if (output_buffer[0] != '\0') {
-                fprintf(output, "%s\n", output_buffer);
-            }
+            MenuApplication_print_result(output, output_buffer, result.success);
             return result;
 
         case MENU_ACTION_PATIENT_BASIC_INFO:
@@ -3534,16 +3722,9 @@ Result MenuApplication_execute_action(
             if (result.success == 0) {
                 return result;
             }
-            result = MenuApplication_query_patient(
-                application,
-                application->bound_patient_id,
-                output_buffer,
-                sizeof(output_buffer)
-            );
-            if (output_buffer[0] != '\0') {
-                fprintf(output, "%s\n", output_buffer);
-            }
-            return result;
+            tui_spinner_run(output, "正在查询患者信息...", 400);
+            MenuApplication_print_patient_card(application, output, application->bound_patient_id);
+            return Result_make_success("patient info displayed");
 
         case MENU_ACTION_PATIENT_QUERY_REGISTRATION:
             result = MenuApplication_require_patient_session(application);
@@ -3556,9 +3737,7 @@ Result MenuApplication_execute_action(
                 output_buffer,
                 sizeof(output_buffer)
             );
-            if (output_buffer[0] != '\0') {
-                fprintf(output, "%s\n", output_buffer);
-            }
+            MenuApplication_print_result(output, output_buffer, result.success);
             return result;
 
         case MENU_ACTION_DOCTOR_PENDING_LIST:
@@ -3568,7 +3747,7 @@ Result MenuApplication_execute_action(
                 result = MenuApplication_prompt_select_doctor(
                     application,
                     &context,
-                    "医生搜索关键字/工号(回车列出全部): ",
+                    "\xe5\x8c\xbb\xe7\x94\x9f\xe6\x90\x9c\xe7\xb4\xa2\xe5\x85\xb3\xe9\x94\xae\xe5\xad\x97/\xe5\xb7\xa5\xe5\x8f\xb7(\xe5\x9b\x9e\xe8\xbd\xa6\xe5\x88\x97\xe5\x87\xba\xe5\x85\xa8\xe9\x83\xa8): ",
                     "",
                     first_id,
                     sizeof(first_id)
@@ -3577,16 +3756,9 @@ Result MenuApplication_execute_action(
                     return result;
                 }
             }
-            result = MenuApplication_query_pending_registrations_by_doctor(
-                application,
-                first_id,
-                output_buffer,
-                sizeof(output_buffer)
-            );
-            if (output_buffer[0] != '\0') {
-                fprintf(output, "%s\n", output_buffer);
-            }
-            return result;
+            tui_spinner_run(output, "正在加载待诊列表...", 500);
+            MenuApplication_print_pending_table(application, output, first_id);
+            return Result_make_success("pending list displayed");
 
         case MENU_ACTION_DOCTOR_QUERY_PATIENT_HISTORY:
             result = MenuApplication_prompt_select_patient(
@@ -3605,9 +3777,7 @@ Result MenuApplication_execute_action(
                 output_buffer,
                 sizeof(output_buffer)
             );
-            if (output_buffer[0] != '\0') {
-                fprintf(output, "%s\n", output_buffer);
-            }
+            MenuApplication_print_result(output, output_buffer, result.success);
             return result;
 
         case MENU_ACTION_PATIENT_QUERY_VISITS:
@@ -3623,9 +3793,7 @@ Result MenuApplication_execute_action(
                 output_buffer,
                 sizeof(output_buffer)
             );
-            if (output_buffer[0] != '\0') {
-                fprintf(output, "%s\n", output_buffer);
-            }
+            MenuApplication_print_result(output, output_buffer, result.success);
             return result;
 
         case MENU_ACTION_PATIENT_QUERY_DISPENSE:
@@ -3639,9 +3807,7 @@ Result MenuApplication_execute_action(
                 output_buffer,
                 sizeof(output_buffer)
             );
-            if (output_buffer[0] != '\0') {
-                fprintf(output, "%s\n", output_buffer);
-            }
+            MenuApplication_print_result(output, output_buffer, result.success);
             return result;
 
         case MENU_ACTION_PATIENT_QUERY_MEDICINE_USAGE:
@@ -3667,9 +3833,7 @@ Result MenuApplication_execute_action(
                 sizeof(output_buffer),
                 1
             );
-            if (output_buffer[0] != '\0') {
-                fprintf(output, "%s\n", output_buffer);
-            }
+            MenuApplication_print_result(output, output_buffer, result.success);
             return result;
 
         case MENU_ACTION_DOCTOR_VISIT_RECORD:
@@ -3735,6 +3899,7 @@ Result MenuApplication_execute_action(
             if (result.success == 0) {
                 return result;
             }
+            tui_spinner_run(output, "正在保存诊疗记录...", 500);
             result = MenuApplication_create_visit_record(
                 application,
                 first_id,
@@ -3748,15 +3913,13 @@ Result MenuApplication_execute_action(
                 output_buffer,
                 sizeof(output_buffer)
             );
-            if (output_buffer[0] != '\0') {
-                fprintf(output, "%s\n", output_buffer);
-            }
+            MenuApplication_print_result(output, output_buffer, result.success);
             return result;
 
         case MENU_ACTION_DOCTOR_EXAM_RECORD:
             result = MenuApplication_prompt_line(
                 &context,
-                "1. 新增检查  2. 回写结果\n请选择: ",
+                TUI_BOLD_YELLOW "1" TUI_RESET ". 新增检查  " TUI_BOLD_YELLOW "2" TUI_RESET ". 回写结果\n请选择: ",
                 first_id,
                 sizeof(first_id)
             );
@@ -3854,9 +4017,7 @@ Result MenuApplication_execute_action(
             } else {
                 return Result_make_failure("invalid exam action");
             }
-            if (output_buffer[0] != '\0') {
-                fprintf(output, "%s\n", output_buffer);
-            }
+            MenuApplication_print_result(output, output_buffer, result.success);
             return result;
 
         case MENU_ACTION_INPATIENT_QUERY_BED:
@@ -3865,9 +4026,7 @@ Result MenuApplication_execute_action(
                 output_buffer,
                 sizeof(output_buffer)
             );
-            if (output_buffer[0] != '\0') {
-                fprintf(output, "%s\n", output_buffer);
-            }
+            MenuApplication_print_result(output, output_buffer, result.success);
             memset(output_buffer, 0, sizeof(output_buffer));
             result = MenuApplication_prompt_select_ward(
                 application,
@@ -3885,43 +4044,28 @@ Result MenuApplication_execute_action(
                 output_buffer,
                 sizeof(output_buffer)
             );
-            if (output_buffer[0] != '\0') {
-                fprintf(output, "%s\n", output_buffer);
-            }
+            MenuApplication_print_result(output, output_buffer, result.success);
             return result;
 
         case MENU_ACTION_INPATIENT_LIST_WARDS:
-            result = MenuApplication_list_wards(
-                application,
-                output_buffer,
-                sizeof(output_buffer)
-            );
-            if (output_buffer[0] != '\0') {
-                fprintf(output, "%s\n", output_buffer);
-            }
-            return result;
+            tui_spinner_run(output, "正在加载病房数据...", 500);
+            MenuApplication_print_ward_table(application, output);
+            return Result_make_success("ward list displayed");
 
         case MENU_ACTION_INPATIENT_LIST_BEDS:
             result = MenuApplication_prompt_select_ward(
                 application,
                 &context,
-                "病区搜索关键字/编号(回车列出全部): ",
+                "\xe7\x97\x85\xe5\x8c\xba\xe6\x90\x9c\xe7\xb4\xa2\xe5\x85\xb3\xe9\x94\xae\xe5\xad\x97/\xe7\xbc\x96\xe5\x8f\xb7(\xe5\x9b\x9e\xe8\xbd\xa6\xe5\x88\x97\xe5\x87\xba\xe5\x85\xa8\xe9\x83\xa8): ",
                 first_id,
                 sizeof(first_id)
             );
             if (result.success == 0) {
                 return result;
             }
-            result = MenuApplication_list_beds_by_ward(
-                application,
-                first_id,
-                output_buffer,
-                sizeof(output_buffer)
-            );
-            if (output_buffer[0] != '\0') {
-                fprintf(output, "%s\n", output_buffer);
-            }
-            return result;
+            tui_spinner_run(output, "正在加载床位数据...", 400);
+            MenuApplication_print_bed_table(application, output, first_id);
+            return Result_make_success("bed list displayed");
 
         case MENU_ACTION_INPATIENT_ADMIT:
             result = MenuApplication_prompt_select_patient(
@@ -3975,6 +4119,7 @@ Result MenuApplication_execute_action(
             if (result.success == 0) {
                 return result;
             }
+            tui_spinner_run(output, "正在办理入院手续...", 600);
             result = MenuApplication_admit_patient(
                 application,
                 first_id,
@@ -3985,9 +4130,7 @@ Result MenuApplication_execute_action(
                 output_buffer,
                 sizeof(output_buffer)
             );
-            if (output_buffer[0] != '\0') {
-                fprintf(output, "%s\n", output_buffer);
-            }
+            MenuApplication_print_result(output, output_buffer, result.success);
             return result;
 
         case MENU_ACTION_INPATIENT_DISCHARGE:
@@ -4021,6 +4164,7 @@ Result MenuApplication_execute_action(
             if (result.success == 0) {
                 return result;
             }
+            tui_spinner_run(output, "正在办理出院手续...", 600);
             result = MenuApplication_discharge_patient(
                 application,
                 first_id,
@@ -4029,9 +4173,7 @@ Result MenuApplication_execute_action(
                 output_buffer,
                 sizeof(output_buffer)
             );
-            if (output_buffer[0] != '\0') {
-                fprintf(output, "%s\n", output_buffer);
-            }
+            MenuApplication_print_result(output, output_buffer, result.success);
             return result;
 
         case MENU_ACTION_INPATIENT_QUERY_RECORD:
@@ -4051,9 +4193,7 @@ Result MenuApplication_execute_action(
                 output_buffer,
                 sizeof(output_buffer)
             );
-            if (output_buffer[0] != '\0') {
-                fprintf(output, "%s\n", output_buffer);
-            }
+            MenuApplication_print_result(output, output_buffer, result.success);
             return result;
 
         case MENU_ACTION_INPATIENT_TRANSFER_BED:
@@ -4099,9 +4239,7 @@ Result MenuApplication_execute_action(
                 output_buffer,
                 sizeof(output_buffer)
             );
-            if (output_buffer[0] != '\0') {
-                fprintf(output, "%s\n", output_buffer);
-            }
+            MenuApplication_print_result(output, output_buffer, result.success);
             return result;
 
         case MENU_ACTION_INPATIENT_DISCHARGE_CHECK:
@@ -4123,9 +4261,7 @@ Result MenuApplication_execute_action(
                 output_buffer,
                 sizeof(output_buffer)
             );
-            if (output_buffer[0] != '\0') {
-                fprintf(output, "%s\n", output_buffer);
-            }
+            MenuApplication_print_result(output, output_buffer, result.success);
             return result;
 
         case MENU_ACTION_PHARMACY_ADD_MEDICINE:
@@ -4139,9 +4275,7 @@ Result MenuApplication_execute_action(
                 output_buffer,
                 sizeof(output_buffer)
             );
-            if (output_buffer[0] != '\0') {
-                fprintf(output, "%s\n", output_buffer);
-            }
+            MenuApplication_print_result(output, output_buffer, result.success);
             return result;
 
         case MENU_ACTION_PHARMACY_RESTOCK:
@@ -4167,8 +4301,9 @@ Result MenuApplication_execute_action(
                 output_buffer,
                 sizeof(output_buffer)
             );
-            if (output_buffer[0] != '\0') {
-                fprintf(output, "%s\n", output_buffer);
+            MenuApplication_print_result(output, output_buffer, result.success);
+            if (result.success) {
+                tui_animate_progress(output, "入库进度", 20, 25);
             }
             return result;
 
@@ -4232,6 +4367,7 @@ Result MenuApplication_execute_action(
             if (result.success == 0) {
                 return result;
             }
+            tui_spinner_run(output, "正在处理发药...", 500);
             result = MenuApplication_dispense_medicine(
                 application,
                 text_value,
@@ -4243,9 +4379,7 @@ Result MenuApplication_execute_action(
                 output_buffer,
                 sizeof(output_buffer)
             );
-            if (output_buffer[0] != '\0') {
-                fprintf(output, "%s\n", output_buffer);
-            }
+            MenuApplication_print_result(output, output_buffer, result.success);
             return result;
 
         case MENU_ACTION_PHARMACY_QUERY_STOCK:
@@ -4267,21 +4401,13 @@ Result MenuApplication_execute_action(
                 output_buffer,
                 sizeof(output_buffer)
             );
-            if (output_buffer[0] != '\0') {
-                fprintf(output, "%s\n", output_buffer);
-            }
+            MenuApplication_print_result(output, output_buffer, result.success);
             return result;
 
         case MENU_ACTION_PHARMACY_LOW_STOCK:
-            result = MenuApplication_find_low_stock_medicines(
-                application,
-                output_buffer,
-                sizeof(output_buffer)
-            );
-            if (output_buffer[0] != '\0') {
-                fprintf(output, "%s\n", output_buffer);
-            }
-            return result;
+            tui_spinner_run(output, "正在检查库存...", 500);
+            MenuApplication_print_low_stock_table(application, output);
+            return Result_make_success("low stock medicines displayed");
 
         default:
             fprintf(output, "当前动作尚未落地: %s\n", MenuController_action_label(action));

@@ -1,76 +1,175 @@
 #include "ui/MenuController.h"
+#include "ui/TuiStyle.h"
 
 #include <ctype.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
+#define MENU_BOX_WIDTH 44
+#define MENU_INNER     (MENU_BOX_WIDTH - 2)
+
 typedef struct MenuOption {
     int selection;
     MenuAction action;
     const char *label;
+    const char *icon;
 } MenuOption;
 
-static const char MENU_MAIN_TEXT[] =
-    "==============================\n"
-    "  登录与角色菜单\n"
-    "==============================\n"
-    "1. 系统管理员\n"
-    "2. 医生\n"
-    "3. 患者\n"
-    "4. 住院管理员\n"
-    "5. 药房人员\n"
-    "6. 重置演示数据\n"
-    "0. 退出系统\n";
+/* ---- snprintf helpers for styled menu boxes ---- */
+
+static int menu_append_hline(
+    char *buf, size_t cap, size_t *used,
+    const char *left, const char *right
+) {
+    int w = 0;
+    int i = 0;
+    w = snprintf(buf + *used, cap - *used,
+                 TUI_BOLD_CYAN "%s", left);
+    if (w < 0 || (size_t)w >= cap - *used) return -1;
+    *used += (size_t)w;
+    for (i = 0; i < MENU_INNER; i++) {
+        w = snprintf(buf + *used, cap - *used, TUI_H);
+        if (w < 0 || (size_t)w >= cap - *used) return -1;
+        *used += (size_t)w;
+    }
+    w = snprintf(buf + *used, cap - *used, "%s" TUI_RESET "\n", right);
+    if (w < 0 || (size_t)w >= cap - *used) return -1;
+    *used += (size_t)w;
+    return 0;
+}
+
+static int menu_append_title(
+    char *buf, size_t cap, size_t *used,
+    const char *title
+) {
+    int w = 0;
+    int dw = tui_display_width(title);
+    int pad_left = 0;
+    int pad_right = 0;
+    int i = 0;
+
+    pad_left = (MENU_INNER - dw) / 2;
+    pad_right = MENU_INNER - dw - pad_left;
+    if (pad_left < 0) pad_left = 0;
+    if (pad_right < 0) pad_right = 0;
+
+    w = snprintf(buf + *used, cap - *used, TUI_BOLD_CYAN TUI_V TUI_BOLD_WHITE);
+    if (w < 0 || (size_t)w >= cap - *used) return -1;
+    *used += (size_t)w;
+    for (i = 0; i < pad_left; i++) {
+        w = snprintf(buf + *used, cap - *used, " ");
+        if (w < 0 || (size_t)w >= cap - *used) return -1;
+        *used += (size_t)w;
+    }
+    w = snprintf(buf + *used, cap - *used, "%s", title);
+    if (w < 0 || (size_t)w >= cap - *used) return -1;
+    *used += (size_t)w;
+    for (i = 0; i < pad_right; i++) {
+        w = snprintf(buf + *used, cap - *used, " ");
+        if (w < 0 || (size_t)w >= cap - *used) return -1;
+        *used += (size_t)w;
+    }
+    w = snprintf(buf + *used, cap - *used, TUI_BOLD_CYAN TUI_V TUI_RESET "\n");
+    if (w < 0 || (size_t)w >= cap - *used) return -1;
+    *used += (size_t)w;
+    return 0;
+}
+
+static int menu_append_item(
+    char *buf, size_t cap, size_t *used,
+    int number, const char *icon, const char *label, int is_dim
+) {
+    char content[128];
+    int w = 0;
+    int dw = 0;
+    int icon_extra = 0;
+    int pad = 0;
+    int i = 0;
+    const char *num_color = is_dim ? TUI_DIM : TUI_BOLD_YELLOW;
+    const char *lbl_color = is_dim ? TUI_DIM : TUI_RESET;
+
+    snprintf(content, sizeof(content), "%d. %s", number, label);
+    dw = tui_display_width(content);
+    if (icon != 0) {
+        icon_extra = 2;  /* icon is 1 display column + 1 space */
+    }
+    pad = MENU_INNER - 2 - icon_extra - dw;  /* 2 for leading spaces */
+    if (pad < 0) pad = 0;
+
+    if (icon != 0) {
+        w = snprintf(buf + *used, cap - *used,
+                     TUI_BOLD_CYAN TUI_V "  "
+                     TUI_CYAN "%s " "%s%d. %s%s",
+                     icon, num_color, number, lbl_color, label);
+    } else {
+        w = snprintf(buf + *used, cap - *used,
+                     TUI_BOLD_CYAN TUI_V "  "
+                     "%s%d. %s%s",
+                     num_color, number, lbl_color, label);
+    }
+    if (w < 0 || (size_t)w >= cap - *used) return -1;
+    *used += (size_t)w;
+    for (i = 0; i < pad; i++) {
+        w = snprintf(buf + *used, cap - *used, " ");
+        if (w < 0 || (size_t)w >= cap - *used) return -1;
+        *used += (size_t)w;
+    }
+    w = snprintf(buf + *used, cap - *used,
+                 TUI_BOLD_CYAN TUI_V TUI_RESET "\n");
+    if (w < 0 || (size_t)w >= cap - *used) return -1;
+    *used += (size_t)w;
+    return 0;
+}
 
 static const MenuOption MENU_ADMIN_OPTIONS[] = {
-    {1, MENU_ACTION_ADMIN_PATIENT_MANAGEMENT, "患者信息管理"},
-    {2, MENU_ACTION_ADMIN_DOCTOR_DEPARTMENT, "医生与科室管理/按科室查看医生"},
-    {3, MENU_ACTION_ADMIN_MEDICAL_RECORDS, "医疗记录管理/按时间范围查询"},
-    {4, MENU_ACTION_ADMIN_WARD_BED_OVERVIEW, "病房与床位管理/查看床位状态"},
-    {5, MENU_ACTION_ADMIN_MEDICINE_OVERVIEW, "药房与药品管理/库存不足提醒"},
-    {0, MENU_ACTION_BACK, "返回上级菜单"}
+    {1, MENU_ACTION_ADMIN_PATIENT_MANAGEMENT, "患者信息管理", TUI_HEART},
+    {2, MENU_ACTION_ADMIN_DOCTOR_DEPARTMENT, "医生与科室管理/按科室查看医生", TUI_MEDICAL},
+    {3, MENU_ACTION_ADMIN_MEDICAL_RECORDS, "医疗记录管理/按时间范围查询", TUI_LOZENGE},
+    {4, MENU_ACTION_ADMIN_WARD_BED_OVERVIEW, "病房与床位管理/查看床位状态", TUI_CIRCLE},
+    {5, MENU_ACTION_ADMIN_MEDICINE_OVERVIEW, "药房与药品管理/库存不足提醒", TUI_FLASK},
+    {0, MENU_ACTION_BACK, "返回上级菜单", TUI_ARROW_R}
 };
 
 static const MenuOption MENU_DOCTOR_OPTIONS[] = {
-    {1, MENU_ACTION_DOCTOR_PENDING_LIST, "待诊列表"},
-    {2, MENU_ACTION_DOCTOR_QUERY_PATIENT_HISTORY, "查询患者信息与历史"},
-    {3, MENU_ACTION_DOCTOR_VISIT_RECORD, "诊疗记录/诊断结果/医生建议"},
-    {4, MENU_ACTION_DOCTOR_PRESCRIPTION_STOCK, "处方与发药/查询药品库存"},
-    {5, MENU_ACTION_DOCTOR_EXAM_RECORD, "检查记录/检查结果"},
-    {0, MENU_ACTION_BACK, "返回上级菜单"}
+    {1, MENU_ACTION_DOCTOR_PENDING_LIST, "待诊列表", TUI_LOZENGE},
+    {2, MENU_ACTION_DOCTOR_QUERY_PATIENT_HISTORY, "查询患者信息与历史", TUI_HEART},
+    {3, MENU_ACTION_DOCTOR_VISIT_RECORD, "诊疗记录/诊断结果/医生建议", TUI_HEAVY_CROSS},
+    {4, MENU_ACTION_DOCTOR_PRESCRIPTION_STOCK, "处方与发药/查询药品库存", TUI_FLASK},
+    {5, MENU_ACTION_DOCTOR_EXAM_RECORD, "检查记录/检查结果", TUI_STAR},
+    {0, MENU_ACTION_BACK, "返回上级菜单", TUI_ARROW_R}
 };
 
 static const MenuOption MENU_PATIENT_OPTIONS[] = {
-    {1, MENU_ACTION_PATIENT_BASIC_INFO, "基本信息"},
-    {2, MENU_ACTION_PATIENT_QUERY_REGISTRATION, "挂号查询"},
-    {3, MENU_ACTION_PATIENT_QUERY_VISITS, "个人看诊历史"},
-    {4, MENU_ACTION_PATIENT_QUERY_EXAMS, "个人检查历史"},
-    {5, MENU_ACTION_PATIENT_QUERY_ADMISSIONS, "个人住院历史"},
-    {6, MENU_ACTION_PATIENT_QUERY_DISPENSE, "个人发药历史"},
-    {7, MENU_ACTION_PATIENT_QUERY_MEDICINE_USAGE, "药品使用方法"},
-    {0, MENU_ACTION_BACK, "返回上级菜单"}
+    {1, MENU_ACTION_PATIENT_BASIC_INFO, "基本信息", TUI_HEART},
+    {2, MENU_ACTION_PATIENT_QUERY_REGISTRATION, "挂号查询", TUI_LOZENGE},
+    {3, MENU_ACTION_PATIENT_QUERY_VISITS, "个人看诊历史", TUI_HEAVY_CROSS},
+    {4, MENU_ACTION_PATIENT_QUERY_EXAMS, "个人检查历史", TUI_STAR},
+    {5, MENU_ACTION_PATIENT_QUERY_ADMISSIONS, "个人住院历史", TUI_CIRCLE},
+    {6, MENU_ACTION_PATIENT_QUERY_DISPENSE, "个人发药历史", TUI_FLASK},
+    {7, MENU_ACTION_PATIENT_QUERY_MEDICINE_USAGE, "药品使用方法", TUI_DIAMOND},
+    {0, MENU_ACTION_BACK, "返回上级菜单", TUI_ARROW_R}
 };
 
 static const MenuOption MENU_INPATIENT_OPTIONS[] = {
-    {1, MENU_ACTION_INPATIENT_QUERY_BED, "病区床位查询"},
-    {2, MENU_ACTION_INPATIENT_ADMIT, "入院登记"},
-    {3, MENU_ACTION_INPATIENT_DISCHARGE, "出院办理"},
-    {4, MENU_ACTION_INPATIENT_QUERY_RECORD, "住院状态查询"},
-    {5, MENU_ACTION_INPATIENT_LIST_WARDS, "查看病房信息"},
-    {6, MENU_ACTION_INPATIENT_LIST_BEDS, "查看床位状态"},
-    {7, MENU_ACTION_INPATIENT_TRANSFER_BED, "床位调整/转床"},
-    {8, MENU_ACTION_INPATIENT_DISCHARGE_CHECK, "出院前检查"},
-    {0, MENU_ACTION_BACK, "返回上级菜单"}
+    {1, MENU_ACTION_INPATIENT_QUERY_BED, "病区床位查询", TUI_CIRCLE},
+    {2, MENU_ACTION_INPATIENT_ADMIT, "入院登记", TUI_HEAVY_CROSS},
+    {3, MENU_ACTION_INPATIENT_DISCHARGE, "出院办理", TUI_TRIANGLE},
+    {4, MENU_ACTION_INPATIENT_QUERY_RECORD, "住院状态查询", TUI_LOZENGE},
+    {5, MENU_ACTION_INPATIENT_LIST_WARDS, "查看病房信息", TUI_STAR},
+    {6, MENU_ACTION_INPATIENT_LIST_BEDS, "查看床位状态", TUI_CIRCLE_O},
+    {7, MENU_ACTION_INPATIENT_TRANSFER_BED, "床位调整/转床", TUI_DIAMOND},
+    {8, MENU_ACTION_INPATIENT_DISCHARGE_CHECK, "出院前检查", TUI_MEDICAL},
+    {0, MENU_ACTION_BACK, "返回上级菜单", TUI_ARROW_R}
 };
 
 static const MenuOption MENU_PHARMACY_OPTIONS[] = {
-    {1, MENU_ACTION_PHARMACY_ADD_MEDICINE, "添加药品"},
-    {2, MENU_ACTION_PHARMACY_RESTOCK, "药品入库"},
-    {3, MENU_ACTION_PHARMACY_DISPENSE, "药品出库/发药"},
-    {4, MENU_ACTION_PHARMACY_QUERY_STOCK, "库存盘点/查询库存"},
-    {5, MENU_ACTION_PHARMACY_LOW_STOCK, "缺药提醒/库存不足提醒"},
-    {0, MENU_ACTION_BACK, "返回上级菜单"}
+    {1, MENU_ACTION_PHARMACY_ADD_MEDICINE, "添加药品", TUI_HEAVY_CROSS},
+    {2, MENU_ACTION_PHARMACY_RESTOCK, "药品入库", TUI_TRIANGLE},
+    {3, MENU_ACTION_PHARMACY_DISPENSE, "药品出库/发药", TUI_DIAMOND},
+    {4, MENU_ACTION_PHARMACY_QUERY_STOCK, "库存盘点/查询库存", TUI_STAR},
+    {5, MENU_ACTION_PHARMACY_LOW_STOCK, "缺药提醒/库存不足提醒", TUI_LIGHTNING},
+    {0, MENU_ACTION_BACK, "返回上级菜单", TUI_ARROW_R}
 };
 
 static Result MenuController_copy_text(char *buffer, size_t capacity, const char *text) {
@@ -153,7 +252,47 @@ static Result MenuController_parse_number(const char *input, int *out_value) {
 }
 
 Result MenuController_render_main_menu(char *buffer, size_t capacity) {
-    return MenuController_copy_text(buffer, capacity, MENU_MAIN_TEXT);
+    size_t used = 0;
+
+    if (buffer == 0 || capacity == 0) {
+        return Result_make_failure("menu buffer invalid");
+    }
+
+    if (menu_append_hline(buffer, capacity, &used, TUI_TL, TUI_TR) < 0) {
+        return Result_make_failure("menu buffer too small");
+    }
+    if (menu_append_title(buffer, capacity, &used, "登录与角色菜单") < 0) {
+        return Result_make_failure("menu buffer too small");
+    }
+    if (menu_append_hline(buffer, capacity, &used, TUI_LT, TUI_RT) < 0) {
+        return Result_make_failure("menu buffer too small");
+    }
+    if (menu_append_item(buffer, capacity, &used, 1, TUI_GEAR, "系统管理员", 0) < 0) {
+        return Result_make_failure("menu buffer too small");
+    }
+    if (menu_append_item(buffer, capacity, &used, 2, TUI_MEDICAL, "医生", 0) < 0) {
+        return Result_make_failure("menu buffer too small");
+    }
+    if (menu_append_item(buffer, capacity, &used, 3, TUI_HEART, "患者", 0) < 0) {
+        return Result_make_failure("menu buffer too small");
+    }
+    if (menu_append_item(buffer, capacity, &used, 4, TUI_CIRCLE, "住院管理员", 0) < 0) {
+        return Result_make_failure("menu buffer too small");
+    }
+    if (menu_append_item(buffer, capacity, &used, 5, TUI_FLASK, "药房人员", 0) < 0) {
+        return Result_make_failure("menu buffer too small");
+    }
+    if (menu_append_item(buffer, capacity, &used, 6, TUI_SPARKLE, "重置演示数据", 0) < 0) {
+        return Result_make_failure("menu buffer too small");
+    }
+    if (menu_append_item(buffer, capacity, &used, 0, TUI_ARROW_R, "退出系统", 1) < 0) {
+        return Result_make_failure("menu buffer too small");
+    }
+    if (menu_append_hline(buffer, capacity, &used, TUI_BL, TUI_BR) < 0) {
+        return Result_make_failure("menu buffer too small");
+    }
+
+    return Result_make_success("menu ready");
 }
 
 Result MenuController_render_role_menu(
@@ -164,8 +303,8 @@ Result MenuController_render_role_menu(
     const MenuOption *options = 0;
     size_t option_count = 0;
     size_t index = 0;
-    int written = 0;
     size_t used = 0;
+    int is_dim = 0;
 
     if (buffer == 0 || capacity == 0) {
         return Result_make_failure("role menu buffer invalid");
@@ -176,30 +315,30 @@ Result MenuController_render_role_menu(
         return Result_make_failure("role menu not found");
     }
 
-    written = snprintf(
-        buffer,
-        capacity,
-        "========== %s ==========\n",
-        MenuController_role_label(role)
-    );
-    if (written < 0 || (size_t)written >= capacity) {
+    if (menu_append_hline(buffer, capacity, &used, TUI_TL, TUI_TR) < 0) {
+        return Result_make_failure("role menu buffer too small");
+    }
+    if (menu_append_title(buffer, capacity, &used,
+                          MenuController_role_label(role)) < 0) {
+        return Result_make_failure("role menu buffer too small");
+    }
+    if (menu_append_hline(buffer, capacity, &used, TUI_LT, TUI_RT) < 0) {
         return Result_make_failure("role menu buffer too small");
     }
 
-    used = (size_t)written;
     for (index = 0; index < option_count; index++) {
-        written = snprintf(
-            buffer + used,
-            capacity - used,
-            "%d. %s\n",
-            options[index].selection,
-            options[index].label
-        );
-        if (written < 0 || (size_t)written >= capacity - used) {
+        is_dim = (options[index].action == MENU_ACTION_BACK) ? 1 : 0;
+        if (menu_append_item(buffer, capacity, &used,
+                             options[index].selection,
+                             options[index].icon,
+                             options[index].label,
+                             is_dim) < 0) {
             return Result_make_failure("role menu buffer too small");
         }
+    }
 
-        used += (size_t)written;
+    if (menu_append_hline(buffer, capacity, &used, TUI_BL, TUI_BR) < 0) {
+        return Result_make_failure("role menu buffer too small");
     }
 
     return Result_make_success("role menu ready");

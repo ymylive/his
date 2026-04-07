@@ -1,0 +1,3 @@
+admission_id|patient_id|ward_id|bed_id|admitted_at|status|discharged_at|summary
+ADM0001|PAT0004|WRD0001|BED0001|2026-03-26 12:20|0||respiratory observation
+ADM0002|PAT0008|WRD0002|BED0004|2026-03-27 10:10|1|2026-03-27 15:00|post-op recovery complete

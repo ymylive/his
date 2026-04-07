@@ -4,7 +4,7 @@
 #include "ui/MenuController.h"
 
 static void test_render_main_menu_contains_all_roles(void) {
-    char buffer[1024];
+    char buffer[2048];
     Result result = MenuController_render_main_menu(buffer, sizeof(buffer));
 
     assert(result.success == 1);
@@ -36,7 +36,7 @@ static void test_parse_main_menu_selection(void) {
 }
 
 static void test_render_patient_and_inpatient_menus(void) {
-    char buffer[1024];
+    char buffer[2048];
     Result result = MenuController_render_role_menu(
         MENU_ROLE_PATIENT,
         buffer,
