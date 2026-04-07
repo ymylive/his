@@ -4,12 +4,8 @@
 #include <string.h>
 
 #ifdef _WIN32
-#ifndef __MINGW32__
 #include <conio.h>
 #include <io.h>
-#else
-#include <unistd.h>
-#endif
 #else
 #include <unistd.h>
 #include <termios.h>
@@ -188,8 +184,7 @@ int InputHelper_read_line(FILE *input, char *buffer, size_t capacity) {
     }
 
 #ifdef _WIN32
-#ifndef __MINGW32__
-    /* MSVC / native Windows: use _kbhit / _getch for ESC peek */
+    /* Windows (MSVC & MinGW): use _getch for ESC peek */
     if (_isatty(_fileno(input))) {
         int ch = _getch();
         if (ch == 27) {
@@ -198,28 +193,6 @@ int InputHelper_read_line(FILE *input, char *buffer, size_t capacity) {
         }
         _ungetch(ch);
     }
-#else
-    /* MinGW: fall through to POSIX path */
-    if (isatty(fileno(input))) {
-        struct termios old_s, new_s;
-        int ch;
-        tcgetattr(STDIN_FILENO, &old_s);
-        new_s = old_s;
-        new_s.c_lflag &= ~((tcflag_t)ICANON | (tcflag_t)ECHO);
-        new_s.c_cc[VMIN] = 1;
-        new_s.c_cc[VTIME] = 0;
-        tcsetattr(STDIN_FILENO, TCSANOW, &new_s);
-        ch = getchar();
-        tcsetattr(STDIN_FILENO, TCSANOW, &old_s);
-        if (ch == 27) {
-            InputHelper_drain_escape_sequence();
-            buffer[0] = '\0';
-            return -2;
-        }
-        if (ch == EOF) { buffer[0] = '\0'; return 0; }
-        ungetc(ch, input);
-    }
-#endif
 #else
     /* POSIX (macOS / Linux) */
     if (isatty(STDIN_FILENO)) {

@@ -55,6 +55,11 @@ add_library(his_common
 
 target_include_directories(his_common PUBLIC include)
 
+# Link libm on platforms where math functions are in a separate library
+if(UNIX AND NOT APPLE)
+    target_link_libraries(his_common PUBLIC m)
+endif()
+
 add_executable(his
     src/main.c
 )
