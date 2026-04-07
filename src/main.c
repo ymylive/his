@@ -3,6 +3,7 @@
 
 #ifdef _WIN32
 #include <conio.h>
+#include <windows.h>
 #else
 #include <sys/select.h>
 #include <termios.h>
@@ -14,6 +15,32 @@
 #include "ui/MenuApplication.h"
 #include "ui/MenuController.h"
 #include "ui/TuiStyle.h"
+
+#ifdef _WIN32
+static void init_windows_console(void) {
+    HANDLE hOut = INVALID_HANDLE_VALUE;
+    HANDLE hIn  = INVALID_HANDLE_VALUE;
+    DWORD  mode = 0;
+
+    /* Set console code page to UTF-8 for correct CJK display */
+    SetConsoleOutputCP(CP_UTF8);
+    SetConsoleCP(CP_UTF8);
+
+    /* Enable ANSI escape sequence processing on stdout */
+    hOut = GetStdHandle(STD_OUTPUT_HANDLE);
+    if (hOut != INVALID_HANDLE_VALUE && GetConsoleMode(hOut, &mode)) {
+        mode |= ENABLE_VIRTUAL_TERMINAL_PROCESSING | ENABLE_PROCESSED_OUTPUT;
+        SetConsoleMode(hOut, mode);
+    }
+
+    /* Enable VT input on stdin */
+    hIn = GetStdHandle(STD_INPUT_HANDLE);
+    if (hIn != INVALID_HANDLE_VALUE && GetConsoleMode(hIn, &mode)) {
+        mode |= ENABLE_VIRTUAL_TERMINAL_INPUT;
+        SetConsoleMode(hIn, mode);
+    }
+}
+#endif
 
 static UserRole role_to_user_role(MenuRole role) {
     switch (role) {
@@ -206,7 +233,13 @@ int main(void) {
     char prompt_buf[256];
     char user_id[128];
     MenuApplication application;
-    MenuApplicationPaths paths = {
+    MenuApplicationPaths paths;
+
+#ifdef _WIN32
+    init_windows_console();
+#endif
+
+    paths = (MenuApplicationPaths){
         "data/users.txt",
         "data/patients.txt",
         "data/departments.txt",
