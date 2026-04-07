@@ -103,10 +103,10 @@ do_install() {
 
     # ── 解包 ──
     info "正在安装..."
-    MOUNT_POINT="$(hdiutil attach "$DMG_PATH" -nobrowse -quiet 2>/dev/null \
-        | grep '/Volumes/' | sed 's/.*\(\/Volumes\/.*\)/\1/' | head -1)"
+    MOUNT_OUTPUT="$(hdiutil attach "$DMG_PATH" -nobrowse 2>/dev/null)"
+    MOUNT_POINT="$(echo "$MOUNT_OUTPUT" | awk -F'\t' '/\/Volumes\//{print $NF}' | head -1)"
 
-    if [ -z "$MOUNT_POINT" ]; then
+    if [ -z "$MOUNT_POINT" ] || [ ! -d "$MOUNT_POINT" ]; then
         fail "DMG 挂载失败"
     fi
 
@@ -133,18 +133,31 @@ cd "$HOME/.his" && exec ./his "$@"
 WRAPPER
     chmod +x "$INSTALL_DIR/his-wrapper"
 
-    if [ -d "/usr/local/bin" ] || mkdir -p /usr/local/bin 2>/dev/null; then
-        ln -sf "$INSTALL_DIR/his-wrapper" "$BIN_LINK" 2>/dev/null \
-            || sudo ln -sf "$INSTALL_DIR/his-wrapper" "$BIN_LINK" 2>/dev/null \
-            || true
+    LINK_OK=0
+    if [ -d "/usr/local/bin" ] || sudo mkdir -p /usr/local/bin 2>/dev/null; then
+        if ln -sf "$INSTALL_DIR/his-wrapper" "$BIN_LINK" 2>/dev/null; then
+            LINK_OK=1
+        elif sudo ln -sf "$INSTALL_DIR/his-wrapper" "$BIN_LINK" 2>/dev/null; then
+            LINK_OK=1
+        fi
     fi
 
-    if command -v his >/dev/null 2>&1; then
+    if [ "$LINK_OK" = "1" ] && command -v his >/dev/null 2>&1; then
         success "已创建全局命令: his"
     else
-        warn "无法创建 /usr/local/bin/his，请手动添加到 PATH:"
-        info "  echo 'export PATH=\"\$HOME/.his:\$PATH\"' >> ~/.zshrc"
-        # 备用方案: 在 .his 目录自身添加 alias
+        # 备用方案: 写入 shell 配置
+        SHELL_RC="$HOME/.zshrc"
+        [ -n "$BASH_VERSION" ] && SHELL_RC="$HOME/.bashrc"
+        EXPORT_LINE='export PATH="$HOME/.his:$PATH"'
+        if ! grep -qF '.his' "$SHELL_RC" 2>/dev/null; then
+            echo "$EXPORT_LINE" >> "$SHELL_RC"
+            success "已添加 PATH 到 $SHELL_RC"
+            info "请运行: source $SHELL_RC 或重新打开终端"
+        else
+            success "PATH 已配置"
+        fi
+        # 同时把 wrapper 软链到 .his 目录本身以便 PATH 方案也能用 his 命令
+        ln -sf "$INSTALL_DIR/his-wrapper" "$INSTALL_DIR/his-cmd" 2>/dev/null || true
     fi
 
     # ── 完成 ──
@@ -154,7 +167,7 @@ WRAPPER
     printf "  ${GREEN}══════════════════════════════════════${RESET}\n"
     echo ""
     info "安装位置:  ~/.his/"
-    info "启动命令:  ${BOLD}his${RESET}"
+    printf "  ${CYAN}•${RESET} 启动命令:  ${BOLD}his${RESET}\n"
     info "卸载命令:  curl -fsSL https://raw.githubusercontent.com/${REPO}/main/install.sh | bash -s uninstall"
     echo ""
 
@@ -162,7 +175,7 @@ WRAPPER
     printf "  ${YELLOW}▶${RESET} 现在启动 HIS? [Y/n] "
     read -r REPLY </dev/tty
     if [ "$REPLY" = "n" ] || [ "$REPLY" = "N" ]; then
-        info "稍后在终端输入 ${BOLD}his${RESET} 即可启动"
+        printf "  ${CYAN}•${RESET} 稍后在终端输入 ${BOLD}his${RESET} 即可启动\n"
         exit 0
     fi
 
