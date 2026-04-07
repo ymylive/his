@@ -219,6 +219,9 @@ int InputHelper_read_line(FILE *input, char *buffer, size_t capacity) {
             buffer[0] = '\0';
             return 0;
         }
+        /* Echo the character that was swallowed in raw mode */
+        fputc(ch, stdout);
+        fflush(stdout);
         ungetc(ch, input);
     }
 #endif
