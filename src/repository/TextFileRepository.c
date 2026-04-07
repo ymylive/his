@@ -35,7 +35,7 @@ static Result TextFileRepository_create_directory_if_needed(const char *path) {
     }
 
     if (stat(path, &info) == 0) {
-        if ((info.st_mode & S_IFDIR) != 0) {
+        if (S_ISDIR(info.st_mode)) {
             return Result_make_success("directory exists");
         }
 
