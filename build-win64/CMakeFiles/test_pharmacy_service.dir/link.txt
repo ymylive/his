@@ -1,3 +1,0 @@
-/opt/homebrew/bin/cmake -E rm -f CMakeFiles/test_pharmacy_service.dir/objects.a
-/opt/homebrew/bin/x86_64-w64-mingw32-ar qc CMakeFiles/test_pharmacy_service.dir/objects.a @CMakeFiles/test_pharmacy_service.dir/objects1.rsp
-/opt/homebrew/bin/x86_64-w64-mingw32-gcc -O3 -DNDEBUG -Wl,--whole-archive CMakeFiles/test_pharmacy_service.dir/objects.a -Wl,--no-whole-archive -o test_pharmacy_service.exe -Wl,--out-implib,libtest_pharmacy_service.dll.a -Wl,--major-image-version,0,--minor-image-version,0 @CMakeFiles/test_pharmacy_service.dir/linkLibs.rsp
