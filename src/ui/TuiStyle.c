@@ -1,6 +1,9 @@
 #include "ui/TuiStyle.h"
 
 #include <string.h>
+#include <stdlib.h>
+#include <math.h>
+#include <time.h>
 
 /* ═══════════════════════════════════════════════════════════════
  *  Role Theme System
@@ -1454,6 +1457,958 @@ void tui_animate_rainbow(FILE *out, const char *text, int cycles, int frame_dela
         tui_sleep_ms(frame_delay_ms);
     }
     fputc('\n', out);
+    fflush(out);
+    tui_show_cursor(out);
+}
+
+/* ═══════════════════════════════════════════════════════════════
+ *  Advanced Animation Effects
+ * ═══════════════════════════════════════════════════════════════ */
+
+/* Simple pseudo-random using linear congruential generator */
+static unsigned int tui_rand_state = 0;
+
+static void tui_rand_seed(void) {
+    tui_rand_state = (unsigned int)time(0) ^ 0xDEADBEEF;
+}
+
+static int tui_rand(void) {
+    tui_rand_state = tui_rand_state * 1103515245 + 12345;
+    return (int)((tui_rand_state >> 16) & 0x7FFF);
+}
+
+/* 256-color helpers */
+static void tui_set_fg256(FILE *out, int color) {
+    fprintf(out, "\033[38;5;%dm", color);
+}
+
+static void tui_set_bg256(FILE *out, int color) {
+    fprintf(out, "\033[48;5;%dm", color);
+}
+
+/* ── Matrix Digital Rain ─────────────────────────────────────── */
+
+void tui_animate_matrix_rain(FILE *out, int width, int height, int duration_ms) {
+    /* Medical/tech symbols for the rain drops */
+    static const char *RAIN_CHARS[] = {
+        "\xe2\x9a\x95", /* ⚕ */
+        "\xe2\x9c\x9a", /* ✚ */
+        "\xe2\x99\xa5", /* ♥ */
+        "\xe2\x97\x86", /* ◆ */
+        "\xe2\x96\x88", /* █ */
+        "\xe2\x96\x93", /* ▓ */
+        "\xe2\x96\x92", /* ▒ */
+        "\xe2\x96\x91", /* ░ */
+        "H", "I", "S",
+        "\xe2\x9a\x99", /* ⚙ */
+        "\xe2\x9a\xa1", /* ⚡ */
+        "\xe2\x9c\xa8", /* ✨ */
+        "0", "1"
+    };
+    #define RAIN_CHAR_COUNT 16
+
+    int drops[60]; /* column positions, max 60 columns */
+    int speeds[60];
+    int elapsed = 0;
+    int step = 50;
+    int col = 0;
+    int r = 0;
+
+    if (out == 0 || !tui_is_interactive()) return;
+    if (width <= 0) width = 44;
+    if (width > 60) width = 60;
+    if (height <= 0) height = 16;
+    if (duration_ms <= 0) duration_ms = 2000;
+
+    tui_rand_seed();
+
+    /* Initialize drop positions */
+    for (col = 0; col < width; col++) {
+        drops[col] = -(tui_rand() % height);
+        speeds[col] = 1 + (tui_rand() % 3);
+    }
+
+    tui_hide_cursor(out);
+
+    /* Reserve screen space */
+    for (r = 0; r < height; r++) fputc('\n', out);
+    fprintf(out, "\033[%dA", height); /* move back up */
+    fflush(out);
+
+    while (elapsed < duration_ms) {
+        /* Draw frame */
+        for (r = 0; r < height; r++) {
+            tui_move_cursor(out, r + 1, 1);
+            fputs("  ", out);
+            for (col = 0; col < width; col++) {
+                int dist = r - drops[col];
+                if (dist == 0) {
+                    /* Head of drop: bright white/green */
+                    tui_set_fg256(out, 15); /* bright white */
+                    fputs(RAIN_CHARS[tui_rand() % RAIN_CHAR_COUNT], out);
+                } else if (dist > 0 && dist < 6) {
+                    /* Trail: fading green */
+                    int green_shades[] = {46, 40, 34, 28, 22};
+                    tui_set_fg256(out, green_shades[dist - 1]);
+                    fputs(RAIN_CHARS[tui_rand() % RAIN_CHAR_COUNT], out);
+                } else if (dist >= 6 && dist < 10) {
+                    /* Far trail: dim */
+                    tui_set_fg256(out, 22);
+                    fputs(TUI_BLOCK_LIGHT, out);
+                } else {
+                    fputc(' ', out);
+                }
+            }
+            fputs(TUI_RESET, out);
+        }
+        fflush(out);
+
+        /* Update drops */
+        for (col = 0; col < width; col++) {
+            drops[col] += speeds[col];
+            if (drops[col] > height + 10) {
+                drops[col] = -(tui_rand() % (height / 2));
+                speeds[col] = 1 + (tui_rand() % 3);
+            }
+        }
+
+        tui_sleep_ms(step);
+        elapsed += step;
+    }
+
+    /* Clear the rain area */
+    for (r = 0; r < height; r++) {
+        tui_move_cursor(out, r + 1, 1);
+        fputs("\033[2K", out);
+    }
+    tui_move_cursor(out, 1, 1);
+    fflush(out);
+    tui_show_cursor(out);
+}
+
+/* ── Particle Explosion ──────────────────────────────────────── */
+
+void tui_animate_particle_explosion(FILE *out, int width, int height) {
+    #define MAX_PARTICLES 40
+    double px[MAX_PARTICLES], py[MAX_PARTICLES];
+    double vx[MAX_PARTICLES], vy[MAX_PARTICLES];
+    int colors[MAX_PARTICLES];
+    int particle_char[MAX_PARTICLES];
+    static const char *PARTICLE_SYMS[] = {
+        "\xe2\x9c\xa8", /* ✨ */
+        "\xe2\x97\x86", /* ◆ */
+        "\xe2\x97\x87", /* ◇ */
+        "\xe2\x80\xa2", /* • */
+        "\xe2\x98\x85", /* ★ */
+        "\xe2\x96\xb2", /* ▲ */
+        "\xe2\x99\xa6", /* ♦ */
+        "\xe2\x9a\xa1"  /* ⚡ */
+    };
+    int frame = 0;
+    int i = 0;
+    int r = 0;
+    double cx = 0;
+    double cy = 0;
+    double angle = 0;
+    double speed = 0;
+
+    if (out == 0 || !tui_is_interactive()) return;
+    if (width <= 0) width = 44;
+    if (height <= 0) height = 12;
+
+    tui_rand_seed();
+    cx = width / 2.0;
+    cy = height / 2.0;
+
+    /* Initialize particles radiating from center */
+    for (i = 0; i < MAX_PARTICLES; i++) {
+        px[i] = cx;
+        py[i] = cy;
+        angle = (tui_rand() % 360) * 3.14159265 / 180.0;
+        speed = 0.3 + (tui_rand() % 100) / 100.0 * 1.5;
+        vx[i] = cos(angle) * speed;
+        vy[i] = sin(angle) * speed * 0.5; /* aspect ratio correction */
+        colors[i] = (tui_rand() % GRADIENT_COUNT);
+        particle_char[i] = tui_rand() % 8;
+    }
+
+    tui_hide_cursor(out);
+
+    /* Reserve space */
+    for (r = 0; r < height; r++) fputc('\n', out);
+    fprintf(out, "\033[%dA", height);
+    fflush(out);
+
+    for (frame = 0; frame < 25; frame++) {
+        /* Clear frame */
+        for (r = 0; r < height; r++) {
+            tui_move_cursor(out, r + 1, 1);
+            fputs("\033[2K", out);
+        }
+
+        /* Draw particles */
+        for (i = 0; i < MAX_PARTICLES; i++) {
+            int ix = (int)(px[i] + 0.5);
+            int iy = (int)(py[i] + 0.5);
+            if (ix >= 0 && ix < width && iy >= 0 && iy < height) {
+                tui_move_cursor(out, iy + 1, ix + 3);
+                /* Fade based on distance from center */
+                if (frame < 8) {
+                    fputs(GRADIENT_COLORS[colors[i]], out);
+                    fputs(TUI_BOLD, out);
+                } else if (frame < 16) {
+                    fputs(GRADIENT_COLORS[colors[i]], out);
+                } else {
+                    fputs(TUI_DIM, out);
+                    fputs(GRADIENT_COLORS[colors[i]], out);
+                }
+                fputs(PARTICLE_SYMS[particle_char[i]], out);
+                fputs(TUI_RESET, out);
+            }
+            /* Update physics */
+            px[i] += vx[i];
+            py[i] += vy[i];
+            vy[i] += 0.03; /* gravity */
+            vx[i] *= 0.97; /* air resistance */
+        }
+
+        fflush(out);
+        tui_sleep_ms(60);
+    }
+
+    /* Clear */
+    for (r = 0; r < height; r++) {
+        tui_move_cursor(out, r + 1, 1);
+        fputs("\033[2K", out);
+    }
+    tui_move_cursor(out, 1, 1);
+    fflush(out);
+    tui_show_cursor(out);
+}
+
+/* ── Heartbeat Monitor ───────────────────────────────────────── */
+
+void tui_animate_heartbeat(FILE *out, int width, int beats) {
+    /* ECG waveform pattern: flat -> small bump -> big spike -> dip -> recovery -> flat */
+    static const int ECG_PATTERN[] = {
+        0, 0, 0, 0, 0, 1, 0, -1, 0, 0,
+        0, 1, 2, 4, 6, 3, -3, -2, 0, 1,
+        0, 0, 0, 0, 0, 0, 0, 0, 0, 0
+    };
+    #define ECG_LEN 30
+    int beat = 0;
+    int pos = 0;
+    int i = 0;
+    int baseline = 4;
+
+    if (out == 0 || !tui_is_interactive()) return;
+    if (width <= 0) width = 50;
+    if (beats <= 0) beats = 3;
+
+    tui_hide_cursor(out);
+
+    /* Draw frame */
+    fputc('\n', out);
+    fputs("  ", out);
+    fputs(TUI_BOLD_RED, out);
+    fputs(TUI_HEART, out);
+    fputs(TUI_RESET TUI_DIM " ECG Monitor " TUI_RESET, out);
+    fputc('\n', out);
+
+    /* Reserve 9 rows for the waveform display */
+    for (i = 0; i < 9; i++) fputc('\n', out);
+    fprintf(out, "\033[9A");
+    fflush(out);
+
+    for (beat = 0; beat < beats; beat++) {
+        for (pos = 0; pos < ECG_LEN; pos++) {
+            int y = baseline - ECG_PATTERN[pos];
+
+            /* Simpler approach: draw the waveform building left to right */
+            {
+                int col = (beat * ECG_LEN + pos) % width;
+                int row = 0;
+                if (col == 0 && (beat > 0 || pos > 0)) {
+                    /* Clear area for new sweep */
+                    for (row = 0; row < 9; row++) {
+                        tui_move_cursor(out, row + 3, 3);
+                        for (i = 0; i < width; i++) fputc(' ', out);
+                    }
+                }
+
+                /* Draw the dot */
+                if (y >= 0 && y < 9) {
+                    tui_move_cursor(out, y + 3, col + 3);
+                    if (ECG_PATTERN[pos] > 3) {
+                        fputs(TUI_BOLD_RED, out);
+                        fputs(TUI_BLOCK_FULL, out);
+                    } else if (ECG_PATTERN[pos] > 1) {
+                        tui_set_fg256(out, 196); /* bright red */
+                        fputs(TUI_BLOCK_FULL, out);
+                    } else if (ECG_PATTERN[pos] < -1) {
+                        tui_set_fg256(out, 202); /* orange-red */
+                        fputs(TUI_BLOCK_FULL, out);
+                    } else {
+                        tui_set_fg256(out, 46); /* green */
+                        fputs(TUI_DOT, out);
+                    }
+                    fputs(TUI_RESET, out);
+                }
+
+                /* Draw sweeping cursor line */
+                if (col + 1 < width) {
+                    for (row = 0; row < 9; row++) {
+                        tui_move_cursor(out, row + 3, col + 4);
+                        tui_set_fg256(out, 238);
+                        fputs(TUI_V, out);
+                        fputs(TUI_RESET, out);
+                    }
+                }
+            }
+            fflush(out);
+            tui_sleep_ms(35);
+        }
+    }
+
+    /* Move cursor below the waveform */
+    tui_move_cursor(out, 13, 1);
+    fputc('\n', out);
+    fflush(out);
+    tui_show_cursor(out);
+}
+
+/* ── Glitch Effect ───────────────────────────────────────────── */
+
+void tui_animate_glitch(FILE *out, const char *text, int intensity, int duration_ms) {
+    static const char *GLITCH_CHARS[] = {
+        "\xe2\x96\x88", "\xe2\x96\x93", "\xe2\x96\x92", "\xe2\x96\x91",
+        "#", "@", "&", "%", "$", "!", "?", "/", "\\", "|",
+        "\xe2\x94\x80", "\xe2\x94\x82"
+    };
+    #define GLITCH_CHAR_COUNT 16
+    int elapsed = 0;
+    int step = 50;
+    int text_len = 0;
+
+    if (out == 0 || text == 0) return;
+    if (!tui_is_interactive()) { fputs(text, out); fputc('\n', out); return; }
+    if (intensity <= 0) intensity = 3;
+    if (duration_ms <= 0) duration_ms = 800;
+
+    tui_rand_seed();
+    text_len = tui_display_width(text);
+
+    tui_hide_cursor(out);
+
+    while (elapsed < duration_ms) {
+        const unsigned char *p = (const unsigned char *)text;
+        int char_idx = 0;
+        int glitch_count = intensity;
+
+        fputs("\r  ", out);
+
+        /* Decide which positions get glitched this frame */
+        if (elapsed > duration_ms * 3 / 4) {
+            glitch_count = 1; /* fewer glitches as we settle */
+        }
+
+        p = (const unsigned char *)text;
+        char_idx = 0;
+        while (*p != 0) {
+            int should_glitch = 0;
+            int ci = 0;
+
+            /* Random glitch at some positions */
+            for (ci = 0; ci < glitch_count; ci++) {
+                if ((tui_rand() % text_len) == char_idx) {
+                    should_glitch = 1;
+                    break;
+                }
+            }
+
+            if (should_glitch) {
+                /* Random color + random char */
+                int color_shift = tui_rand() % 6;
+                static const char *GLITCH_COLORS[] = {
+                    "\033[91m", "\033[92m", "\033[93m", "\033[95m", "\033[96m", "\033[97m"
+                };
+                fputs(GLITCH_COLORS[color_shift], out);
+                fputs(GLITCH_CHARS[tui_rand() % GLITCH_CHAR_COUNT], out);
+                fputs(TUI_RESET, out);
+                /* Skip the original char bytes */
+                if (*p < 0x80) p += 1;
+                else if (*p < 0xE0) p += 2;
+                else if (*p < 0xF0) p += 3;
+                else p += 4;
+            } else {
+                /* Normal char */
+                fputs(TUI_BOLD_WHITE, out);
+                if (*p < 0x80) {
+                    fputc(*p, out); p += 1;
+                } else if (*p < 0xE0) {
+                    fputc(p[0], out); fputc(p[1], out); p += 2;
+                } else if (*p < 0xF0) {
+                    fputc(p[0], out); fputc(p[1], out); fputc(p[2], out); p += 3;
+                } else {
+                    fputc(p[0], out); fputc(p[1], out); fputc(p[2], out); fputc(p[3], out); p += 4;
+                }
+                fputs(TUI_RESET, out);
+            }
+
+            char_idx++;
+        }
+
+        fflush(out);
+        tui_sleep_ms(step);
+        elapsed += step;
+    }
+
+    /* Final clean render */
+    fputs("\r  " TUI_BOLD_WHITE, out);
+    fputs(text, out);
+    fputs(TUI_RESET, out);
+    fputc('\n', out);
+    fflush(out);
+    tui_show_cursor(out);
+}
+
+/* ── Fireworks ───────────────────────────────────────────────── */
+
+void tui_animate_fireworks(FILE *out, int width, int height, int count) {
+    #define FW_MAX_SPARKS 30
+    int fw = 0;
+    int frame = 0;
+    int r = 0;
+    int i = 0;
+
+    static const char *SPARK_SYMS[] = {
+        "\xe2\x9c\xa8", /* ✨ */
+        "\xe2\x80\xa2", /* • */
+        "\xe2\x97\x86", /* ◆ */
+        "\xe2\x98\x85", /* ★ */
+        "\xe2\x97\x87", /* ◇ */
+        "\xe2\x9a\xa1", /* ⚡ */
+        "\xe2\x9d\x84", /* ❄ */
+        "\xe2\x9d\x80"  /* ❀ */
+    };
+
+    if (out == 0 || !tui_is_interactive()) return;
+    if (width <= 0) width = 50;
+    if (height <= 0) height = 14;
+    if (count <= 0) count = 3;
+
+    tui_rand_seed();
+    tui_hide_cursor(out);
+
+    /* Reserve space */
+    for (r = 0; r < height; r++) fputc('\n', out);
+    fprintf(out, "\033[%dA", height);
+    fflush(out);
+
+    for (fw = 0; fw < count; fw++) {
+        /* Launch position */
+        int launch_x = 5 + tui_rand() % (width - 10);
+        int burst_y = 2 + tui_rand() % (height / 3);
+        int color_base = tui_rand() % GRADIENT_COUNT;
+
+        /* Phase 1: Launch trail going up */
+        {
+            int trail_y = 0;
+            for (trail_y = height - 1; trail_y > burst_y; trail_y--) {
+                /* Clear previous trail dot */
+                if (trail_y < height - 1) {
+                    tui_move_cursor(out, trail_y + 2, launch_x + 3);
+                    tui_set_fg256(out, 240);
+                    fputs(TUI_DOT, out);
+                    fputs(TUI_RESET, out);
+                }
+                /* Draw current position */
+                tui_move_cursor(out, trail_y + 1, launch_x + 3);
+                fputs(TUI_BOLD_YELLOW, out);
+                fputs(TUI_BLOCK_FULL, out);
+                fputs(TUI_RESET, out);
+                fflush(out);
+                tui_sleep_ms(30);
+            }
+            /* Clear launch trail */
+            for (trail_y = height - 1; trail_y > burst_y; trail_y--) {
+                tui_move_cursor(out, trail_y + 1, launch_x + 3);
+                fputc(' ', out);
+            }
+        }
+
+        /* Phase 2: Explosion burst */
+        {
+            double sx[FW_MAX_SPARKS], sy[FW_MAX_SPARKS];
+            double svx[FW_MAX_SPARKS], svy[FW_MAX_SPARKS];
+            int spark_sym[FW_MAX_SPARKS];
+
+            for (i = 0; i < FW_MAX_SPARKS; i++) {
+                double angle = (tui_rand() % 360) * 3.14159265 / 180.0;
+                double spd = 0.4 + (tui_rand() % 100) / 100.0 * 1.2;
+                sx[i] = (double)launch_x;
+                sy[i] = (double)burst_y;
+                svx[i] = cos(angle) * spd;
+                svy[i] = sin(angle) * spd * 0.5;
+                spark_sym[i] = tui_rand() % 8;
+            }
+
+            for (frame = 0; frame < 18; frame++) {
+                /* Clear area */
+                for (r = 0; r < height; r++) {
+                    tui_move_cursor(out, r + 1, 3);
+                    for (i = 0; i < width; i++) fputc(' ', out);
+                }
+
+                /* Draw sparks */
+                for (i = 0; i < FW_MAX_SPARKS; i++) {
+                    int ix = (int)(sx[i] + 0.5);
+                    int iy = (int)(sy[i] + 0.5);
+                    if (ix >= 0 && ix < width && iy >= 0 && iy < height) {
+                        tui_move_cursor(out, iy + 1, ix + 3);
+                        if (frame < 6) {
+                            fputs(GRADIENT_COLORS[(color_base + i) % GRADIENT_COUNT], out);
+                            fputs(TUI_BOLD, out);
+                        } else if (frame < 12) {
+                            fputs(GRADIENT_COLORS[(color_base + i) % GRADIENT_COUNT], out);
+                        } else {
+                            fputs(TUI_DIM, out);
+                        }
+                        fputs(SPARK_SYMS[spark_sym[i]], out);
+                        fputs(TUI_RESET, out);
+                    }
+                    sx[i] += svx[i];
+                    sy[i] += svy[i];
+                    svy[i] += 0.04; /* gravity */
+                    svx[i] *= 0.96;
+                }
+                fflush(out);
+                tui_sleep_ms(55);
+            }
+        }
+
+        tui_sleep_ms(200);
+    }
+
+    /* Final clear */
+    for (r = 0; r < height; r++) {
+        tui_move_cursor(out, r + 1, 1);
+        fputs("\033[2K", out);
+    }
+    tui_move_cursor(out, 1, 1);
+    fflush(out);
+    tui_show_cursor(out);
+}
+
+/* ── DNA Double Helix ────────────────────────────────────────── */
+
+void tui_animate_dna_helix(FILE *out, int height, int frames) {
+    int frame = 0;
+    int row = 0;
+
+    static const int PAIR_COLORS[] = { 196, 46, 33, 226 }; /* red, green, blue, yellow */
+
+    if (out == 0 || !tui_is_interactive()) return;
+    if (height <= 0) height = 12;
+    if (frames <= 0) frames = 30;
+
+    tui_rand_seed();
+    tui_hide_cursor(out);
+
+    /* Reserve space */
+    fputc('\n', out);
+    for (row = 0; row < height; row++) fputc('\n', out);
+    fprintf(out, "\033[%dA", height);
+    fflush(out);
+
+    for (frame = 0; frame < frames; frame++) {
+        for (row = 0; row < height; row++) {
+            double phase = (row + frame) * 0.5;
+            double x = sin(phase) * 10.0;
+            int left_pos = 20 + (int)(x);
+            int right_pos = 20 - (int)(x);
+            int pair_idx = (row + frame) % 4;
+            int i_b = 0;
+
+            tui_move_cursor(out, row + 2, 1);
+            fputs("\033[2K", out); /* clear line */
+
+            if (left_pos < right_pos) {
+                /* Left strand visible, bridge, right strand */
+                { int p; for (p = 0; p < left_pos; p++) fputc(' ', out); }
+                tui_set_fg256(out, 51); /* cyan */
+                fputs(TUI_BOLD, out);
+                fputs("\xe2\x97\x89", out); /* ◉ left node */
+
+                /* Bridge (base pair) */
+                if (left_pos + 2 < right_pos) {
+                    tui_set_fg256(out, PAIR_COLORS[pair_idx]);
+                    fputs(TUI_DIM, out);
+                    for (i_b = left_pos + 2; i_b < right_pos; i_b++) fputs(TUI_H, out);
+                }
+
+                tui_set_fg256(out, 213); /* pink */
+                fputs(TUI_BOLD, out);
+                fputs("\xe2\x97\x89", out); /* ◉ right node */
+                fputs(TUI_RESET, out);
+            } else if (right_pos < left_pos) {
+                { int p; for (p = 0; p < right_pos; p++) fputc(' ', out); }
+                tui_set_fg256(out, 213);
+                fputs(TUI_BOLD, out);
+                fputs("\xe2\x97\x89", out);
+
+                if (right_pos + 2 < left_pos) {
+                    tui_set_fg256(out, PAIR_COLORS[pair_idx]);
+                    fputs(TUI_DIM, out);
+                    for (i_b = right_pos + 2; i_b < left_pos; i_b++) fputs(TUI_H, out);
+                }
+
+                tui_set_fg256(out, 51);
+                fputs(TUI_BOLD, out);
+                fputs("\xe2\x97\x89", out);
+                fputs(TUI_RESET, out);
+            } else {
+                /* Crossed - show X */
+                { int p; for (p = 0; p < left_pos; p++) fputc(' ', out); }
+                tui_set_fg256(out, 226); /* yellow */
+                fputs(TUI_BOLD, out);
+                fputs(TUI_DX, out); /* ╬ */
+                fputs(TUI_RESET, out);
+            }
+        }
+        fflush(out);
+        tui_sleep_ms(80);
+    }
+
+    /* Clear */
+    for (row = 0; row < height + 1; row++) {
+        tui_move_cursor(out, row + 1, 1);
+        fputs("\033[2K", out);
+    }
+    tui_move_cursor(out, 1, 1);
+    fflush(out);
+    tui_show_cursor(out);
+}
+
+/* ── Fade Reveal ─────────────────────────────────────────────── */
+
+void tui_animate_fade_reveal(FILE *out, const char *text, int steps) {
+    /* Block density progression: ░ → ▒ → ▓ → █ → actual text */
+    static const char *DENSITY[] = {
+        "\xe2\x96\x91", /* ░ */
+        "\xe2\x96\x92", /* ▒ */
+        "\xe2\x96\x93", /* ▓ */
+        "\xe2\x96\x88"  /* █ */
+    };
+    int step = 0;
+    int text_dw = 0;
+    int i = 0;
+
+    if (out == 0 || text == 0) return;
+    if (!tui_is_interactive()) { fputs("  ", out); fputs(text, out); fputc('\n', out); return; }
+    if (steps <= 0) steps = 4;
+
+    text_dw = tui_display_width(text);
+    tui_hide_cursor(out);
+
+    /* Each density level */
+    for (step = 0; step < 4 && step < steps; step++) {
+        fputs("\r  ", out);
+        fputs(GRADIENT_COLORS[step % GRADIENT_COUNT], out);
+        for (i = 0; i < text_dw; i++) {
+            fputs(DENSITY[step], out);
+        }
+        fputs(TUI_RESET, out);
+        fflush(out);
+        tui_sleep_ms(100);
+    }
+
+    /* Final: reveal actual text with color sweep */
+    fputs("\r  ", out);
+    {
+        const unsigned char *p = (const unsigned char *)text;
+        int idx = 0;
+        while (*p != 0) {
+            fputs(GRADIENT_COLORS[idx % GRADIENT_COUNT], out);
+            fputs(TUI_BOLD, out);
+            if (*p < 0x80) {
+                fputc(*p, out); p += 1;
+            } else if (*p < 0xE0) {
+                fputc(p[0], out); fputc(p[1], out); p += 2;
+            } else if (*p < 0xF0) {
+                fputc(p[0], out); fputc(p[1], out); fputc(p[2], out); p += 3;
+            } else {
+                fputc(p[0], out); fputc(p[1], out); fputc(p[2], out); fputc(p[3], out); p += 4;
+            }
+            fputs(TUI_RESET, out);
+            fflush(out);
+            tui_sleep_ms(20);
+            idx++;
+        }
+    }
+    fputc('\n', out);
+    fflush(out);
+    tui_show_cursor(out);
+}
+
+/* ── Wave Text Animation ─────────────────────────────────────── */
+
+void tui_animate_wave_text(FILE *out, const char *text, int cycles, int frame_delay_ms) {
+    int frame = 0;
+    int total_frames = 0;
+    int max_height = 3;
+
+    if (out == 0 || text == 0) return;
+    if (!tui_is_interactive()) { fputs("  ", out); fputs(text, out); fputc('\n', out); return; }
+    if (cycles <= 0) cycles = 2;
+    if (frame_delay_ms <= 0) frame_delay_ms = 60;
+
+    total_frames = cycles * 20;
+
+    tui_hide_cursor(out);
+
+    /* Reserve space for wave (max_height * 2 + 1 rows) */
+    { int r; for (r = 0; r < max_height * 2 + 1; r++) fputc('\n', out); }
+    fprintf(out, "\033[%dA", max_height * 2 + 1);
+
+    for (frame = 0; frame < total_frames; frame++) {
+        const unsigned char *p = (const unsigned char *)text;
+        int char_idx = 0;
+        int r = 0;
+
+        /* Clear wave area */
+        for (r = 0; r < max_height * 2 + 1; r++) {
+            tui_move_cursor(out, r + 1, 1);
+            fputs("\033[2K", out);
+        }
+
+        /* Draw each character at its wave position */
+        p = (const unsigned char *)text;
+        char_idx = 0;
+        while (*p != 0) {
+            double wave_y = sin((char_idx * 0.6) + (frame * 0.3)) * max_height;
+            int row_offset = max_height + (int)(wave_y + 0.5);
+            int col = char_idx * 2 + 3;
+            char ch_buf[5];
+            int ch_len = 0;
+
+            /* Extract one character */
+            if (*p < 0x80) {
+                ch_buf[0] = *p; ch_len = 1; p += 1;
+            } else if (*p < 0xE0) {
+                ch_buf[0] = p[0]; ch_buf[1] = p[1]; ch_len = 2; p += 2;
+            } else if (*p < 0xF0) {
+                ch_buf[0] = p[0]; ch_buf[1] = p[1]; ch_buf[2] = p[2]; ch_len = 3; p += 3;
+            } else {
+                ch_buf[0] = p[0]; ch_buf[1] = p[1]; ch_buf[2] = p[2]; ch_buf[3] = p[3]; ch_len = 4; p += 4;
+            }
+            ch_buf[ch_len] = '\0';
+
+            if (row_offset >= 0 && row_offset < max_height * 2 + 1) {
+                tui_move_cursor(out, row_offset + 1, col);
+                fputs(GRADIENT_COLORS[(char_idx + frame) % GRADIENT_COUNT], out);
+                fputs(TUI_BOLD, out);
+                fputs(ch_buf, out);
+                fputs(TUI_RESET, out);
+            }
+            char_idx++;
+        }
+        fflush(out);
+        tui_sleep_ms(frame_delay_ms);
+    }
+
+    /* Clear and show final text normally */
+    { int r; for (r = 0; r < max_height * 2 + 1; r++) {
+        tui_move_cursor(out, r + 1, 1);
+        fputs("\033[2K", out);
+    }}
+    tui_move_cursor(out, max_height + 1, 1);
+    fputs("  " TUI_BOLD_WHITE, out);
+    fputs(text, out);
+    fputs(TUI_RESET, out);
+    fputc('\n', out);
+
+    /* Move to end */
+    tui_move_cursor(out, max_height * 2 + 2, 1);
+    fflush(out);
+    tui_show_cursor(out);
+}
+
+/* ── Plasma Gradient Effect ──────────────────────────────────── */
+
+void tui_animate_plasma(FILE *out, int width, int height, int frames) {
+    int frame = 0;
+    int row = 0;
+    int col = 0;
+
+    if (out == 0 || !tui_is_interactive()) return;
+    if (width <= 0) width = 44;
+    if (height <= 0) height = 8;
+    if (frames <= 0) frames = 30;
+
+    tui_hide_cursor(out);
+
+    /* Reserve space */
+    for (row = 0; row < height; row++) fputc('\n', out);
+    fprintf(out, "\033[%dA", height);
+
+    for (frame = 0; frame < frames; frame++) {
+        for (row = 0; row < height; row++) {
+            tui_move_cursor(out, row + 1, 3);
+            for (col = 0; col < width; col++) {
+                /* Plasma function: combine multiple sine waves */
+                double v = 0.0;
+                int color256 = 0;
+
+                v = sin(col * 0.15 + frame * 0.2);
+                v += sin(row * 0.2 + frame * 0.15);
+                v += sin((col + row) * 0.1 + frame * 0.1);
+                v += sin(sqrt((double)(col * col + row * row)) * 0.1);
+                v = v / 4.0; /* normalize to -1..1 */
+
+                /* Map to 256-color: use color range 16-231 (color cube) */
+                {
+                    int r_val = (int)((sin(v * 3.14159) + 1.0) * 2.5);
+                    int g_val = (int)((sin(v * 3.14159 + 2.094) + 1.0) * 2.5);
+                    int b_val = (int)((sin(v * 3.14159 + 4.189) + 1.0) * 2.5);
+                    if (r_val > 5) r_val = 5;
+                    if (g_val > 5) g_val = 5;
+                    if (b_val > 5) b_val = 5;
+                    color256 = 16 + 36 * r_val + 6 * g_val + b_val;
+                }
+
+                tui_set_bg256(out, color256);
+                fputc(' ', out);
+            }
+            fputs(TUI_RESET, out);
+        }
+        fflush(out);
+        tui_sleep_ms(50);
+    }
+
+    /* Clear */
+    for (row = 0; row < height; row++) {
+        tui_move_cursor(out, row + 1, 1);
+        fputs("\033[2K", out);
+    }
+    tui_move_cursor(out, 1, 1);
+    fflush(out);
+    tui_show_cursor(out);
+}
+
+/* ── Themed Entrance Animation ───────────────────────────────── */
+
+void tui_animate_entrance(FILE *out, TuiRoleTheme theme) {
+    const char *color = tui_role_color(theme);
+    const char *icon = tui_role_icon(theme);
+    int i = 0;
+    int row = 0;
+
+    if (out == 0 || !tui_is_interactive()) return;
+
+    tui_hide_cursor(out);
+
+    /* Phase 1: Plasma flash (brief) */
+    for (row = 0; row < 6; row++) fputc('\n', out);
+    fprintf(out, "\033[6A");
+    {
+        int f = 0;
+        for (f = 0; f < 8; f++) {
+            for (row = 0; row < 6; row++) {
+                tui_move_cursor(out, row + 1, 3);
+                for (i = 0; i < 44; i++) {
+                    double v = sin(i * 0.2 + f * 0.5) + sin(row * 0.3 + f * 0.4);
+                    int bright = (int)((v + 2.0) * 32.0);
+                    if (bright > 255) bright = 255;
+                    if (bright < 0) bright = 0;
+                    /* Use grayscale ramp 232-255 */
+                    tui_set_bg256(out, 232 + (bright * 23 / 255));
+                    fputc(' ', out);
+                }
+                fputs(TUI_RESET, out);
+            }
+            fflush(out);
+            tui_sleep_ms(40);
+        }
+    }
+
+    /* Phase 2: Converge to center with icon */
+    {
+        int step = 0;
+        for (step = 22; step >= 0; step--) {
+            for (row = 0; row < 6; row++) {
+                tui_move_cursor(out, row + 1, 1);
+                fputs("\033[2K", out);
+            }
+
+            /* Left particle */
+            tui_move_cursor(out, 3, 3 + (22 - step));
+            fputs(color, out);
+            fputs(TUI_BOLD, out);
+            for (i = 0; i < 3 && i <= 22 - step; i++) {
+                fputs(TUI_HH, out);
+            }
+            fputs(TUI_RESET, out);
+
+            /* Right particle */
+            {
+                int rpos = 3 + 44 - (22 - step);
+                if (rpos > 3) {
+                    tui_move_cursor(out, 3, rpos - 3);
+                    fputs(color, out);
+                    fputs(TUI_BOLD, out);
+                    for (i = 0; i < 3 && i <= 22 - step; i++) {
+                        fputs(TUI_HH, out);
+                    }
+                    fputs(TUI_RESET, out);
+                }
+            }
+
+            if (step == 0) {
+                /* Center collision - show icon with burst */
+                tui_move_cursor(out, 3, 24);
+                fputs(color, out);
+                fputs(TUI_BOLD, out);
+                fputs(icon, out);
+                fputs(TUI_RESET, out);
+            }
+
+            fflush(out);
+            tui_sleep_ms(step > 10 ? 15 : 25);
+        }
+    }
+
+    /* Phase 3: Expand from center icon */
+    {
+        int step = 0;
+        for (step = 0; step < 22; step++) {
+            tui_move_cursor(out, 3, 1);
+            fputs("\033[2K", out);
+            tui_move_cursor(out, 3, 24 - step);
+            fputs(color, out);
+            tui_repeat(out, TUI_HH, step * 2 + 1);
+            fputs(TUI_RESET, out);
+
+            /* Center icon stays */
+            tui_move_cursor(out, 3, 24);
+            fputs(color, out);
+            fputs(TUI_BOLD, out);
+            fputs(icon, out);
+            fputs(TUI_RESET, out);
+
+            fflush(out);
+            tui_sleep_ms(15);
+        }
+    }
+
+    tui_sleep_ms(150);
+
+    /* Clear entrance area */
+    for (row = 0; row < 6; row++) {
+        tui_move_cursor(out, row + 1, 1);
+        fputs("\033[2K", out);
+    }
+    tui_move_cursor(out, 1, 1);
     fflush(out);
     tui_show_cursor(out);
 }

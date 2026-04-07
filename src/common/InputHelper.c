@@ -1,6 +1,20 @@
 #include "common/InputHelper.h"
 
 #include <ctype.h>
+#include <string.h>
+
+#ifdef _WIN32
+#ifndef __MINGW32__
+#include <conio.h>
+#include <io.h>
+#else
+#include <unistd.h>
+#endif
+#else
+#include <unistd.h>
+#include <termios.h>
+#include <sys/select.h>
+#endif
 
 static const char *InputHelper_skip_spaces(const char *text) {
     while (text != 0 && *text != '\0' && isspace((unsigned char)*text) != 0) {
@@ -109,4 +123,157 @@ int InputHelper_is_non_negative_amount(const char *text) {
     }
 
     return has_digit;
+}
+
+/* ── Helper: discard remaining bytes on a line ──────────────── */
+
+static void InputHelper_discard_rest_of_line(FILE *input) {
+    int ch = 0;
+
+    while ((ch = fgetc(input)) != EOF) {
+        if (ch == '\n') {
+            return;
+        }
+    }
+}
+
+/* ── Helper: drain escape-sequence tail bytes (Unix) ────────── */
+
+#ifndef _WIN32
+static void InputHelper_drain_escape_sequence(void) {
+    struct termios old_settings;
+    struct termios raw_settings;
+    struct timeval tv;
+    fd_set fds;
+
+    if (!isatty(STDIN_FILENO)) {
+        return;
+    }
+
+    tcgetattr(STDIN_FILENO, &old_settings);
+    raw_settings = old_settings;
+    raw_settings.c_lflag &= ~((tcflag_t)ICANON | (tcflag_t)ECHO);
+    raw_settings.c_cc[VMIN] = 0;
+    raw_settings.c_cc[VTIME] = 0;
+    tcsetattr(STDIN_FILENO, TCSANOW, &raw_settings);
+
+    tv.tv_sec = 0;
+    tv.tv_usec = 50000;
+    FD_ZERO(&fds);
+    FD_SET(STDIN_FILENO, &fds);
+    while (select(STDIN_FILENO + 1, &fds, 0, 0, &tv) > 0) {
+        (void)getchar();
+        FD_ZERO(&fds);
+        FD_SET(STDIN_FILENO, &fds);
+        tv.tv_sec = 0;
+        tv.tv_usec = 10000;
+    }
+
+    tcsetattr(STDIN_FILENO, TCSANOW, &old_settings);
+}
+#endif
+
+/* ── InputHelper_read_line ──────────────────────────────────── */
+
+int InputHelper_read_line(FILE *input, char *buffer, size_t capacity) {
+    size_t length = 0;
+
+    if (buffer == 0 || capacity == 0) {
+        return 0;
+    }
+
+    if (input == 0) {
+        buffer[0] = '\0';
+        return 0;
+    }
+
+#ifdef _WIN32
+#ifndef __MINGW32__
+    /* MSVC / native Windows: use _kbhit / _getch for ESC peek */
+    if (_isatty(_fileno(input))) {
+        int ch = _getch();
+        if (ch == 27) {
+            buffer[0] = '\0';
+            return -2;
+        }
+        _ungetch(ch);
+    }
+#else
+    /* MinGW: fall through to POSIX path */
+    if (isatty(fileno(input))) {
+        struct termios old_s, new_s;
+        int ch;
+        tcgetattr(STDIN_FILENO, &old_s);
+        new_s = old_s;
+        new_s.c_lflag &= ~((tcflag_t)ICANON | (tcflag_t)ECHO);
+        new_s.c_cc[VMIN] = 1;
+        new_s.c_cc[VTIME] = 0;
+        tcsetattr(STDIN_FILENO, TCSANOW, &new_s);
+        ch = getchar();
+        tcsetattr(STDIN_FILENO, TCSANOW, &old_s);
+        if (ch == 27) {
+            InputHelper_drain_escape_sequence();
+            buffer[0] = '\0';
+            return -2;
+        }
+        if (ch == EOF) { buffer[0] = '\0'; return 0; }
+        ungetc(ch, input);
+    }
+#endif
+#else
+    /* POSIX (macOS / Linux) */
+    if (isatty(STDIN_FILENO)) {
+        struct termios old_settings;
+        struct termios new_settings;
+        int ch = 0;
+
+        tcgetattr(STDIN_FILENO, &old_settings);
+        new_settings = old_settings;
+        new_settings.c_lflag &= ~((tcflag_t)ICANON | (tcflag_t)ECHO);
+        new_settings.c_cc[VMIN] = 1;
+        new_settings.c_cc[VTIME] = 0;
+        tcsetattr(STDIN_FILENO, TCSANOW, &new_settings);
+
+        ch = getchar();
+        tcsetattr(STDIN_FILENO, TCSANOW, &old_settings);
+
+        if (ch == 27) {
+            InputHelper_drain_escape_sequence();
+            buffer[0] = '\0';
+            return -2;
+        }
+        if (ch == EOF) {
+            buffer[0] = '\0';
+            return 0;
+        }
+        ungetc(ch, input);
+    }
+#endif
+
+    if (fgets(buffer, (int)capacity, input) == 0) {
+        buffer[0] = '\0';
+        return 0;
+    }
+
+    length = strlen(buffer);
+    if (length > 0 && buffer[length - 1] != '\n' && !feof(input)) {
+        InputHelper_discard_rest_of_line(input);
+        buffer[0] = '\0';
+        return -1;
+    }
+
+    if (length > 0 && buffer[length - 1] == '\n') {
+        buffer[length - 1] = '\0';
+    }
+
+    return 1;
+}
+
+/* ── InputHelper_is_esc_cancel ──────────────────────────────── */
+
+int InputHelper_is_esc_cancel(const char *message) {
+    if (message == 0) {
+        return 0;
+    }
+    return strcmp(message, INPUT_HELPER_ESC_MESSAGE) == 0 ? 1 : 0;
 }

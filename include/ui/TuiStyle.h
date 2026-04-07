@@ -302,4 +302,36 @@ void tui_animate_error(FILE *out, const char *message);
 /* Rainbow color cycling text (each char gets next color) */
 void tui_animate_rainbow(FILE *out, const char *text, int cycles, int frame_delay_ms);
 
+/* ── Advanced Animation Effects ─────────────────────────────── */
+
+/* Matrix digital rain with medical symbols */
+void tui_animate_matrix_rain(FILE *out, int width, int height, int duration_ms);
+
+/* Particle explosion burst from center */
+void tui_animate_particle_explosion(FILE *out, int width, int height);
+
+/* ECG heartbeat monitor line */
+void tui_animate_heartbeat(FILE *out, int width, int beats);
+
+/* Text glitch/distortion effect */
+void tui_animate_glitch(FILE *out, const char *text, int intensity, int duration_ms);
+
+/* Fireworks celebration */
+void tui_animate_fireworks(FILE *out, int width, int height, int count);
+
+/* DNA double helix rotation */
+void tui_animate_dna_helix(FILE *out, int height, int frames);
+
+/* Text fade-in using block density progression */
+void tui_animate_fade_reveal(FILE *out, const char *text, int steps);
+
+/* Sine wave animated text */
+void tui_animate_wave_text(FILE *out, const char *text, int cycles, int frame_delay_ms);
+
+/* Plasma gradient background effect */
+void tui_animate_plasma(FILE *out, int width, int height, int frames);
+
+/* Themed screen entrance: combines multiple effects for login */
+void tui_animate_entrance(FILE *out, TuiRoleTheme theme);
+
 #endif

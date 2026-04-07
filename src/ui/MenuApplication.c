@@ -9,6 +9,7 @@
 #include <string.h>
 
 #include "common/IdGenerator.h"
+#include "common/InputHelper.h"
 #include "service/DepartmentService.h"
 
 static int MenuApplication_is_blank(const char *text) {
@@ -1773,20 +1774,6 @@ static Result MenuApplication_query_dispense_history_by_patient_id(
     return Result_make_success("dispense patient history ready");
 }
 
-static void MenuApplication_discard_rest_of_line(FILE *input) {
-    int character = 0;
-
-    if (input == 0) {
-        return;
-    }
-
-    while ((character = fgetc(input)) != EOF) {
-        if (character == '\n') {
-            return;
-        }
-    }
-}
-
 typedef struct MenuApplicationPromptContext {
     FILE *input;
     FILE *output;
@@ -1805,7 +1792,7 @@ static Result MenuApplication_prompt_line(
     char *buffer,
     size_t capacity
 ) {
-    size_t length = 0;
+    int read_result = 0;
 
     if (context == 0 || context->input == 0 || context->output == 0) {
         return Result_make_failure("prompt context invalid");
@@ -1817,19 +1804,17 @@ static Result MenuApplication_prompt_line(
 
     tui_print_prompt(context->output, prompt);
     fflush(context->output);
-    if (fgets(buffer, (int)capacity, context->input) == 0) {
+
+    read_result = InputHelper_read_line(context->input, buffer, capacity);
+
+    if (read_result == -2) {
+        return Result_make_failure(INPUT_HELPER_ESC_MESSAGE);
+    }
+    if (read_result == 0) {
         return Result_make_failure("input ended");
     }
-
-    length = strlen(buffer);
-    if (length > 0 && buffer[length - 1] != '\n' && !feof(context->input)) {
-        MenuApplication_discard_rest_of_line(context->input);
-        buffer[0] = '\0';
+    if (read_result < 0) {
         return Result_make_failure("input too long");
-    }
-
-    if (length > 0 && buffer[length - 1] == '\n') {
-        buffer[length - 1] = '\0';
     }
 
     return Result_make_success("line read");

@@ -2,14 +2,10 @@
 #include <string.h>
 
 #ifdef _WIN32
-#include <conio.h>
 #include <windows.h>
-#else
-#include <sys/select.h>
-#include <termios.h>
-#include <unistd.h>
 #endif
 
+#include "common/InputHelper.h"
 #include "common/UpdateChecker.h"
 #include "ui/DemoData.h"
 #include "ui/MenuApplication.h"
@@ -76,156 +72,6 @@ static TuiRoleTheme role_to_theme(MenuRole role) {
     }
 }
 
-static void discard_rest_of_line(FILE *input) {
-    int character = 0;
-
-    while ((character = fgetc(input)) != EOF) {
-        if (character == '\n') {
-            return;
-        }
-    }
-}
-
-static int peek_escape_key(void) {
-#ifdef _WIN32
-    if (_kbhit()) {
-        int ch = _getch();
-        if (ch == 27) return 1;
-        _ungetch(ch);
-    }
-    return 0;
-#else
-    struct termios old_settings;
-    struct termios new_settings;
-    int ch = 0;
-    fd_set fds;
-    struct timeval tv;
-
-    if (!isatty(STDIN_FILENO)) {
-        return 0;
-    }
-
-    tcgetattr(STDIN_FILENO, &old_settings);
-    new_settings = old_settings;
-    new_settings.c_lflag &= ~(ICANON | ECHO);
-    new_settings.c_cc[VMIN] = 0;
-    new_settings.c_cc[VTIME] = 0;
-    tcsetattr(STDIN_FILENO, TCSANOW, &new_settings);
-
-    FD_ZERO(&fds);
-    FD_SET(STDIN_FILENO, &fds);
-    tv.tv_sec = 0;
-    tv.tv_usec = 0;
-
-    if (select(STDIN_FILENO + 1, &fds, 0, 0, &tv) > 0) {
-        ch = getchar();
-        if (ch == 27) {
-            /* consume any trailing escape sequence bytes */
-            tv.tv_sec = 0;
-            tv.tv_usec = 50000;
-            while (select(STDIN_FILENO + 1, &fds, 0, 0, &tv) > 0) {
-                getchar();
-                FD_ZERO(&fds);
-                FD_SET(STDIN_FILENO, &fds);
-                tv.tv_sec = 0;
-                tv.tv_usec = 10000;
-            }
-            tcsetattr(STDIN_FILENO, TCSANOW, &old_settings);
-            return 1;
-        }
-        if (ch != EOF) {
-            ungetc(ch, stdin);
-        }
-    }
-
-    tcsetattr(STDIN_FILENO, TCSANOW, &old_settings);
-    return 0;
-#endif
-}
-
-static int read_line(char *buffer, size_t capacity) {
-    size_t length = 0;
-#ifndef _WIN32
-    struct termios old_settings;
-    struct termios new_settings;
-    int ch = 0;
-#endif
-
-    if (buffer == 0 || capacity == 0) {
-        return 0;
-    }
-
-#ifdef _WIN32
-    {
-        int ch = _getch();
-        if (ch == 27) {
-            buffer[0] = '\0';
-            return -2;
-        }
-        _ungetch(ch);
-    }
-#else
-    if (isatty(STDIN_FILENO)) {
-        tcgetattr(STDIN_FILENO, &old_settings);
-        new_settings = old_settings;
-        new_settings.c_lflag &= ~(ICANON | ECHO);
-        new_settings.c_cc[VMIN] = 1;
-        new_settings.c_cc[VTIME] = 0;
-        tcsetattr(STDIN_FILENO, TCSANOW, &new_settings);
-
-        ch = getchar();
-        tcsetattr(STDIN_FILENO, TCSANOW, &old_settings);
-
-        if (ch == 27) {
-            /* drain any escape sequence bytes */
-            struct timeval tv;
-            fd_set fds;
-            new_settings = old_settings;
-            new_settings.c_lflag &= ~(ICANON | ECHO);
-            new_settings.c_cc[VMIN] = 0;
-            new_settings.c_cc[VTIME] = 0;
-            tcsetattr(STDIN_FILENO, TCSANOW, &new_settings);
-            tv.tv_sec = 0;
-            tv.tv_usec = 50000;
-            FD_ZERO(&fds);
-            FD_SET(STDIN_FILENO, &fds);
-            while (select(STDIN_FILENO + 1, &fds, 0, 0, &tv) > 0) {
-                getchar();
-                FD_ZERO(&fds);
-                FD_SET(STDIN_FILENO, &fds);
-                tv.tv_sec = 0;
-                tv.tv_usec = 10000;
-            }
-            tcsetattr(STDIN_FILENO, TCSANOW, &old_settings);
-            buffer[0] = '\0';
-            return -2;
-        }
-        if (ch == EOF) {
-            buffer[0] = '\0';
-            return 0;
-        }
-        ungetc(ch, stdin);
-    }
-#endif
-
-    if (fgets(buffer, (int)capacity, stdin) == 0) {
-        return 0;
-    }
-
-    length = strlen(buffer);
-    if (length > 0 && buffer[length - 1] != '\n' && !feof(stdin)) {
-        discard_rest_of_line(stdin);
-        buffer[0] = '\0';
-        return -1;
-    }
-
-    if (length > 0 && buffer[length - 1] == '\n') {
-        buffer[length - 1] = '\0';
-    }
-
-    return 1;
-}
-
 int main(void) {
     char menu_text[2048];
     char input[128];
@@ -261,7 +107,10 @@ int main(void) {
     }
 
     tui_clear_screen();
+    /* Startup: matrix rain → logo → glitch title → banner */
+    tui_animate_matrix_rain(stdout, 44, 10, 1500);
     tui_animate_logo(stdout);
+    tui_animate_glitch(stdout, "  H I S  -  Hospital Information System", 4, 600);
     tui_animate_banner(stdout, "轻量级医院信息系统 (HIS)");
 
     /* ── startup update check ── */
@@ -292,11 +141,12 @@ int main(void) {
 
         tui_clear_screen();
         tui_animate_logo(stdout);
+        tui_animate_fade_reveal(stdout, "\xe2\x9a\x95 \xe8\xaf\xb7\xe9\x80\x89\xe6\x8b\xa9\xe6\x82\xa8\xe7\x9a\x84\xe8\xa7\x92\xe8\x89\xb2" /* ⚕ 请选择您的角色 */, 4);
         tui_animate_lines(stdout, menu_text, 30);
         tui_print_prompt(stdout, "请选择角色编号 (ESC返回): ");
         result = Result_make_success("line ready");
         {
-            int read_result = read_line(input, sizeof(input));
+            int read_result = InputHelper_read_line(stdin, input, sizeof(input));
             if (read_result == 0 || read_result == -2) {
                 tui_clear_screen();
                 tui_animate_goodbye(stdout);
@@ -321,6 +171,7 @@ int main(void) {
 
         if (MenuController_is_exit_role(role)) {
             tui_clear_screen();
+            tui_animate_wave_text(stdout, "\xe6\x84\x9f\xe8\xb0\xa2\xe4\xbd\xbf\xe7\x94\xa8 HIS \xe7\xb3\xbb\xe7\xbb\x9f" /* 感谢使用 HIS 系统 */, 2, 60);
             tui_animate_goodbye(stdout);
             tui_show_cursor(stdout);
             return 0;
@@ -329,11 +180,13 @@ int main(void) {
         if (role == MENU_ROLE_RESET_DEMO) {
             char reset_message[RESULT_MESSAGE_CAPACITY];
             tui_print_section(stdout, TUI_SPARKLE, "重置演示数据");
+            tui_animate_dna_helix(stdout, 10, 20);
             tui_spinner_run(stdout, "正在重置数据...", 800);
             result = DemoData_reset(&paths, reset_message, sizeof(reset_message));
             if (result.success == 0) {
                 tui_animate_error(stdout, reset_message[0] != '\0' ? reset_message : result.message);
             } else {
+                tui_animate_fireworks(stdout, 50, 12, 2);
                 tui_animate_success(stdout, reset_message);
             }
             continue;
@@ -353,7 +206,7 @@ int main(void) {
             snprintf(prompt_buf, sizeof(prompt_buf), "请输入[%s]用户编号 (ESC返回): ", MenuController_role_label(role));
             tui_print_prompt(stdout, prompt_buf);
             {
-                int read_result = read_line(input, sizeof(input));
+                int read_result = InputHelper_read_line(stdin, input, sizeof(input));
                 if (read_result == 0) {
                     tui_clear_screen();
                     tui_animate_goodbye(stdout);
@@ -373,7 +226,7 @@ int main(void) {
 
             tui_print_prompt(stdout, "请输入密码 (ESC返回): ");
             {
-                int read_result = read_line(password, sizeof(password));
+                int read_result = InputHelper_read_line(stdin, password, sizeof(password));
                 if (read_result == 0) {
                     tui_clear_screen();
                     tui_animate_goodbye(stdout);
@@ -404,9 +257,24 @@ int main(void) {
         user_id[sizeof(user_id) - 1] = '\0';
 
         tui_clear_screen();
+        /* Themed entrance: plasma → converge → expand, then welcome */
+        tui_animate_entrance(stdout, theme);
         tui_animate_welcome(stdout, theme, user_id);
-        tui_print_info(stdout, "按回车键进入系统...");
-        read_line(input, sizeof(input));
+        tui_animate_heartbeat(stdout, 40, 2);
+        tui_print_info(stdout, "按回车键进入系统 (ESC返回)...");
+        {
+            int enter_result = InputHelper_read_line(stdin, input, sizeof(input));
+            if (enter_result == -2) {
+                MenuApplication_logout(&application);
+                continue;
+            }
+            if (enter_result == 0) {
+                tui_clear_screen();
+                tui_animate_goodbye(stdout);
+                tui_show_cursor(stdout);
+                return 0;
+            }
+        }
         tui_animate_transition(stdout);
 
         for (;;) {
@@ -423,7 +291,7 @@ int main(void) {
             tui_animate_lines(stdout, menu_text, 25);
             tui_print_prompt(stdout, "请选择操作 (ESC返回): ");
             {
-                int read_result = read_line(input, sizeof(input));
+                int read_result = InputHelper_read_line(stdin, input, sizeof(input));
                 if (read_result == 0) {
                     tui_clear_screen();
                     tui_animate_goodbye(stdout);
@@ -453,14 +321,26 @@ int main(void) {
 
             result = MenuApplication_execute_action(&application, action, stdin, stdout);
             if (result.success == 0 &&
-                strcmp(result.message, "action not implemented yet") != 0) {
+                strcmp(result.message, "action not implemented yet") != 0 &&
+                !InputHelper_is_esc_cancel(result.message)) {
                 tui_print_error(stdout, result.message);
             }
 
             tui_delay(300);
             printf("\n");
             tui_print_info(stdout, "按回车键继续 (ESC返回上级)...");
-            read_line(input, sizeof(input));
+            {
+                int cont_result = InputHelper_read_line(stdin, input, sizeof(input));
+                if (cont_result == -2) {
+                    break;
+                }
+                if (cont_result == 0) {
+                    tui_clear_screen();
+                    tui_animate_goodbye(stdout);
+                    tui_show_cursor(stdout);
+                    return 0;
+                }
+            }
         }
 
         MenuApplication_logout(&application);
