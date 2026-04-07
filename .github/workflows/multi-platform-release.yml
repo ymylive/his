@@ -102,7 +102,9 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: linux-portable
-          path: dist/*.zip
+          path: |
+            dist/*.zip
+            dist/*.tar.gz
 
   publish-release:
     needs: [build-windows, build-macos, build-linux]
@@ -121,5 +123,7 @@ jobs:
       - name: Publish GitHub release
         uses: softprops/action-gh-release@v2
         with:
-          files: artifacts/**/*.zip
+          files: |
+            artifacts/**/*.zip
+            artifacts/**/*.tar.gz
           fail_on_unmatched_files: false

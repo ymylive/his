@@ -107,24 +107,39 @@ do_install() {
     VERSION=""
     DOWNLOAD_URL=""
 
+    USE_TARGZ=0
     if [ -n "$API_RESPONSE" ]; then
         # 提取 tag_name
         VERSION="$(echo "$API_RESPONSE" | grep '"tag_name"' | head -1 | sed 's/.*"tag_name"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/')"
 
-        # 查找匹配平台的 zip 资产 URL
-        DOWNLOAD_URL="$(echo "$API_RESPONSE" | grep '"browser_download_url"' | grep "$ASSET_KEYWORD" | grep '\.zip"' | head -1 | sed 's/.*"browser_download_url"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/')"
+        # Linux 优先用 tar.gz，macOS 用 zip
+        if [ "$OS" = "Linux" ]; then
+            DOWNLOAD_URL="$(echo "$API_RESPONSE" | grep '"browser_download_url"' | grep "$ASSET_KEYWORD" | grep '\.tar\.gz"' | head -1 | sed 's/.*"browser_download_url"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/')"
+            if [ -n "$DOWNLOAD_URL" ]; then
+                USE_TARGZ=1
+            fi
+        fi
+
+        # 回退到 zip
+        if [ -z "$DOWNLOAD_URL" ]; then
+            DOWNLOAD_URL="$(echo "$API_RESPONSE" | grep '"browser_download_url"' | grep "$ASSET_KEYWORD" | grep '\.zip"' | head -1 | sed 's/.*"browser_download_url"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/')"
+        fi
     fi
 
     # 回退: 如果 API 失败，使用硬编码
     if [ -z "$VERSION" ]; then
-        VERSION="v3.1.0"
+        VERSION="v3.2.0"
         warn "无法连接 GitHub API，使用默认版本 $VERSION"
     fi
 
     if [ -z "$DOWNLOAD_URL" ]; then
         NORM_VER="${VERSION#v}"
-        ZIP_NAME="lightweight-his-portable-v${NORM_VER}-${ASSET_KEYWORD}.zip"
-        DOWNLOAD_URL="https://github.com/${REPO}/releases/download/${VERSION}/${ZIP_NAME}"
+        if [ "$OS" = "Linux" ]; then
+            DOWNLOAD_URL="https://github.com/${REPO}/releases/download/${VERSION}/lightweight-his-portable-v${NORM_VER}-${ASSET_KEYWORD}.tar.gz"
+            USE_TARGZ=1
+        else
+            DOWNLOAD_URL="https://github.com/${REPO}/releases/download/${VERSION}/lightweight-his-portable-v${NORM_VER}-${ASSET_KEYWORD}.zip"
+        fi
     fi
 
     info "版本: $VERSION"
@@ -132,17 +147,21 @@ do_install() {
     # ── 下载 ──
     mkdir -p "$INSTALL_DIR"
     TMPDIR_DL="$(mktemp -d)"
-    ZIP_PATH="${TMPDIR_DL}/his_release.zip"
+    DL_FILE="${TMPDIR_DL}/his_release"
 
     info "正在下载..."
-    curl -fSL --progress-bar -o "$ZIP_PATH" "$DOWNLOAD_URL" || fail "下载失败，请检查网络连接\n  URL: $DOWNLOAD_URL"
+    curl -fSL --progress-bar -o "$DL_FILE" "$DOWNLOAD_URL" || fail "下载失败，请检查网络连接\n  URL: $DOWNLOAD_URL"
     success "下载完成"
 
     # ── 解压 ──
     info "正在解压..."
     EXTRACT_DIR="${TMPDIR_DL}/extracted"
     mkdir -p "$EXTRACT_DIR"
-    unzip -q -o "$ZIP_PATH" -d "$EXTRACT_DIR" || fail "解压失败"
+    if [ "$USE_TARGZ" = "1" ]; then
+        tar xzf "$DL_FILE" -C "$EXTRACT_DIR" || fail "解压失败"
+    else
+        unzip -q -o "$DL_FILE" -d "$EXTRACT_DIR" || fail "解压失败"
+    fi
 
     # 找到解压后的顶层目录（zip 内通常有一层文件夹）
     INNER_DIR="$(find "$EXTRACT_DIR" -mindepth 1 -maxdepth 1 -type d | head -1)"

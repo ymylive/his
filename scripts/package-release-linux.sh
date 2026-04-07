@@ -95,14 +95,21 @@ Demo accounts:
 Architecture: ${ARCH_TAG}
 EOF
 
-# Create zip archive
-echo "Creating zip archive..."
+# Create tar.gz archive (primary for Linux — no extra tools needed)
+TAR_PATH="$DIST_DIR/${PACKAGE_NAME}.tar.gz"
+echo "Creating tar.gz archive..."
 cd "$DIST_DIR"
+tar czf "${PACKAGE_NAME}.tar.gz" "$PACKAGE_NAME"
+
+# Also create zip for consistency
+ZIP_PATH="$DIST_DIR/${PACKAGE_NAME}.zip"
+echo "Creating zip archive..."
 zip -r "${PACKAGE_NAME}.zip" "$PACKAGE_NAME"
 cd "$PROJECT_ROOT"
 
 echo ""
 echo "Portable release ready:"
 echo "  Folder: $STAGE_PATH"
-echo "  Zip:    $ZIP_PATH"
+echo "  tar.gz: $TAR_PATH"
+echo "  zip:    $ZIP_PATH"
 echo "  Arch:   $ARCH_TAG"
