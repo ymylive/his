@@ -195,34 +195,37 @@ int InputHelper_read_line(FILE *input, char *buffer, size_t capacity) {
     }
 #else
     /* POSIX (macOS / Linux) */
-    if (isatty(STDIN_FILENO)) {
-        struct termios old_settings;
-        struct termios new_settings;
-        int ch = 0;
+    {
+        int input_fd = fileno(input);
+        if (input_fd >= 0 && isatty(input_fd)) {
+            struct termios old_settings;
+            struct termios new_settings;
+            int ch = 0;
 
-        tcgetattr(STDIN_FILENO, &old_settings);
-        new_settings = old_settings;
-        new_settings.c_lflag &= ~((tcflag_t)ICANON | (tcflag_t)ECHO);
-        new_settings.c_cc[VMIN] = 1;
-        new_settings.c_cc[VTIME] = 0;
-        tcsetattr(STDIN_FILENO, TCSANOW, &new_settings);
+            tcgetattr(input_fd, &old_settings);
+            new_settings = old_settings;
+            new_settings.c_lflag &= ~((tcflag_t)ICANON | (tcflag_t)ECHO);
+            new_settings.c_cc[VMIN] = 1;
+            new_settings.c_cc[VTIME] = 0;
+            tcsetattr(input_fd, TCSANOW, &new_settings);
 
-        ch = getchar();
-        tcsetattr(STDIN_FILENO, TCSANOW, &old_settings);
+            ch = fgetc(input);
+            tcsetattr(input_fd, TCSANOW, &old_settings);
 
-        if (ch == 27) {
-            InputHelper_drain_escape_sequence();
-            buffer[0] = '\0';
-            return -2;
+            if (ch == 27) {
+                InputHelper_drain_escape_sequence();
+                buffer[0] = '\0';
+                return -2;
+            }
+            if (ch == EOF) {
+                buffer[0] = '\0';
+                return 0;
+            }
+            /* Echo the character that was swallowed in raw mode */
+            fputc(ch, stdout);
+            fflush(stdout);
+            ungetc(ch, input);
         }
-        if (ch == EOF) {
-            buffer[0] = '\0';
-            return 0;
-        }
-        /* Echo the character that was swallowed in raw mode */
-        fputc(ch, stdout);
-        fflush(stdout);
-        ungetc(ch, input);
     }
 #endif
 

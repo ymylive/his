@@ -761,7 +761,7 @@ static void test_pharmacy_flow_add_restock_dispense_and_low_stock(void) {
 static void test_execute_action_inpatient_bed_query_lists_beds(void) {
     MenuApplicationTestContext context;
     MenuApplication application;
-    char output[2048];
+    char output[8192];
     Result result;
 
     setup_context(&context, "execute_inpatient_bed_query");
@@ -789,7 +789,7 @@ static void test_execute_action_ward_transfer_bed_moves_inpatient_to_target_bed(
     BedRepository bed_repository;
     Bed second_bed;
     Admission admission;
-    char output[2048];
+    char output[8192];
     Result result;
 
     setup_context(&context, "execute_ward_transfer_bed");
@@ -849,7 +849,7 @@ static void test_execute_action_doctor_visit_preserves_long_complaint(void) {
     MenuApplication application;
     VisitRecordRepository visit_repository;
     VisitRecord visit;
-    char output[2048];
+    char output[8192];
     const char *chief_complaint =
         "Long chief complaint text for execute action route coverage";
     Result result;
@@ -915,7 +915,7 @@ static void test_execute_action_doctor_visit_preserves_long_complaint(void) {
 static void test_execute_action_rejects_invalid_medicine_price(void) {
     MenuApplicationTestContext context;
     MenuApplication application;
-    char output[2048];
+    char output[8192];
     Result result;
 
     setup_context(&context, "execute_invalid_price");
@@ -940,7 +940,7 @@ static void test_execute_action_rejects_invalid_medicine_price(void) {
 static void test_execute_action_rejects_overlong_prompt_input(void) {
     MenuApplicationTestContext context;
     MenuApplication application;
-    char output[2048];
+    char output[8192];
     Result result;
 
     setup_context(&context, "execute_overlong_prompt");
@@ -962,7 +962,7 @@ static void test_execute_action_rejects_overlong_prompt_input(void) {
 static void test_execute_action_patient_query_registration_lists_records(void) {
     MenuApplicationTestContext context;
     MenuApplication application;
-    char output[2048];
+    char output[8192];
     Result result;
 
     setup_context(&context, "execute_patient_registration_query");
@@ -1018,7 +1018,7 @@ static void test_execute_action_patient_query_registration_lists_records(void) {
 static void test_patient_session_authorizes_only_bound_patient_routes(void) {
     MenuApplicationTestContext context;
     MenuApplication application;
-    char output[2048];
+    char output[8192];
     Result result;
 
     setup_context(&context, "patient_session_patient_routes");
@@ -1251,7 +1251,7 @@ static void test_patient_session_authorizes_only_bound_patient_routes(void) {
 static void test_execute_action_patient_query_dispense_lists_records(void) {
     MenuApplicationTestContext context;
     MenuApplication application;
-    char output[2048];
+    char output[8192];
     Result result;
 
     setup_context(&context, "execute_patient_dispense_query");
@@ -1325,7 +1325,7 @@ static void test_execute_action_doctor_exam_record_create_and_complete(void) {
     MenuApplication application;
     ExaminationRecordRepository examination_repository;
     ExaminationRecord record;
-    char output[2048];
+    char output[8192];
     Result result;
 
     setup_context(&context, "execute_doctor_exam");
@@ -1426,7 +1426,7 @@ static void test_execute_action_doctor_exam_record_create_and_complete(void) {
 static void test_execute_action_doctor_pending_list_filters_diagnosed(void) {
     MenuApplicationTestContext context;
     MenuApplication application;
-    char output[2048];
+    char output[8192];
     Result result;
 
     setup_context(&context, "execute_doctor_pending");
@@ -1523,7 +1523,7 @@ static void test_execute_action_admin_patient_management_deletes_patient(void) {
     MenuApplication application;
     PatientRepository patient_repository;
     Patient patient;
-    char output[2048];
+    char output[8192];
     Result result;
 
     setup_context(&context, "execute_admin_patient");
@@ -1549,7 +1549,7 @@ static void test_execute_action_admin_patient_management_deletes_patient(void) {
 static void test_execute_action_admin_doctor_department_adds_and_lists_doctor(void) {
     MenuApplicationTestContext context;
     MenuApplication application;
-    char output[2048];
+    char output[8192];
     Result result;
 
     setup_context(&context, "execute_admin_doctor_department");
@@ -1600,7 +1600,7 @@ static void test_execute_action_admin_doctor_department_adds_and_lists_doctor(vo
 static void test_execute_action_admin_medical_records_queries_time_range(void) {
     MenuApplicationTestContext context;
     MenuApplication application;
-    char output[2048];
+    char output[8192];
     Result result;
 
     setup_context(&context, "execute_admin_medical_records");
@@ -1666,7 +1666,7 @@ static void test_execute_action_admin_medical_records_queries_time_range(void) {
 static void test_execute_action_admin_ward_bed_overview_lists_beds(void) {
     MenuApplicationTestContext context;
     MenuApplication application;
-    char output[2048];
+    char output[8192];
     Result result;
 
     setup_context(&context, "execute_admin_ward_overview");
@@ -1689,7 +1689,7 @@ static void test_execute_action_admin_ward_bed_overview_lists_beds(void) {
 static void test_execute_action_admin_medicine_overview_lists_low_stock(void) {
     MenuApplicationTestContext context;
     MenuApplication application;
-    char output[2048];
+    char output[8192];
     Result result;
 
     setup_context(&context, "execute_admin_medicine");
@@ -1724,7 +1724,7 @@ static void test_execute_action_admin_medicine_overview_lists_low_stock(void) {
 static void test_execute_action_patient_query_medicine_usage_reports_missing_instruction(void) {
     MenuApplicationTestContext context;
     MenuApplication application;
-    char output[2048];
+    char output[8192];
     Result result;
 
     setup_context(&context, "execute_patient_medicine_usage");
@@ -1782,7 +1782,7 @@ static void test_execute_action_patient_query_medicine_usage_reports_missing_ins
 static void test_execute_action_ward_discharge_check_reports_ready_status(void) {
     MenuApplicationTestContext context;
     MenuApplication application;
-    char output[2048];
+    char output[8192];
     Result result;
 
     setup_context(&context, "execute_ward_discharge_check");

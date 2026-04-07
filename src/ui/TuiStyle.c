@@ -1,4 +1,5 @@
 #include "ui/TuiStyle.h"
+#include "common/UpdateChecker.h"  /* HIS_VERSION */
 
 #include <string.h>
 #include <stdlib.h>
@@ -141,6 +142,16 @@ static const char *GRADIENT_COLORS[] = {
 };
 #define GRADIENT_COUNT 6
 
+/* 256-color smooth gradient for premium effects (warm sunset palette) */
+static const int GRADIENT_256[] = {
+    196, 202, 208, 214, 220, 226,  /* red → orange → yellow */
+    190, 154, 118, 82, 46,         /* yellow-green → green */
+    47, 48, 49, 50, 51,            /* green → cyan */
+    45, 39, 33, 27, 21,            /* cyan → blue */
+    57, 93, 129, 165, 201          /* blue → magenta */
+};
+#define GRADIENT_256_COUNT 26
+
 static const char *LOGO_LINES[] = {
     "  \xe2\x96\x88\xe2\x96\x88\xe2\x95\x97  \xe2\x96\x88\xe2\x96\x88\xe2\x95\x97 \xe2\x96\x88\xe2\x96\x88\xe2\x95\x97 \xe2\x96\x88\xe2\x96\x88\xe2\x96\x88\xe2\x96\x88\xe2\x96\x88\xe2\x96\x88\xe2\x96\x88\xe2\x95\x97",
     "  \xe2\x96\x88\xe2\x96\x88\xe2\x95\x91  \xe2\x96\x88\xe2\x96\x88\xe2\x95\x91 \xe2\x96\x88\xe2\x96\x88\xe2\x95\x91 \xe2\x96\x88\xe2\x96\x88\xe2\x95\x94\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x9d",
@@ -209,79 +220,88 @@ void tui_print_banner(FILE *out, const char *title) {
 
     title_w = tui_display_width(title);
     box_w = title_w + 6;
-    if (box_w < 42) box_w = 42;
+    if (box_w < 48) box_w = 48;
 
     pad_left = (box_w - 2 - title_w) / 2;
     pad_right = box_w - 2 - title_w - pad_left;
 
-    /* Top border with gradient */
-    fputs(TUI_BOLD_CYAN, out);
+    /* Top border: 256-color smooth gradient */
     fputs("  ", out);
+    fprintf(out, "\033[38;5;51m");  /* cyan */
     fputs(TUI_DTL, out);
-    tui_repeat(out, TUI_DH, box_w - 2);
+    for (i = 0; i < box_w - 2; i++) {
+        fprintf(out, "\033[38;5;%dm", GRADIENT_256[i % GRADIENT_256_COUNT]);
+        fputs(TUI_DH, out);
+    }
+    fprintf(out, "\033[38;5;51m");
     fputs(TUI_DTR, out);
     fputs(TUI_RESET, out);
     fputc('\n', out);
 
-    /* Decorative line */
+    /* Upper decorative line: smooth 256-color blocks */
     fputs("  ", out);
-    fputs(TUI_BOLD_CYAN TUI_DV TUI_RESET, out);
-    fputs(" ", out);
+    fprintf(out, "\033[38;5;51m" TUI_DV TUI_RESET);
+    fputc(' ', out);
     for (i = 0; i < box_w - 4; i++) {
-        fputs(GRADIENT_COLORS[i % GRADIENT_COUNT], out);
+        fprintf(out, "\033[38;5;%dm", GRADIENT_256[i % GRADIENT_256_COUNT]);
         fputs(TUI_BLOCK_UPPER, out);
     }
     fputs(TUI_RESET, out);
-    fputs(" ", out);
-    fputs(TUI_BOLD_CYAN TUI_DV TUI_RESET, out);
+    fputc(' ', out);
+    fprintf(out, "\033[38;5;51m" TUI_DV TUI_RESET);
     fputc('\n', out);
 
-    /* Title line */
+    /* Sparkle + title line */
     fputs("  ", out);
-    fputs(TUI_BOLD_CYAN TUI_DV TUI_RESET, out);
-    for (i = 0; i < pad_left; i++) fputc(' ', out);
+    fprintf(out, "\033[38;5;51m" TUI_DV TUI_RESET);
+    for (i = 0; i < pad_left - 2; i++) fputc(' ', out);
+    fputs(TUI_SPARKLE " ", out);
     fputs(TUI_BOLD_WHITE, out);
     fputs(title, out);
-    fputs(TUI_RESET, out);
-    for (i = 0; i < pad_right; i++) fputc(' ', out);
-    fputs(TUI_BOLD_CYAN TUI_DV TUI_RESET, out);
+    fputs(TUI_RESET " " TUI_SPARKLE, out);
+    for (i = 0; i < pad_right - 2; i++) fputc(' ', out);
+    fprintf(out, "\033[38;5;51m" TUI_DV TUI_RESET);
     fputc('\n', out);
 
-    /* Subtitle line */
+    /* Subtitle line with version from HIS_VERSION */
     {
-        const char *sub = TUI_HEAVY_CROSS " Hospital Information System v2.0";
+        const char *sub = TUI_MEDICAL " Hospital Information System v" HIS_VERSION;
         int sub_w = tui_display_width(sub);
         int spad_l = (box_w - 2 - sub_w) / 2;
         int spad_r = box_w - 2 - sub_w - spad_l;
         fputs("  ", out);
-        fputs(TUI_BOLD_CYAN TUI_DV TUI_RESET, out);
+        fprintf(out, "\033[38;5;51m" TUI_DV TUI_RESET);
         for (i = 0; i < spad_l; i++) fputc(' ', out);
-        fputs(TUI_DIM, out);
+        fprintf(out, "\033[38;5;245m");  /* subtle gray */
         fputs(sub, out);
         fputs(TUI_RESET, out);
         for (i = 0; i < spad_r; i++) fputc(' ', out);
-        fputs(TUI_BOLD_CYAN TUI_DV TUI_RESET, out);
+        fprintf(out, "\033[38;5;51m" TUI_DV TUI_RESET);
         fputc('\n', out);
     }
 
-    /* Decorative line */
+    /* Lower decorative line: reverse 256-color blocks */
     fputs("  ", out);
-    fputs(TUI_BOLD_CYAN TUI_DV TUI_RESET, out);
-    fputs(" ", out);
-    for (i = 0; i < box_w - 4; i++) {
-        fputs(GRADIENT_COLORS[(box_w - 4 - i) % GRADIENT_COUNT], out);
+    fprintf(out, "\033[38;5;51m" TUI_DV TUI_RESET);
+    fputc(' ', out);
+    for (i = box_w - 5; i >= 0; i--) {
+        fprintf(out, "\033[38;5;%dm", GRADIENT_256[i % GRADIENT_256_COUNT]);
         fputs(TUI_BLOCK_LOWER, out);
     }
     fputs(TUI_RESET, out);
-    fputs(" ", out);
-    fputs(TUI_BOLD_CYAN TUI_DV TUI_RESET, out);
+    fputc(' ', out);
+    fprintf(out, "\033[38;5;51m" TUI_DV TUI_RESET);
     fputc('\n', out);
 
-    /* Bottom border */
+    /* Bottom border: matching gradient */
     fputs("  ", out);
-    fputs(TUI_BOLD_CYAN, out);
+    fprintf(out, "\033[38;5;51m");
     fputs(TUI_DBL, out);
-    tui_repeat(out, TUI_DH, box_w - 2);
+    for (i = 0; i < box_w - 2; i++) {
+        fprintf(out, "\033[38;5;%dm", GRADIENT_256[(box_w - 2 - i) % GRADIENT_256_COUNT]);
+        fputs(TUI_DH, out);
+    }
+    fprintf(out, "\033[38;5;51m");
     fputs(TUI_DBR, out);
     fputs(TUI_RESET, out);
     fputc('\n', out);
@@ -345,28 +365,39 @@ void tui_print_welcome(FILE *out, TuiRoleTheme theme, const char *user_id) {
 }
 
 void tui_print_goodbye(FILE *out) {
+    int i = 0;
+
     if (out == 0) return;
 
     fputc('\n', out);
+
+    /* Top divider: smooth 256-color gradient line */
     fputs("  ", out);
-    fputs(TUI_DIM, out);
-    tui_repeat(out, TUI_H, 42);
+    for (i = 0; i < 46; i++) {
+        fprintf(out, "\033[38;5;%dm", GRADIENT_256[i % GRADIENT_256_COUNT]);
+        fputs(TUI_HH, out);
+    }
     fputs(TUI_RESET, out);
     fputc('\n', out);
 
+    /* Content line */
     fputs("  ", out);
+    fputs(TUI_SPARKLE " ", out);
     tui_print_gradient_text(out, "\xe6\x84\x9f\xe8\xb0\xa2\xe4\xbd\xbf\xe7\x94\xa8" /* 感谢使用 */);
     fputs(TUI_BOLD_WHITE " HIS " TUI_RESET, out);
     tui_print_gradient_text(out, "\xe7\xb3\xbb\xe7\xbb\x9f" /* 系统 */);
-    fputs(TUI_DIM " - ", out);
+    fprintf(out, " \033[38;5;245m- ");
     tui_print_gradient_text(out, "\xe5\x86\x8d\xe8\xa7\x81" /* 再见 */);
     fprintf(out, " %s", TUI_SPARKLE);
     fputs(TUI_RESET, out);
     fputc('\n', out);
 
+    /* Bottom divider: reverse gradient */
     fputs("  ", out);
-    fputs(TUI_DIM, out);
-    tui_repeat(out, TUI_H, 42);
+    for (i = 45; i >= 0; i--) {
+        fprintf(out, "\033[38;5;%dm", GRADIENT_256[i % GRADIENT_256_COUNT]);
+        fputs(TUI_HH, out);
+    }
     fputs(TUI_RESET, out);
     fputc('\n', out);
     fputc('\n', out);
@@ -397,28 +428,43 @@ void tui_print_status_bar_themed(FILE *out, TuiRoleTheme theme, const char *user
 
     if (out == 0) return;
 
-    /* Left accent block */
+    /* Left accent: gradient edge ▐█ */
+    fputs(TUI_DIM, out);
     fputs(tui_role_color(theme), out);
-    fputs(TUI_BLOCK_FULL TUI_BLOCK_FULL, out);
+    fputs(TUI_BLOCK_RIGHT, out);
+    fputs(TUI_RESET, out);
+    fputs(tui_role_color(theme), out);
+    fputs(TUI_BLOCK_FULL, out);
     fputs(TUI_RESET, out);
 
-    /* Main bar */
+    /* Main role badge */
     fputs(TUI_BOLD, out);
     fputs(bg, out);
     fputs(TUI_WHITE, out);
     fprintf(out, " %s %s ", icon, label);
     fputs(TUI_RESET, out);
 
-    /* User ID section */
-    fputs(TUI_BOLD TUI_BG_BLUE TUI_WHITE, out);
+    /* Separator glyph */
+    fputs(tui_role_color(theme), out);
+    fputs(TUI_BLOCK_RIGHT, out);
+    fputs(TUI_RESET, out);
+
+    /* User ID section with subtle background */
+    fprintf(out, "\033[48;5;236m");  /* dark gray bg */
+    fputs(TUI_BOLD_WHITE, out);
     if (user_id != 0) {
         fprintf(out, " %s %s ", TUI_DOT, user_id);
     }
     fputs(TUI_RESET, out);
 
-    /* Right fade */
+    /* HIS badge */
+    fprintf(out, "\033[48;5;238m\033[38;5;245m");
+    fprintf(out, " %s HIS ", TUI_MEDICAL);
+    fputs(TUI_RESET, out);
+
+    /* Right fade: smooth block density transition */
     fputs(tui_role_color(theme), out);
-    fputs(" " TUI_BLOCK_DARK TUI_BLOCK_MED TUI_BLOCK_LIGHT, out);
+    fputs(TUI_BLOCK_DARK TUI_BLOCK_MED TUI_BLOCK_LIGHT, out);
     fputs(TUI_RESET, out);
     fputc('\n', out);
 }
@@ -459,12 +505,14 @@ void tui_print_header(FILE *out, const char *title, int width) {
 }
 
 void tui_print_section(FILE *out, const char *icon, const char *title) {
+    int i = 0;
+
     if (out == 0 || title == 0) return;
 
     fputc('\n', out);
     fputs("  ", out);
     if (icon != 0) {
-        fputs(TUI_BOLD_CYAN, out);
+        fprintf(out, "\033[38;5;214m");  /* warm orange */
         fputs(icon, out);
         fputs(TUI_RESET, out);
         fputc(' ', out);
@@ -473,9 +521,12 @@ void tui_print_section(FILE *out, const char *icon, const char *title) {
     fputs(title, out);
     fputs(TUI_RESET, out);
     fputc('\n', out);
+    /* Gradient underline */
     fputs("  ", out);
-    fputs(TUI_DIM, out);
-    tui_repeat(out, TUI_H, 38);
+    for (i = 0; i < 38; i++) {
+        fprintf(out, "\033[38;5;%dm", 236 + (i * 8 / 38)); /* dark to medium gray */
+        fputs(TUI_H, out);
+    }
     fputs(TUI_RESET, out);
     fputc('\n', out);
 }
@@ -502,27 +553,27 @@ void tui_print_double_hline(FILE *out, int width) {
 
 void tui_print_success(FILE *out, const char *message) {
     if (out == 0 || message == 0) return;
-    fprintf(out, "\n  " TUI_BOLD_GREEN "%s %s" TUI_RESET "\n", TUI_CHECK, message);
+    fprintf(out, "\n  \033[48;5;22m\033[38;5;46m %s \033[1m%s \033[0m\n", TUI_CHECK, message);
 }
 
 void tui_print_error(FILE *out, const char *message) {
     if (out == 0 || message == 0) return;
-    fprintf(out, "\n  " TUI_BOLD_RED "%s %s" TUI_RESET "\n", TUI_CROSS, message);
+    fprintf(out, "\n  \033[48;5;52m\033[38;5;196m %s \033[1m%s \033[0m\n", TUI_CROSS, message);
 }
 
 void tui_print_warning(FILE *out, const char *message) {
     if (out == 0 || message == 0) return;
-    fprintf(out, "\n  " TUI_BOLD_YELLOW "%s %s" TUI_RESET "\n", TUI_TRIANGLE, message);
+    fprintf(out, "\n  \033[48;5;58m\033[38;5;220m %s \033[1m%s \033[0m\n", TUI_TRIANGLE, message);
 }
 
 void tui_print_info(FILE *out, const char *message) {
     if (out == 0 || message == 0) return;
-    fprintf(out, "  " TUI_CYAN "%s %s" TUI_RESET "\n", TUI_DOT, message);
+    fprintf(out, "  \033[38;5;39m%s\033[0m \033[38;5;252m%s\033[0m\n", TUI_DOT, message);
 }
 
 void tui_print_prompt(FILE *out, const char *text) {
     if (out == 0 || text == 0) return;
-    fprintf(out, "\n  " TUI_BOLD_YELLOW "%s %s" TUI_RESET, TUI_ARROW, text);
+    fprintf(out, "\n  \033[38;5;214m%s\033[0m \033[1;37m%s\033[0m", TUI_ARROW, text);
     fflush(out);
 }
 
@@ -573,31 +624,36 @@ void tui_print_kv_colored(FILE *out, const char *key, const char *value, const c
 void tui_print_progress(FILE *out, const char *label, int current, int total, int bar_width) {
     int filled = 0;
     int i = 0;
+    int pct = 0;
 
     if (out == 0 || total <= 0) return;
     if (bar_width < 10) bar_width = 10;
 
     filled = (current * bar_width) / total;
     if (filled > bar_width) filled = bar_width;
+    pct = (current * 100) / total;
 
     if (label != 0) {
         fprintf(out, "  %s ", label);
     }
-    fputs(TUI_DIM TUI_V TUI_RESET, out);
+    fprintf(out, "\033[38;5;240m" TUI_V "\033[0m");
     for (i = 0; i < filled; i++) {
+        /* Smooth 256-color gradient: red(196) → yellow(226) → green(46) */
+        int color = 0;
         if (i < bar_width / 3)
-            fputs(TUI_BOLD_RED TUI_BLOCK_FULL, out);
+            color = 196 + (i * 6 / (bar_width / 3));  /* red shades */
         else if (i < (bar_width * 2) / 3)
-            fputs(TUI_BOLD_YELLOW TUI_BLOCK_FULL, out);
+            color = 208 + (((i - bar_width / 3) * 18) / (bar_width / 3));  /* orange → yellow */
         else
-            fputs(TUI_BOLD_GREEN TUI_BLOCK_FULL, out);
+            color = 46;  /* green */
+        fprintf(out, "\033[38;5;%dm" TUI_BLOCK_FULL, color);
     }
     fputs(TUI_RESET, out);
     for (i = filled; i < bar_width; i++) {
-        fputs(TUI_DIM TUI_BLOCK_LIGHT TUI_RESET, out);
+        fprintf(out, "\033[38;5;238m" TUI_BLOCK_LIGHT);
     }
-    fputs(TUI_DIM TUI_V TUI_RESET, out);
-    fprintf(out, " %d/%d", current, total);
+    fprintf(out, "\033[0m\033[38;5;240m" TUI_V "\033[0m");
+    fprintf(out, " \033[38;5;%dm%d/%d\033[0m", pct >= 100 ? 46 : 252, current, total);
     fputc('\n', out);
 }
 
@@ -786,15 +842,17 @@ void tui_print_menu_item(FILE *out, int number, const char *label, int width) {
     if (out == 0 || label == 0) return;
 
     fputs(TUI_BOLD_CYAN TUI_V TUI_RESET, out);
-    fputs("  ", out);
     if (number == 0) {
-        fprintf(out, TUI_DIM "%d. %s" TUI_RESET, number, label);
+        fprintf(out, "  " TUI_DIM "%d. %s" TUI_RESET, number, label);
     } else {
-        fprintf(out, TUI_BOLD_YELLOW "%d" TUI_RESET ". %s", number, label);
+        /* Numbered badge + label */
+        fprintf(out, " \033[48;5;236m\033[38;5;214m %d \033[0m ", number);
+        fprintf(out, "\033[38;5;252m%s\033[0m", label);
     }
 
     content_w = 5 + tui_display_width(label);
     if (number >= 10) content_w += 1;
+    if (number != 0) content_w += 2; /* badge padding */
     padding = width - 2 - content_w;
     for (i = 0; i < padding; i++) fputc(' ', out);
 
@@ -810,23 +868,25 @@ void tui_print_menu_item_icon(FILE *out, int number, const char *icon, const cha
     if (out == 0 || label == 0) return;
 
     fputs(TUI_BOLD_CYAN TUI_V TUI_RESET, out);
-    fputs("  ", out);
     if (number == 0) {
-        fprintf(out, TUI_DIM "%d. %s %s" TUI_RESET, number, icon != 0 ? icon : "", label);
+        fprintf(out, "  " TUI_DIM "%d. %s %s" TUI_RESET, number, icon != 0 ? icon : "", label);
     } else {
-        fprintf(out, TUI_BOLD_YELLOW "%d" TUI_RESET ". ", number);
+        /* Numbered badge */
+        fprintf(out, " \033[48;5;236m\033[38;5;214m %d \033[0m ", number);
+        /* Icon with distinct color */
         if (icon != 0) {
-            fputs(TUI_CYAN, out);
+            fprintf(out, "\033[38;5;51m");  /* bright cyan */
             fputs(icon, out);
             fputs(TUI_RESET, out);
             fputc(' ', out);
         }
-        fputs(label, out);
+        fprintf(out, "\033[38;5;252m%s\033[0m", label);
     }
 
     content_w = 5 + tui_display_width(label);
     if (icon != 0) content_w += tui_display_width(icon) + 1;
     if (number >= 10) content_w += 1;
+    if (number != 0) content_w += 2; /* badge padding */
     padding = width - 2 - content_w;
     for (i = 0; i < padding; i++) fputc(' ', out);
 
