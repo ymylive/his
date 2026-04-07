@@ -846,9 +846,17 @@ void tui_print_menu_bottom(FILE *out, int width) {
  * ═══════════════════════════════════════════════════════════════ */
 
 #ifdef _WIN32
+#ifndef __MINGW32__
 #include <windows.h>
+#include <io.h>
 static void tui_sleep_ms(int ms) { Sleep(ms); }
 static int tui_check_tty(void) { return _isatty(_fileno(stdout)); }
+#else
+/* MinGW: POSIX-compatible */
+#include <unistd.h>
+static void tui_sleep_ms(int ms) { usleep(ms * 1000); }
+static int tui_check_tty(void) { return isatty(STDOUT_FILENO); }
+#endif
 #else
 #include <unistd.h>
 static void tui_sleep_ms(int ms) { usleep(ms * 1000); }
