@@ -14,6 +14,7 @@ add_library(his_common
     src/common/LinkedList.c
     src/common/Result.c
     src/common/StringUtils.c
+    src/common/UpdateChecker.c
     src/domain/Admission.c
     src/domain/Bed.c
     src/domain/DispenseRecord.c
