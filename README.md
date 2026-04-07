@@ -20,13 +20,29 @@ curl -fsSL https://raw.githubusercontent.com/ymylive/his/main/install.sh | bash
 curl -fsSL https://raw.githubusercontent.com/ymylive/his/main/install.sh | bash -s uninstall
 ```
 
-### Windows
+### Windows — 一键安装
 
-1. 从 [最新 Release](https://github.com/ymylive/his/releases/latest) 下载 `his-v3.0.0-win64.zip`
-2. 解压到任意目录
-3. 打开 **Windows Terminal**，进入解压目录运行 `his.exe`
+打开 **PowerShell**，粘贴：
+
+```powershell
+irm https://raw.githubusercontent.com/ymylive/his/main/install.ps1 | iex
+```
+
+安装完成后，随时输入 `his` 即可启动。
+
+### Windows — 卸载
+
+```powershell
+irm https://raw.githubusercontent.com/ymylive/his/main/install.ps1 | iex -Args uninstall
+```
 
 > ⚠️ Windows 请使用 Windows Terminal 或支持 ANSI/UTF-8 的终端，cmd.exe 可能无法正确显示颜色和 Unicode 字符。
+
+### Windows — 手动安装
+
+1. 从 [最新 Release](https://github.com/ymylive/his/releases/latest) 下载 `lightweight-his-portable-vX.Y.Z-win64.zip`
+2. 解压到任意目录
+3. 双击 `run_console.bat` 或在终端中运行 `his.exe`
 
 ### 源码构建
 
@@ -75,6 +91,8 @@ cmake --build .
 - 框线彩色表格（病房/床位/低库存/待诊列表）
 - 动画系统：打字机效果、菜单滑入、加载旋转器、进度条、过渡动画
 - 70+ Unicode 符号图标
+- ESC 键快速返回上一级菜单
+- 启动时自动检测新版本，支持终端内一键更新
 
 ## 演示数据
 
