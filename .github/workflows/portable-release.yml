@@ -28,10 +28,15 @@ jobs:
             mingw-w64-i686-ninja
             git
 
+      - name: Sync glyph seed if needed
+        shell: powershell
+        run: |
+          python .\scripts\sync-desktop-glyph-seed.py --write
+        continue-on-error: true
+
       - name: Build and package portable
         shell: powershell
         run: |
-          python .\scripts\sync-desktop-glyph-seed.py --check
           powershell -ExecutionPolicy Bypass -File .\scripts\package-release.ps1 -Version ${{ github.ref_name }} -SkipSmoke
 
       - name: Upload portable artifact

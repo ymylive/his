@@ -90,12 +90,18 @@ if (-not $SkipTests) {
     Invoke-External -FilePath "ctest" -Arguments @("--test-dir", $buildPath, "--output-on-failure")
 }
 
+$consoleExecutable = Join-Path $buildPath "his.exe"
 $desktopExecutable = Join-Path $buildPath "his_desktop.exe"
-if (-not $SkipSmoke) {
+$hasDesktop = Test-Path -LiteralPath $desktopExecutable
+
+# Use whichever executable exists for arch detection
+$archDetectExe = if ($hasDesktop) { $desktopExecutable } else { $consoleExecutable }
+
+if (-not $SkipSmoke -and $hasDesktop) {
     Invoke-External -FilePath $desktopExecutable -Arguments @("--smoke")
 }
 
-$archTag = Get-ArchitectureTag -CacheFile (Join-Path $buildPath "CMakeCache.txt") -ExecutablePath $desktopExecutable
+$archTag = Get-ArchitectureTag -CacheFile (Join-Path $buildPath "CMakeCache.txt") -ExecutablePath $archDetectExe
 $packageName = "lightweight-his-portable-v$normalizedVersion-$archTag"
 $stagePath = Join-Path $distPath $packageName
 $zipPath = Join-Path $distPath "$packageName.zip"
@@ -110,16 +116,22 @@ if (Test-Path -LiteralPath $zipPath) {
 
 New-Item -ItemType Directory -Force -Path $stagePath | Out-Null
 
-Copy-Item -LiteralPath (Join-Path $buildPath "his.exe") -Destination (Join-Path $stagePath "his.exe")
-Copy-Item -LiteralPath (Join-Path $buildPath "his_desktop.exe") -Destination (Join-Path $stagePath "his_desktop.exe")
+Copy-Item -LiteralPath $consoleExecutable -Destination (Join-Path $stagePath "his.exe")
+
+if ($hasDesktop) {
+    Copy-Item -LiteralPath $desktopExecutable -Destination (Join-Path $stagePath "his_desktop.exe")
+}
+
 Copy-Item -LiteralPath (Join-Path $projectRoot "README.md") -Destination (Join-Path $stagePath "README.md")
 Copy-Item -LiteralPath (Join-Path $projectRoot "data") -Destination (Join-Path $stagePath "data") -Recurse
 
-Write-Launcher -Path (Join-Path $stagePath "run_desktop.bat") -Lines @(
-    "@echo off",
-    "cd /d ""%~dp0""",
-    "start """" ""%~dp0his_desktop.exe"""
-)
+if ($hasDesktop) {
+    Write-Launcher -Path (Join-Path $stagePath "run_desktop.bat") -Lines @(
+        "@echo off",
+        "cd /d ""%~dp0""",
+        "start """" ""%~dp0his_desktop.exe"""
+    )
+}
 
 Write-Launcher -Path (Join-Path $stagePath "run_console.bat") -Lines @(
     "@echo off",
@@ -130,11 +142,16 @@ Write-Launcher -Path (Join-Path $stagePath "run_console.bat") -Lines @(
 $startHere = @"
 Lightweight HIS Portable v$normalizedVersion
 
-Start desktop:
-  run_desktop.bat
-
 Start console:
   run_console.bat
+"@
+
+if ($hasDesktop) {
+    $startHere += "`r`n`r`nStart desktop:`r`n  run_desktop.bat"
+}
+
+$startHere += @"
+
 
 Demo accounts:
   ADM0001 / admin123

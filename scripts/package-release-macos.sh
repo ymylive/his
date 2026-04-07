@@ -53,11 +53,14 @@ mkdir -p "$STAGE_PATH"
 
 # Copy executables
 cp "$BUILD_DIR/his" "$STAGE_PATH/his"
-cp "$BUILD_DIR/his_desktop" "$STAGE_PATH/his_desktop"
-
-# Make executables executable
 chmod +x "$STAGE_PATH/his"
-chmod +x "$STAGE_PATH/his_desktop"
+
+HAS_DESKTOP=0
+if [ -f "$BUILD_DIR/his_desktop" ]; then
+    cp "$BUILD_DIR/his_desktop" "$STAGE_PATH/his_desktop"
+    chmod +x "$STAGE_PATH/his_desktop"
+    HAS_DESKTOP=1
+fi
 
 # Copy data and documentation
 cp README.md "$STAGE_PATH/"
@@ -69,26 +72,27 @@ cp scripts/setup-macos.sh "$STAGE_PATH/"
 chmod +x "$STAGE_PATH/setup-macos.sh"
 
 # Create launcher scripts
-cat > "$STAGE_PATH/run_desktop.sh" << 'EOF'
+if [ "$HAS_DESKTOP" = "1" ]; then
+    cat > "$STAGE_PATH/run_desktop.sh" << 'EOF'
 #!/bin/bash
 cd "$(dirname "$0")"
 ./his_desktop
 EOF
+    chmod +x "$STAGE_PATH/run_desktop.sh"
+fi
 
 cat > "$STAGE_PATH/run_console.sh" << 'EOF'
 #!/bin/bash
 cd "$(dirname "$0")"
 ./his
 EOF
-
-chmod +x "$STAGE_PATH/run_desktop.sh"
 chmod +x "$STAGE_PATH/run_console.sh"
 
 # Create START_HERE.txt
 cat > "$STAGE_PATH/START_HERE.txt" << EOF
 Lightweight HIS Portable v${NORMALIZED_VERSION} for macOS
 
-⚠️  首次运行前必读 ⚠️
+首次运行前必读:
 
 由于应用未经 Apple 签名，macOS 会阻止运行。请先运行配置脚本：
 
@@ -97,12 +101,20 @@ Lightweight HIS Portable v${NORMALIZED_VERSION} for macOS
 或手动配置：
 
   xattr -cr .
-  chmod +x run_desktop.sh his_desktop
+  chmod +x his run_console.sh
 
 然后启动：
 
-  ./run_desktop.sh    # 桌面版（推荐）
   ./run_console.sh    # 控制台版
+EOF
+
+if [ "$HAS_DESKTOP" = "1" ]; then
+    cat >> "$STAGE_PATH/START_HERE.txt" << 'EOF'
+  ./run_desktop.sh    # 桌面版（推荐）
+EOF
+fi
+
+cat >> "$STAGE_PATH/START_HERE.txt" << EOF
 
 Demo accounts:
   ADM0001 / admin123  - Administrator
@@ -110,14 +122,6 @@ Demo accounts:
   INP0001 / inpatient123 - Inpatient Manager
   PHA0001 / pharmacy123 - Pharmacy
   PAT0001 / patient123 - Patient
-
-详细说明：
-  - 安全配置：docs/MACOS_SECURITY.md
-  - 完整文档：docs/MACOS_SUPPORT.md
-
-Notes:
-  - Keep the data folder next to the executables
-  - For security details, see docs/MACOS_SECURITY.md
 
 Architecture: ${ARCH_TAG}
 EOF
@@ -129,7 +133,7 @@ zip -r "${PACKAGE_NAME}.zip" "$PACKAGE_NAME"
 cd "$PROJECT_ROOT"
 
 echo ""
-echo "✅ Portable release ready:"
+echo "Portable release ready:"
 echo "  Folder: $STAGE_PATH"
 echo "  Zip:    $ZIP_PATH"
 echo "  Arch:   $ARCH_TAG"
