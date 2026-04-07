@@ -1644,6 +1644,7 @@ void tui_animate_matrix_rain(FILE *out, int width, int height, int duration_ms) 
     tui_move_cursor(out, 1, 1);
     fflush(out);
     tui_show_cursor(out);
+    #undef RAIN_CHAR_COUNT
 }
 
 /* ── Particle Explosion ──────────────────────────────────────── */
@@ -1744,6 +1745,7 @@ void tui_animate_particle_explosion(FILE *out, int width, int height) {
     tui_move_cursor(out, 1, 1);
     fflush(out);
     tui_show_cursor(out);
+    #undef MAX_PARTICLES
 }
 
 /* ── Heartbeat Monitor ───────────────────────────────────────── */
@@ -1835,6 +1837,7 @@ void tui_animate_heartbeat(FILE *out, int width, int beats) {
     fputc('\n', out);
     fflush(out);
     tui_show_cursor(out);
+    #undef ECG_LEN
 }
 
 /* ── Glitch Effect ───────────────────────────────────────────── */
@@ -1930,6 +1933,7 @@ void tui_animate_glitch(FILE *out, const char *text, int intensity, int duration
     fputc('\n', out);
     fflush(out);
     tui_show_cursor(out);
+    #undef GLITCH_CHAR_COUNT
 }
 
 /* ── Fireworks ───────────────────────────────────────────────── */
@@ -2058,6 +2062,7 @@ void tui_animate_fireworks(FILE *out, int width, int height, int count) {
     tui_move_cursor(out, 1, 1);
     fflush(out);
     tui_show_cursor(out);
+    #undef FW_MAX_SPARKS
 }
 
 /* ── DNA Double Helix ────────────────────────────────────────── */

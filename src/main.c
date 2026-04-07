@@ -107,10 +107,10 @@ int main(void) {
     }
 
     tui_clear_screen();
-    /* Startup: matrix rain → logo → glitch title → banner */
-    tui_animate_matrix_rain(stdout, 44, 10, 1500);
+    /* Startup: matrix rain → logo → glitch title → banner (~2s total) */
+    tui_animate_matrix_rain(stdout, 44, 8, 800);
     tui_animate_logo(stdout);
-    tui_animate_glitch(stdout, "  H I S  -  Hospital Information System", 4, 600);
+    tui_animate_glitch(stdout, "  H I S  -  Hospital Information System", 3, 400);
     tui_animate_banner(stdout, "轻量级医院信息系统 (HIS)");
 
     /* ── startup update check ── */
@@ -155,8 +155,7 @@ int main(void) {
             }
             if (read_result < 0) {
                 tui_print_warning(stdout, "输入过长，请重新输入。");
-                tui_delay(800);
-                tui_delay(500);
+                tui_delay(1000);
                 continue;
             }
         }
@@ -164,8 +163,7 @@ int main(void) {
         result = MenuController_parse_main_selection(input, &role);
         if (result.success == 0) {
             tui_print_warning(stdout, "输入无效，请重新输入菜单编号。");
-            tui_delay(800);
-            tui_delay(500);
+            tui_delay(1000);
             continue;
         }
 
@@ -200,8 +198,7 @@ int main(void) {
 
             if (required_role == USER_ROLE_UNKNOWN) {
                 tui_print_warning(stdout, "角色未配置登录映射。");
-                tui_delay(800);
-                tui_delay(500);
+                tui_delay(1000);
                 continue;
             }
 
@@ -248,7 +245,8 @@ int main(void) {
                 }
 
                 result = MenuApplication_login(&application, input, password, required_role);
-                memset(password, 0, sizeof(password));
+                /* Secure clear: volatile prevents optimizer from removing */
+                { volatile char *p = password; size_t n = sizeof(password); while (n--) *p++ = 0; }
                 if (result.success == 0) {
                     tui_animate_error(stdout, result.message);
                     tui_delay(500);
@@ -271,7 +269,7 @@ int main(void) {
         /* Themed entrance: plasma → converge → expand, then welcome */
         tui_animate_entrance(stdout, theme);
         tui_animate_welcome(stdout, theme, user_id);
-        tui_animate_heartbeat(stdout, 40, 2);
+        tui_animate_heartbeat(stdout, 40, 1);
         tui_print_info(stdout, "按回车键进入系统 (ESC返回)...");
         {
             int enter_result = InputHelper_read_line(stdin, input, sizeof(input));
