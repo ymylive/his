@@ -10,7 +10,7 @@
 
 set -e
 
-VERSION="v3.0.0"
+VERSION="v3.1.0"
 REPO="ymylive/his"
 DMG_NAME="his-${VERSION}-macos-arm64.dmg"
 INSTALL_DIR="$HOME/.his"

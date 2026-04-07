@@ -4,6 +4,21 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## [3.1.0] - 2026-04-06
+
+### Added
+
+- **ESC 键返回** — 所有菜单层级支持按 ESC 键返回上一步操作
+  - 主菜单 ESC 退出系统，角色子菜单 ESC 返回主菜单
+  - 登录输入（用户编号/密码）ESC 返回角色选择
+  - 使用 termios raw 模式实时检测 ESC 按键，无需按回车
+- **启动自动更新检测** — 启动时通过 GitHub API 检查最新 release
+  - 自动识别当前平台（Windows win32/win64、macOS arm64/x86_64、Linux）
+  - 支持终端直接下载 zip 并安装更新，无需手动操作
+  - Windows 自动生成更新脚本，退出后完成文件替换并重启
+  - macOS/Linux 直接覆盖安装，支持 xattr 权限修复
+  - 提供浏览器打开下载页的备选方案
+
 ## [2.6.0] - 2026-04-05
 
 ### Added
