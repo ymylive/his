@@ -598,8 +598,7 @@ void tui_print_gradient_hline(FILE *out, int width) {
     if (out == 0) return;
     fputs("  ", out);
     for (i = 0; i < width; i++) {
-        fprintf(out, "\033[38;5;%dm", GRADIENT_256[i % GRADIENT_256_COUNT]);
-        fputs(TUI_HH, out);
+        fprintf(out, "\033[38;5;%dm-", GRADIENT_256[i % GRADIENT_256_COUNT]);
     }
     fputs(TUI_RESET, out);
     fputc('\n', out);
