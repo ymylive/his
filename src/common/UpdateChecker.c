@@ -1,3 +1,15 @@
+/**
+ * @file UpdateChecker.c
+ * @brief 更新检查模块的实现 - 通过 GitHub API 检查、下载并安装新版本
+ *
+ * 本模块实现了完整的自动更新流程：
+ * 1. 通过 curl 调用 GitHub Releases API 获取最新版本信息
+ * 2. 解析 JSON 响应提取版本号和下载链接
+ * 3. 比较版本号判断是否有可用更新
+ * 4. 支持自动下载 zip 包并安装到当前目录
+ * 5. 支持 Windows、macOS 和 Linux 三个平台
+ */
+
 #include "common/UpdateChecker.h"
 #include "ui/TuiStyle.h"
 
@@ -19,12 +31,27 @@
 #endif
 #endif
 
+/** GitHub Releases API 地址 */
 #define GITHUB_API_URL "https://api.github.com/repos/ymylive/his/releases/latest"
+/** GitHub 仓库标识 */
 #define GITHUB_REPO    "ymylive/his"
+/** API 响应缓冲区最大大小（字节） */
 #define MAX_RESPONSE   16384
 
-/* ── JSON helpers ─────────────────────────────────────────── */
+/* ── JSON 辅助解析函数 ───────────────────────────────────── */
 
+/**
+ * @brief 从 JSON 字符串中提取指定键的字符串值
+ *
+ * 简易 JSON 解析器，通过字符串匹配定位键名，然后提取对应的字符串值。
+ * 不依赖第三方 JSON 库，适用于结构简单的 GitHub API 响应。
+ *
+ * @param json     JSON 字符串
+ * @param key      要提取的键名
+ * @param buf      输出缓冲区
+ * @param buf_size 输出缓冲区大小
+ * @return 成功提取返回 1，未找到返回 0
+ */
 static int json_extract_string(
     const char *json, const char *key,
     char *buf, size_t buf_size
@@ -34,21 +61,26 @@ static int json_extract_string(
     const char *end = 0;
     size_t len = 0;
 
+    /* 构造搜索模式 "key" */
     snprintf(pattern, sizeof(pattern), "\"%s\"", key);
     start = strstr(json, pattern);
     if (start == 0) return 0;
 
+    /* 跳过键名及冒号、空白等分隔字符 */
     start += strlen(pattern);
     while (*start == ' ' || *start == ':' || *start == '\t') start++;
+    /* 期望值以双引号开头 */
     if (*start != '"') return 0;
-    start++;
+    start++; /* 跳过开头双引号 */
 
+    /* 找到值的结束位置（匹配闭合双引号，处理转义字符） */
     end = start;
     while (*end != '\0' && *end != '"') {
-        if (*end == '\\') { end++; }
+        if (*end == '\\') { end++; } /* 跳过转义字符 */
         if (*end != '\0') end++;
     }
 
+    /* 将提取的值复制到输出缓冲区 */
     len = (size_t)(end - start);
     if (len >= buf_size) len = buf_size - 1;
     memcpy(buf, start, len);
@@ -56,9 +88,17 @@ static int json_extract_string(
     return 1;
 }
 
-/*
- * Find a download URL in the JSON whose "name" field contains `keyword`.
- * Searches the "assets" array for "browser_download_url".
+/**
+ * @brief 从 JSON 的 assets 数组中查找匹配的下载 URL
+ *
+ * 遍历 JSON 中所有 "name" 字段，找到同时包含指定关键字和 ".zip"
+ * 后缀的资源，然后提取其 "browser_download_url" 字段。
+ *
+ * @param json    JSON 字符串
+ * @param keyword 平台关键字（如 "win64"、"macos-arm64" 等）
+ * @param url_buf 输出 URL 缓冲区
+ * @param url_size 输出缓冲区大小
+ * @return 找到匹配的资源返回 1，未找到返回 0
  */
 static int json_find_asset_url(
     const char *json, const char *keyword,
@@ -68,12 +108,14 @@ static int json_find_asset_url(
     const char *name_pos = 0;
     const char *url_pos = 0;
 
+    /* 遍历所有 "name" 字段 */
     while ((name_pos = strstr(cursor, "\"name\"")) != 0) {
         char name[256];
-        const char *ns = name_pos + 6; /* skip "name" */
+        const char *ns = name_pos + 6; /* 跳过 "name" */
         const char *ne = 0;
         size_t nlen = 0;
 
+        /* 跳过分隔符，提取 name 的值 */
         while (*ns == ' ' || *ns == ':' || *ns == '\t') ns++;
         if (*ns != '"') { cursor = ns; continue; }
         ns++;
@@ -84,11 +126,12 @@ static int json_find_asset_url(
         memcpy(name, ns, nlen);
         name[nlen] = '\0';
 
+        /* 检查文件名是否同时包含平台关键字和 .zip 后缀 */
         if (strstr(name, keyword) != 0 && strstr(name, ".zip") != 0) {
-            /* Found matching asset — look for browser_download_url nearby */
+            /* 找到匹配的资源文件，在附近查找 browser_download_url */
             url_pos = strstr(name_pos, "\"browser_download_url\"");
             if (url_pos != 0) {
-                const char *us = url_pos + 22;
+                const char *us = url_pos + 22; /* 跳过 "browser_download_url" */
                 const char *ue = 0;
                 size_t ulen = 0;
                 while (*us == ' ' || *us == ':' || *us == '\t') us++;
@@ -108,22 +151,38 @@ static int json_find_asset_url(
     return 0;
 }
 
-/* ── Version comparison ──────────────────────────────────── */
+/* ── 版本号比较 ──────────────────────────────────────────── */
 
+/**
+ * @brief 比较两个语义化版本号字符串（major.minor.patch）
+ *
+ * @param a 版本号字符串 A
+ * @param b 版本号字符串 B
+ * @return a > b 返回正数，a < b 返回负数，相等返回 0
+ */
 static int version_compare(const char *a, const char *b) {
-    int a1 = 0, a2 = 0, a3 = 0;
-    int b1 = 0, b2 = 0, b3 = 0;
+    int a1 = 0, a2 = 0, a3 = 0; /* A 的主版本、次版本、补丁版本 */
+    int b1 = 0, b2 = 0, b3 = 0; /* B 的主版本、次版本、补丁版本 */
 
     sscanf(a, "%d.%d.%d", &a1, &a2, &a3);
     sscanf(b, "%d.%d.%d", &b1, &b2, &b3);
 
+    /* 依次比较主版本、次版本、补丁版本 */
     if (a1 != b1) return a1 - b1;
     if (a2 != b2) return a2 - b2;
     return a3 - b3;
 }
 
-/* ── Platform detection ──────────────────────────────────── */
+/* ── 平台检测 ────────────────────────────────────────────── */
 
+/**
+ * @brief 获取当前平台的关键字标识
+ *
+ * 根据编译期宏定义返回对应平台的关键字字符串，
+ * 用于在 GitHub Release 资源中匹配对应平台的下载包。
+ *
+ * @return 平台关键字字符串（如 "win64"、"macos-arm64"、"linux" 等）
+ */
 static const char *get_platform_keyword(void) {
 #if defined(_WIN32)
     #if defined(_WIN64) || defined(__x86_64__) || defined(__amd64__)
@@ -144,12 +203,23 @@ static const char *get_platform_keyword(void) {
 #endif
 }
 
-/* ── Stored raw JSON for asset lookup ─────────────────────── */
+/* ── 全局变量：缓存 API 响应的原始 JSON ─────────────────── */
 
+/** 用于存储 GitHub API 返回的原始 JSON 响应 */
 static char g_api_response[MAX_RESPONSE];
 
-/* ── Public API ──────────────────────────────────────────── */
+/* ── 公开接口实现 ────────────────────────────────────────── */
 
+/**
+ * @brief 检查 GitHub 上是否有新版本
+ *
+ * 通过 curl 调用 GitHub API 获取最新发布信息，解析 JSON
+ * 响应提取版本号、下载页面 URL 和平台对应的安装包 URL，
+ * 最后与当前版本号比较判断是否需要更新。
+ *
+ * @param info 输出参数，用于存储检查结果
+ * @return 检查成功返回 1，失败返回 0
+ */
 int UpdateChecker_check(UpdateInfo *info) {
     FILE *pipe = 0;
     size_t total = 0;
@@ -159,9 +229,11 @@ int UpdateChecker_check(UpdateInfo *info) {
 
     if (info == 0) return 0;
 
+    /* 初始化更新信息结构体 */
     memset(info, 0, sizeof(UpdateInfo));
     strncpy(info->current_version, HIS_VERSION, sizeof(info->current_version) - 1);
 
+    /* 通过 popen 执行 curl 命令获取 GitHub API 响应 */
 #ifdef _WIN32
     pipe = popen(
         "curl -s -m 5 -H \"Accept: application/vnd.github.v3+json\" "
@@ -177,6 +249,7 @@ int UpdateChecker_check(UpdateInfo *info) {
 #endif
     if (pipe == 0) return 0;
 
+    /* 读取 API 响应内容到全局缓冲区 */
     while ((bytes_read = fread(g_api_response + total, 1,
                                sizeof(g_api_response) - total - 1, pipe)) > 0) {
         total += bytes_read;
@@ -185,28 +258,28 @@ int UpdateChecker_check(UpdateInfo *info) {
     g_api_response[total] = '\0';
     pclose(pipe);
 
-    if (total == 0) return 0;
+    if (total == 0) return 0; /* 无响应数据，检查失败 */
 
-    /* Extract tag_name (e.g. "v3.1.0") */
+    /* 从 JSON 中提取 tag_name（如 "v3.1.0"） */
     if (!json_extract_string(g_api_response, "tag_name", tag_name, sizeof(tag_name))) {
         return 0;
     }
 
-    /* Strip leading 'v' */
+    /* 去除版本号前导的 'v' 或 'V' */
     ver = tag_name;
     if (ver[0] == 'v' || ver[0] == 'V') ver++;
 
     strncpy(info->latest_version, ver, sizeof(info->latest_version) - 1);
 
-    /* Extract release page URL */
+    /* 提取 GitHub 发布页面 URL */
     json_extract_string(g_api_response, "html_url",
                         info->download_url, sizeof(info->download_url));
 
-    /* Find platform-specific asset URL */
+    /* 查找当前平台对应的安装包直接下载 URL */
     json_find_asset_url(g_api_response, get_platform_keyword(),
                         info->asset_url, sizeof(info->asset_url));
 
-    /* Compare versions */
+    /* 比较版本号，判断是否有新版本 */
     if (version_compare(info->latest_version, info->current_version) > 0) {
         info->has_update = 1;
     }
@@ -214,22 +287,44 @@ int UpdateChecker_check(UpdateInfo *info) {
     return 1;
 }
 
-/* ── Download and install ────────────────────────────────── */
+/* ── 下载并安装更新 ──────────────────────────────────────── */
 
+/**
+ * @brief 打印更新对话框的一行（带左右边框）
+ *
+ * 内部辅助函数，用于绘制 TUI 样式的对话框行。
+ *
+ * @param out   输出流
+ * @param left  行左侧内容
+ * @param right 行右侧边框字符
+ * @param width 行的总宽度（用于空格填充）
+ */
 static void print_box_line(FILE *out, const char *left, const char *right, int width) {
     int used = (int)strlen(left);
     int i = 0;
     fprintf(out, TUI_BOLD_YELLOW "  %s" TUI_RESET, left);
+    /* 用空格填充至指定宽度 */
     for (i = used; i < width; i++) fprintf(out, " ");
     fprintf(out, TUI_BOLD_YELLOW "%s" TUI_RESET "\n", right);
 }
 
+/**
+ * @brief 执行下载和安装更新的核心逻辑
+ *
+ * 根据平台分别实现：
+ * - Windows: 下载 zip -> 解压 -> 创建批处理脚本 -> 退出后自动覆盖安装
+ * - macOS/Linux: 下载 zip -> 解压 -> 直接覆盖安装 -> 修复权限
+ *
+ * @param out  输出流，用于显示进度信息
+ * @param info 更新信息结构体（包含下载 URL）
+ * @return 成功返回 1，失败返回 0
+ */
 static int do_download_and_install(FILE *out, const UpdateInfo *info) {
     char cmd[1024];
     int ret = 0;
 
 #ifdef _WIN32
-    /* Windows: download zip → extract → copy over current dir */
+    /* ===== Windows 平台更新流程 ===== */
     const char *tmp_zip = "%TEMP%\\his_update.zip";
     const char *tmp_dir = "%TEMP%\\his_update";
 
@@ -237,6 +332,7 @@ static int do_download_and_install(FILE *out, const UpdateInfo *info) {
     tui_print_info(out, "正在下载更新包...");
     fflush(out);
 
+    /* 第一步：使用 curl 下载 zip 安装包 */
     snprintf(cmd, sizeof(cmd),
         "curl -L -s --progress-bar -o \"%s\" \"%s\"",
         tmp_zip, info->asset_url);
@@ -247,10 +343,10 @@ static int do_download_and_install(FILE *out, const UpdateInfo *info) {
     }
     tui_print_success(out, "下载完成");
 
+    /* 第二步：使用 PowerShell 解压 zip 文件 */
     tui_print_info(out, "正在解压更新包...");
     fflush(out);
 
-    /* Clean old temp dir and extract */
     snprintf(cmd, sizeof(cmd),
         "if exist \"%s\" rd /s /q \"%s\" && "
         "powershell -NoProfile -Command \""
@@ -264,15 +360,14 @@ static int do_download_and_install(FILE *out, const UpdateInfo *info) {
     }
     tui_print_success(out, "解压完成");
 
+    /* 第三步：创建更新批处理脚本 */
     tui_print_info(out, "正在安装更新...");
     fflush(out);
 
     /*
-     * The zip contains a top-level folder like lightweight-his-portable-vX.Y.Z-win64.
-     * We use xcopy to copy everything from the inner folder to the current directory,
-     * overwriting existing files. The /E copies subdirectories, /Y suppresses prompts.
-     * We schedule a batch script to do the copy after this process exits
-     * to avoid file-in-use issues with the running executable.
+     * Windows 下无法直接覆盖正在运行的可执行文件，
+     * 因此创建一个批处理脚本，在当前进程退出后自动执行覆盖安装。
+     * 脚本流程：等待 HIS 退出 -> 复制文件 -> 重新启动 -> 清理临时文件
      */
     {
         char bat_path[512];
@@ -285,9 +380,11 @@ static int do_download_and_install(FILE *out, const UpdateInfo *info) {
             tui_print_error(out, "无法获取程序路径。");
             return 0;
         }
+        /* 从完整路径中截取目录部分 */
         last_slash = strrchr(exe_dir, '\\');
         if (last_slash) *(last_slash + 1) = '\0';
 
+        /* 拼接批处理脚本路径 */
         {
             const char *tmp_env = getenv("TEMP");
             if (tmp_env == 0) tmp_env = ".";
@@ -303,27 +400,29 @@ static int do_download_and_install(FILE *out, const UpdateInfo *info) {
             return 0;
         }
 
+        /* 写入批处理脚本内容 */
         fprintf(bat, "@echo off\r\n");
-        fprintf(bat, "chcp 65001 >NUL 2>&1\r\n");
+        fprintf(bat, "chcp 65001 >NUL 2>&1\r\n");         /* 设置 UTF-8 编码 */
         fprintf(bat, "echo 正在等待 HIS 退出...\r\n");
-        fprintf(bat, "timeout /t 2 /nobreak >NUL\r\n");
+        fprintf(bat, "timeout /t 2 /nobreak >NUL\r\n");    /* 等待 2 秒让旧进程退出 */
         fprintf(bat, "echo 正在安装更新...\r\n");
-        /* Copy all files from the extracted folder (including subfolder) to exe_dir */
+        /* 遍历解压目录的子文件夹，将内容复制到程序目录 */
         fprintf(bat, "for /d %%%%D in (\"%%TEMP%%\\his_update\\*\") do (\r\n");
         fprintf(bat, "    xcopy /E /Y /Q \"%%%%D\\*\" \"%s\"\r\n", exe_dir);
         fprintf(bat, ")\r\n");
         fprintf(bat, "echo 更新完成！正在重新启动...\r\n");
         fprintf(bat, "timeout /t 1 /nobreak >NUL\r\n");
-        fprintf(bat, "start \"\" \"%shis.exe\"\r\n", exe_dir);
-        fprintf(bat, "rd /s /q \"%%TEMP%%\\his_update\" 2>NUL\r\n");
-        fprintf(bat, "del \"%%TEMP%%\\his_update.zip\" 2>NUL\r\n");
-        fprintf(bat, "del \"%%~f0\" 2>NUL\r\n");
+        fprintf(bat, "start \"\" \"%shis.exe\"\r\n", exe_dir); /* 启动新版本 */
+        fprintf(bat, "rd /s /q \"%%TEMP%%\\his_update\" 2>NUL\r\n"); /* 清理解压目录 */
+        fprintf(bat, "del \"%%TEMP%%\\his_update.zip\" 2>NUL\r\n");  /* 清理 zip 文件 */
+        fprintf(bat, "del \"%%~f0\" 2>NUL\r\n");           /* 删除批处理脚本自身 */
         fclose(bat);
 
         tui_print_success(out, "更新准备就绪");
         tui_print_info(out, "系统将自动退出并完成更新...");
         fflush(out);
 
+        /* 以最小化窗口方式启动更新脚本 */
         snprintf(cmd, sizeof(cmd), "start \"HIS Updater\" /MIN cmd /c \"%s\"", bat_path);
         system(cmd);
     }
@@ -331,7 +430,7 @@ static int do_download_and_install(FILE *out, const UpdateInfo *info) {
     return 1;
 
 #else
-    /* macOS / Linux: download zip → extract → copy over install dir */
+    /* ===== macOS / Linux 平台更新流程 ===== */
     char tmp_zip[256];
     char tmp_dir[256];
     char exe_dir[512];
@@ -341,9 +440,10 @@ static int do_download_and_install(FILE *out, const UpdateInfo *info) {
     snprintf(tmp_zip, sizeof(tmp_zip), "/tmp/his_update.zip");
     snprintf(tmp_dir, sizeof(tmp_dir), "/tmp/his_update");
 
-    /* Detect current executable directory */
+    /* 检测当前可执行文件所在目录 */
 #ifdef __APPLE__
     {
+        /* macOS 使用 _NSGetExecutablePath 获取可执行文件路径 */
         uint32_t bsize = sizeof(exe_dir);
         if (_NSGetExecutablePath(exe_dir, &bsize) != 0) {
             tui_print_error(out, "无法获取程序路径。");
@@ -351,6 +451,7 @@ static int do_download_and_install(FILE *out, const UpdateInfo *info) {
         }
     }
 #else
+    /* Linux 通过 /proc/self/exe 软链接获取可执行文件路径 */
     rlen = readlink("/proc/self/exe", exe_dir, sizeof(exe_dir) - 1);
     if (rlen < 0) {
         tui_print_error(out, "无法获取程序路径。");
@@ -358,6 +459,7 @@ static int do_download_and_install(FILE *out, const UpdateInfo *info) {
     }
     exe_dir[rlen] = '\0';
 #endif
+    /* 从完整路径中截取目录部分 */
     last_slash = strrchr(exe_dir, '/');
     if (last_slash) *(last_slash + 1) = '\0';
 
@@ -365,6 +467,7 @@ static int do_download_and_install(FILE *out, const UpdateInfo *info) {
     tui_print_info(out, "正在下载更新包...");
     fflush(out);
 
+    /* 第一步：使用 curl 下载 zip 安装包（-L 跟随重定向） */
     snprintf(cmd, sizeof(cmd),
         "curl -L -s --progress-bar -o \"%s\" \"%s\" 2>&1",
         tmp_zip, info->asset_url);
@@ -375,6 +478,7 @@ static int do_download_and_install(FILE *out, const UpdateInfo *info) {
     }
     tui_print_success(out, "下载完成");
 
+    /* 第二步：清理旧的临时目录并解压 zip 文件 */
     tui_print_info(out, "正在解压更新包...");
     fflush(out);
 
@@ -388,30 +492,32 @@ static int do_download_and_install(FILE *out, const UpdateInfo *info) {
     }
     tui_print_success(out, "解压完成");
 
+    /* 第三步：将解压的文件复制到程序安装目录 */
     tui_print_info(out, "正在安装更新...");
     fflush(out);
 
-    /* Copy extracted files to install directory */
     snprintf(cmd, sizeof(cmd),
         "for d in \"%s\"/*/; do cp -Rf \"$d\"* \"%s\" 2>/dev/null; done",
         tmp_dir, exe_dir);
     ret = system(cmd);
 
-    /* Fix permissions on macOS */
+    /* 第四步：修复文件权限 */
 #ifdef __APPLE__
+    /* macOS 需要清除扩展属性（quarantine）并添加执行权限 */
     snprintf(cmd, sizeof(cmd),
         "xattr -cr \"%s\" 2>/dev/null; chmod +x \"%shis\" 2>/dev/null; "
         "chmod +x \"%shis_desktop\" 2>/dev/null",
         exe_dir, exe_dir, exe_dir);
     system(cmd);
 #else
+    /* Linux 仅需添加执行权限 */
     snprintf(cmd, sizeof(cmd),
         "chmod +x \"%shis\" 2>/dev/null; chmod +x \"%shis_desktop\" 2>/dev/null",
         exe_dir, exe_dir);
     system(cmd);
 #endif
 
-    /* Cleanup */
+    /* 第五步：清理临时文件 */
     snprintf(cmd, sizeof(cmd),
         "rm -rf \"%s\" \"%s\"", tmp_dir, tmp_zip);
     system(cmd);
@@ -423,18 +529,32 @@ static int do_download_and_install(FILE *out, const UpdateInfo *info) {
 #endif
 }
 
-/* ── User prompt ─────────────────────────────────────────── */
+/* ── 用户更新提示对话框 ──────────────────────────────────── */
 
+/**
+ * @brief 向用户展示更新提示对话框
+ *
+ * 在终端中绘制带边框的 TUI 风格对话框，展示当前版本和最新版本，
+ * 并提供操作选项。根据是否有直接下载链接，显示不同的菜单选项。
+ *
+ * @param out  输出流
+ * @param in   输入流
+ * @param info 更新信息结构体
+ * @return 0=跳过更新, 1=已打开浏览器, 2=已安装更新需重启
+ */
 int UpdateChecker_prompt(FILE *out, FILE *in, const UpdateInfo *info) {
     char answer[16];
     int has_direct_download = 0;
 
+    /* 参数校验：输入输出流和更新信息不能为空，且必须有可用更新 */
     if (out == 0 || in == 0 || info == 0 || info->has_update == 0) {
         return 0;
     }
 
+    /* 判断是否有当前平台的直接下载链接 */
     has_direct_download = (info->asset_url[0] != '\0') ? 1 : 0;
 
+    /* 绘制更新提示对话框的标题区域 */
     fprintf(out, "\n");
     fprintf(out, TUI_BOLD_YELLOW
         "  ╔══════════════════════════════════════════╗\n"
@@ -442,6 +562,7 @@ int UpdateChecker_prompt(FILE *out, FILE *in, const UpdateInfo *info) {
         TUI_BOLD_YELLOW "              ║\n"
         "  ╠══════════════════════════════════════════╣\n" TUI_RESET);
 
+    /* 显示当前版本号（灰色/暗淡样式） */
     fprintf(out,
         TUI_BOLD_YELLOW "  ║" TUI_RESET
         "  当前版本: " TUI_DIM "v%s" TUI_RESET,
@@ -449,10 +570,11 @@ int UpdateChecker_prompt(FILE *out, FILE *in, const UpdateInfo *info) {
     {
         int used = 14 + (int)strlen(info->current_version);
         int i = 0;
-        for (i = used; i < 42; i++) fprintf(out, " ");
+        for (i = used; i < 42; i++) fprintf(out, " "); /* 填充空格对齐右边框 */
     }
     fprintf(out, TUI_BOLD_YELLOW "║\n" TUI_RESET);
 
+    /* 显示最新版本号（绿色高亮样式） */
     fprintf(out,
         TUI_BOLD_YELLOW "  ║" TUI_RESET
         "  最新版本: " TUI_BOLD_GREEN "v%s" TUI_RESET,
@@ -464,10 +586,13 @@ int UpdateChecker_prompt(FILE *out, FILE *in, const UpdateInfo *info) {
     }
     fprintf(out, TUI_BOLD_YELLOW "║\n" TUI_RESET);
 
+    /* 绘制分隔线 */
     fprintf(out, TUI_BOLD_YELLOW
         "  ╠══════════════════════════════════════════╣\n" TUI_RESET);
 
+    /* 根据是否有直接下载链接，显示不同的菜单选项 */
     if (has_direct_download) {
+        /* 有直接下载链接时提供三个选项 */
         fprintf(out,
             TUI_BOLD_YELLOW "  ║" TUI_RESET
             "  " TUI_BOLD_WHITE "1." TUI_RESET " 立即下载并安装更新"
@@ -484,6 +609,7 @@ int UpdateChecker_prompt(FILE *out, FILE *in, const UpdateInfo *info) {
             "                              "
             TUI_BOLD_YELLOW "║\n" TUI_RESET);
     } else {
+        /* 无直接下载链接时只提供两个选项 */
         fprintf(out,
             TUI_BOLD_YELLOW "  ║" TUI_RESET
             "  " TUI_BOLD_WHITE "1." TUI_RESET " 在浏览器中打开下载页"
@@ -496,9 +622,11 @@ int UpdateChecker_prompt(FILE *out, FILE *in, const UpdateInfo *info) {
             TUI_BOLD_YELLOW "║\n" TUI_RESET);
     }
 
+    /* 绘制底部边框 */
     fprintf(out, TUI_BOLD_YELLOW
         "  ╚══════════════════════════════════════════╝\n" TUI_RESET);
 
+    /* 显示输入提示并等待用户选择 */
     fprintf(out, "\n");
     if (has_direct_download) {
         fprintf(out, TUI_BOLD_CYAN "  请选择 " TUI_RESET
@@ -509,31 +637,33 @@ int UpdateChecker_prompt(FILE *out, FILE *in, const UpdateInfo *info) {
     }
     fflush(out);
 
+    /* 读取用户输入 */
     if (fgets(answer, sizeof(answer), in) == 0) {
         return 0;
     }
 
+    /* 处理用户选择：直接下载安装 */
     if (has_direct_download && answer[0] == '1') {
-        /* Direct download and install */
         if (do_download_and_install(out, info)) {
 #ifdef _WIN32
-            return 2; /* signal caller to exit for updater bat */
+            return 2; /* Windows：通知调用者退出，由批处理脚本完成后续安装 */
 #else
-            return 2; /* signal caller to exit and restart */
+            return 2; /* macOS/Linux：安装已完成，通知调用者退出以重启 */
 #endif
         }
         return 0;
     }
 
+    /* 处理用户选择：在浏览器中打开下载页面 */
     if ((has_direct_download && answer[0] == '2') ||
         (!has_direct_download && answer[0] == '1')) {
-        /* Open in browser (avoid command injection via system()) */
+        /* 使用平台原生方式打开浏览器，避免通过 system() 造成命令注入风险 */
 #ifdef __APPLE__
         {
             pid_t pid = fork();
             if (pid == 0) {
                 execlp("open", "open", info->download_url, (char *)NULL);
-                _exit(127);
+                _exit(127); /* exec 失败时退出子进程 */
             }
         }
 #elif defined(_WIN32)
@@ -551,6 +681,7 @@ int UpdateChecker_prompt(FILE *out, FILE *in, const UpdateInfo *info) {
         return 1;
     }
 
+    /* 用户选择跳过更新（输入 0 或其他值） */
     tui_print_info(out, "已跳过更新，继续启动系统...");
     return 0;
 }

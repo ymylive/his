@@ -1,3 +1,12 @@
+/**
+ * @file MedicalRecordService.c
+ * @brief 病历服务模块实现
+ *
+ * 实现病历管理的核心业务功能，包括就诊记录和检查记录的增删改，
+ * 以及患者病历历史和按时间范围查询。该服务协调挂号仓库、就诊记录仓库、
+ * 检查记录仓库和住院记录仓库，通过全量加载-修改-保存的方式维护数据一致性。
+ */
+
 #include "service/MedicalRecordService.h"
 
 #include <ctype.h>
@@ -9,11 +18,24 @@
 #include "common/IdGenerator.h"
 #include "repository/RepositoryUtils.h"
 
+/** @brief 就诊记录ID的前缀 */
 #define MEDICAL_RECORD_VISIT_ID_PREFIX "VIS"
+
+/** @brief 就诊记录ID序号部分的位宽 */
 #define MEDICAL_RECORD_VISIT_ID_WIDTH 4
+
+/** @brief 检查记录ID的前缀 */
 #define MEDICAL_RECORD_EXAM_ID_PREFIX "EXM"
+
+/** @brief 检查记录ID序号部分的位宽 */
 #define MEDICAL_RECORD_EXAM_ID_WIDTH 4
 
+/**
+ * @brief 判断文本是否为空白（NULL、空串或全为空白字符）
+ *
+ * @param text  待检查的字符串
+ * @return int  1=空白，0=非空白
+ */
 static int MedicalRecordService_is_blank_text(const char *text) {
     if (text == 0) {
         return 1;
@@ -30,6 +52,13 @@ static int MedicalRecordService_is_blank_text(const char *text) {
     return 1;
 }
 
+/**
+ * @brief 安全复制文本字符串
+ *
+ * @param destination  目标缓冲区
+ * @param capacity     目标缓冲区容量
+ * @param source       源字符串（可为 NULL）
+ */
 static void MedicalRecordService_copy_text(
     char *destination,
     size_t capacity,
@@ -48,6 +77,16 @@ static void MedicalRecordService_copy_text(
     destination[capacity - 1] = '\0';
 }
 
+/**
+ * @brief 校验文本字段
+ *
+ * 根据 allow_empty 参数决定是否允许空值，同时检查保留字符。
+ *
+ * @param text         待校验的文本
+ * @param field_name   字段名称（用于错误消息）
+ * @param allow_empty  是否允许空白（1=允许，0=不允许）
+ * @return Result      校验结果
+ */
 static Result MedicalRecordService_validate_text(
     const char *text,
     const char *field_name,
@@ -68,6 +107,16 @@ static Result MedicalRecordService_validate_text(
     return Result_make_success("medical record text valid");
 }
 
+/**
+ * @brief 校验就诊记录的标志位（是否需要检查/住院/开药）
+ *
+ * 每个标志位只允许为 0 或 1。
+ *
+ * @param need_exam       是否需要检查
+ * @param need_admission  是否需要住院
+ * @param need_medicine   是否需要开药
+ * @return Result         校验结果
+ */
 static Result MedicalRecordService_validate_flags(
     int need_exam,
     int need_admission,
@@ -82,19 +131,32 @@ static Result MedicalRecordService_validate_flags(
     return Result_make_success("visit flags valid");
 }
 
+/**
+ * @brief 判断时间值是否在指定范围内
+ *
+ * 使用字符串比较来判断时间先后（要求时间格式一致，如 ISO 8601）。
+ *
+ * @param value      待检查的时间值
+ * @param time_from  起始时间（空白表示不限制起始）
+ * @param time_to    结束时间（空白表示不限制结束）
+ * @return int       1=在范围内，0=不在范围内
+ */
 static int MedicalRecordService_is_in_time_range(
     const char *value,
     const char *time_from,
     const char *time_to
 ) {
+    /* 空白时间值不在任何范围内 */
     if (MedicalRecordService_is_blank_text(value)) {
         return 0;
     }
 
+    /* 检查是否早于起始时间 */
     if (!MedicalRecordService_is_blank_text(time_from) && strcmp(value, time_from) < 0) {
         return 0;
     }
 
+    /* 检查是否晚于结束时间 */
     if (!MedicalRecordService_is_blank_text(time_to) && strcmp(value, time_to) > 0) {
         return 0;
     }
@@ -102,6 +164,13 @@ static int MedicalRecordService_is_in_time_range(
     return 1;
 }
 
+/**
+ * @brief 从挂号仓库加载所有挂号记录
+ *
+ * @param service            指向病历服务结构体
+ * @param out_registrations  输出参数，挂号记录链表
+ * @return Result            操作结果
+ */
 static Result MedicalRecordService_load_registrations(
     MedicalRecordService *service,
     LinkedList *out_registrations
@@ -110,6 +179,13 @@ static Result MedicalRecordService_load_registrations(
     return RegistrationRepository_load_all(&service->registration_repository, out_registrations);
 }
 
+/**
+ * @brief 从就诊记录仓库加载所有就诊记录
+ *
+ * @param service     指向病历服务结构体
+ * @param out_visits  输出参数，就诊记录链表
+ * @return Result     操作结果
+ */
 static Result MedicalRecordService_load_visits(
     MedicalRecordService *service,
     LinkedList *out_visits
@@ -118,6 +194,13 @@ static Result MedicalRecordService_load_visits(
     return VisitRecordRepository_load_all(&service->visit_repository, out_visits);
 }
 
+/**
+ * @brief 从检查记录仓库加载所有检查记录
+ *
+ * @param service           指向病历服务结构体
+ * @param out_examinations  输出参数，检查记录链表
+ * @return Result           操作结果
+ */
 static Result MedicalRecordService_load_examinations(
     MedicalRecordService *service,
     LinkedList *out_examinations
@@ -129,6 +212,13 @@ static Result MedicalRecordService_load_examinations(
     );
 }
 
+/**
+ * @brief 从住院记录仓库加载所有住院记录
+ *
+ * @param service         指向病历服务结构体
+ * @param out_admissions  输出参数，住院记录链表
+ * @return Result         操作结果
+ */
 static Result MedicalRecordService_load_admissions(
     MedicalRecordService *service,
     LinkedList *out_admissions
@@ -137,6 +227,13 @@ static Result MedicalRecordService_load_admissions(
     return AdmissionRepository_load_all(&service->admission_repository, out_admissions);
 }
 
+/**
+ * @brief 在挂号记录链表中按ID查找挂号记录
+ *
+ * @param registrations    挂号记录链表
+ * @param registration_id  待查找的挂号ID
+ * @return Registration*   找到时返回指针，未找到返回 NULL
+ */
 static Registration *MedicalRecordService_find_registration(
     LinkedList *registrations,
     const char *registration_id
@@ -161,6 +258,13 @@ static Registration *MedicalRecordService_find_registration(
     return 0;
 }
 
+/**
+ * @brief 在就诊记录链表中按就诊ID查找就诊记录
+ *
+ * @param visits    就诊记录链表
+ * @param visit_id  待查找的就诊ID
+ * @return VisitRecord*  找到时返回指针，未找到返回 NULL
+ */
 static VisitRecord *MedicalRecordService_find_visit(
     LinkedList *visits,
     const char *visit_id
@@ -185,6 +289,15 @@ static VisitRecord *MedicalRecordService_find_visit(
     return 0;
 }
 
+/**
+ * @brief 在就诊记录链表中按挂号ID查找就诊记录
+ *
+ * 每个挂号只能有一条就诊记录，此函数用于检查重复创建。
+ *
+ * @param visits           就诊记录链表
+ * @param registration_id  待查找的挂号ID
+ * @return VisitRecord*    找到时返回指针，未找到返回 NULL
+ */
 static VisitRecord *MedicalRecordService_find_visit_by_registration(
     LinkedList *visits,
     const char *registration_id
@@ -209,6 +322,13 @@ static VisitRecord *MedicalRecordService_find_visit_by_registration(
     return 0;
 }
 
+/**
+ * @brief 在检查记录链表中按ID查找检查记录
+ *
+ * @param examinations    检查记录链表
+ * @param examination_id  待查找的检查ID
+ * @return ExaminationRecord*  找到时返回指针，未找到返回 NULL
+ */
 static ExaminationRecord *MedicalRecordService_find_examination(
     LinkedList *examinations,
     const char *examination_id
@@ -233,6 +353,13 @@ static ExaminationRecord *MedicalRecordService_find_examination(
     return 0;
 }
 
+/**
+ * @brief 将挂号记录的副本追加到目标链表
+ *
+ * @param target        目标链表
+ * @param registration  待复制的挂号记录
+ * @return Result       操作结果
+ */
 static Result MedicalRecordService_append_registration_copy(
     LinkedList *target,
     const Registration *registration
@@ -252,6 +379,13 @@ static Result MedicalRecordService_append_registration_copy(
     return Result_make_success("registration appended");
 }
 
+/**
+ * @brief 将就诊记录的副本追加到目标链表
+ *
+ * @param target  目标链表
+ * @param record  待复制的就诊记录
+ * @return Result 操作结果
+ */
 static Result MedicalRecordService_append_visit_copy(
     LinkedList *target,
     const VisitRecord *record
@@ -271,6 +405,13 @@ static Result MedicalRecordService_append_visit_copy(
     return Result_make_success("visit appended");
 }
 
+/**
+ * @brief 将检查记录的副本追加到目标链表
+ *
+ * @param target  目标链表
+ * @param record  待复制的检查记录
+ * @return Result 操作结果
+ */
 static Result MedicalRecordService_append_examination_copy(
     LinkedList *target,
     const ExaminationRecord *record
@@ -290,6 +431,13 @@ static Result MedicalRecordService_append_examination_copy(
     return Result_make_success("exam appended");
 }
 
+/**
+ * @brief 将住院记录的副本追加到目标链表
+ *
+ * @param target     目标链表
+ * @param admission  待复制的住院记录
+ * @return Result    操作结果
+ */
 static Result MedicalRecordService_append_admission_copy(
     LinkedList *target,
     const Admission *admission
@@ -309,6 +457,17 @@ static Result MedicalRecordService_append_admission_copy(
     return Result_make_success("admission appended");
 }
 
+/**
+ * @brief 从链表中移除指定节点
+ *
+ * 将节点从链表中断开，释放节点结构本身，返回节点中的数据指针
+ * （由调用方决定是否释放数据）。
+ *
+ * @param list      目标链表
+ * @param previous  待移除节点的前一个节点（头节点时为 NULL）
+ * @param current   待移除的节点
+ * @return void*    被移除节点中的数据指针
+ */
 static void *MedicalRecordService_remove_node(
     LinkedList *list,
     LinkedListNode *previous,
@@ -321,12 +480,14 @@ static void *MedicalRecordService_remove_node(
     }
 
     data = current->data;
+    /* 调整前后指针 */
     if (previous == 0) {
-        list->head = current->next;
+        list->head = current->next;  /* 移除的是头节点 */
     } else {
         previous->next = current->next;
     }
 
+    /* 更新尾指针 */
     if (list->tail == current) {
         list->tail = previous;
     }
@@ -339,6 +500,13 @@ static void *MedicalRecordService_remove_node(
     return data;
 }
 
+/**
+ * @brief 从已加载的就诊记录列表中计算下一个序列号
+ *
+ * @param visits         已加载的就诊记录链表
+ * @param out_sequence   输出参数，下一个可用序列号
+ * @return Result        操作结果
+ */
 static Result MedicalRecordService_next_visit_sequence_from_list(
     const LinkedList *visits,
     int *out_sequence
@@ -350,6 +518,7 @@ static Result MedicalRecordService_next_visit_sequence_from_list(
         return Result_make_failure("visit sequence output missing");
     }
 
+    /* 遍历所有就诊记录，提取ID中的序列号并找到最大值 */
     current = visits->head;
     while (current != 0) {
         const VisitRecord *record = (const VisitRecord *)current->data;
@@ -382,6 +551,13 @@ static Result MedicalRecordService_next_visit_sequence_from_list(
     return Result_make_success("visit sequence ready");
 }
 
+/**
+ * @brief 从存储中计算下一个就诊记录序列号
+ *
+ * @param service       指向病历服务结构体
+ * @param out_sequence  输出参数，下一个可用序列号
+ * @return Result       操作结果
+ */
 static Result MedicalRecordService_next_visit_sequence(
     MedicalRecordService *service,
     int *out_sequence
@@ -400,6 +576,7 @@ static Result MedicalRecordService_next_visit_sequence(
         return result;
     }
 
+    /* 遍历所有就诊记录提取最大序列号 */
     current = visits.head;
     while (current != 0) {
         const VisitRecord *record = (const VisitRecord *)current->data;
@@ -435,6 +612,13 @@ static Result MedicalRecordService_next_visit_sequence(
     return Result_make_success("visit sequence ready");
 }
 
+/**
+ * @brief 从已加载的检查记录列表中计算下一个序列号
+ *
+ * @param examinations   已加载的检查记录链表
+ * @param out_sequence   输出参数，下一个可用序列号
+ * @return Result        操作结果
+ */
 static Result MedicalRecordService_next_examination_sequence_from_list(
     const LinkedList *examinations,
     int *out_sequence
@@ -446,6 +630,7 @@ static Result MedicalRecordService_next_examination_sequence_from_list(
         return Result_make_failure("exam sequence output missing");
     }
 
+    /* 遍历所有检查记录，提取ID中的序列号并找到最大值 */
     current = examinations->head;
     while (current != 0) {
         const ExaminationRecord *record = (const ExaminationRecord *)current->data;
@@ -478,6 +663,13 @@ static Result MedicalRecordService_next_examination_sequence_from_list(
     return Result_make_success("exam sequence ready");
 }
 
+/**
+ * @brief 从存储中计算下一个检查记录序列号
+ *
+ * @param service       指向病历服务结构体
+ * @param out_sequence  输出参数，下一个可用序列号
+ * @return Result       操作结果
+ */
 static Result MedicalRecordService_next_examination_sequence(
     MedicalRecordService *service,
     int *out_sequence
@@ -496,6 +688,7 @@ static Result MedicalRecordService_next_examination_sequence(
         return result;
     }
 
+    /* 遍历所有检查记录提取最大序列号 */
     current = examinations.head;
     while (current != 0) {
         const ExaminationRecord *record = (const ExaminationRecord *)current->data;
@@ -531,6 +724,13 @@ static Result MedicalRecordService_next_examination_sequence(
     return Result_make_success("exam sequence ready");
 }
 
+/**
+ * @brief 初始化病历历史结构体
+ *
+ * 将结构体中的四个链表全部初始化为空。
+ *
+ * @param history  指向待初始化的病历历史结构体
+ */
 static void MedicalRecordHistory_init(MedicalRecordHistory *history) {
     LinkedList_init(&history->registrations);
     LinkedList_init(&history->visits);
@@ -538,6 +738,19 @@ static void MedicalRecordHistory_init(MedicalRecordHistory *history) {
     LinkedList_init(&history->admissions);
 }
 
+/**
+ * @brief 初始化病历服务
+ *
+ * 分别初始化挂号、就诊、检查和住院记录仓库，
+ * 并确保各存储文件就绪且可正常加载。
+ *
+ * @param service            指向待初始化的病历服务结构体
+ * @param registration_path  挂号数据文件路径
+ * @param visit_path         就诊记录数据文件路径
+ * @param examination_path   检查记录数据文件路径
+ * @param admission_path     住院记录数据文件路径
+ * @return Result            操作结果
+ */
 Result MedicalRecordService_init(
     MedicalRecordService *service,
     const char *registration_path,
@@ -552,6 +765,7 @@ Result MedicalRecordService_init(
         return Result_make_failure("medical record service missing");
     }
 
+    /* 依次初始化四个仓库 */
     result = RegistrationRepository_init(&service->registration_repository, registration_path);
     if (result.success == 0) {
         return result;
@@ -575,6 +789,7 @@ Result MedicalRecordService_init(
         return result;
     }
 
+    /* 确保各存储文件就绪 */
     result = RegistrationRepository_ensure_storage(&service->registration_repository);
     if (result.success == 0) {
         return result;
@@ -590,6 +805,7 @@ Result MedicalRecordService_init(
         return result;
     }
 
+    /* 验证住院记录仓库可正常加载 */
     LinkedList_init(&admissions);
     result = AdmissionRepository_load_all(&service->admission_repository, &admissions);
     if (result.success == 0) {
@@ -600,6 +816,13 @@ Result MedicalRecordService_init(
     return Result_make_success("medical record service ready");
 }
 
+/**
+ * @brief 清理病历历史记录
+ *
+ * 释放 MedicalRecordHistory 中所有链表的动态分配内存。
+ *
+ * @param history  指向待清理的病历历史结构体
+ */
 void MedicalRecordHistory_clear(MedicalRecordHistory *history) {
     if (history == 0) {
         return;
@@ -611,6 +834,23 @@ void MedicalRecordHistory_clear(MedicalRecordHistory *history) {
     AdmissionRepository_clear_loaded_list(&history->admissions);
 }
 
+/**
+ * @brief 构建就诊记录结构体
+ *
+ * 校验各文本字段和标志位后，从挂号记录中提取关联信息填充就诊记录。
+ *
+ * @param record           输出参数，待填充的就诊记录
+ * @param visit_id         就诊ID
+ * @param registration     关联的挂号记录
+ * @param chief_complaint  主诉（可为空）
+ * @param diagnosis        诊断（可为空）
+ * @param advice           医嘱建议（可为空）
+ * @param need_exam        是否需要检查
+ * @param need_admission   是否需要住院
+ * @param need_medicine    是否需要开药
+ * @param visit_time       就诊时间
+ * @return Result          操作结果
+ */
 static Result MedicalRecordService_build_visit_record(
     VisitRecord *record,
     const char *visit_id,
@@ -625,6 +865,7 @@ static Result MedicalRecordService_build_visit_record(
 ) {
     Result result;
 
+    /* 校验各文本字段 */
     result = MedicalRecordService_validate_text(chief_complaint, "chief complaint", 1);
     if (result.success == 0) {
         return result;
@@ -645,11 +886,13 @@ static Result MedicalRecordService_build_visit_record(
         return result;
     }
 
+    /* 校验标志位 */
     result = MedicalRecordService_validate_flags(need_exam, need_admission, need_medicine);
     if (result.success == 0) {
         return result;
     }
 
+    /* 填充就诊记录各字段 */
     memset(record, 0, sizeof(*record));
     MedicalRecordService_copy_text(record->visit_id, sizeof(record->visit_id), visit_id);
     MedicalRecordService_copy_text(
@@ -678,6 +921,25 @@ static Result MedicalRecordService_build_visit_record(
     return Result_make_success("visit record built");
 }
 
+/**
+ * @brief 创建就诊记录
+ *
+ * 流程：校验参数 -> 加载挂号和就诊记录 -> 查找挂号记录 ->
+ * 检查挂号未取消且无重复就诊 -> 生成就诊ID -> 构建就诊记录 ->
+ * 追加到链表 -> 将挂号标记为已诊 -> 保存就诊和挂号数据。
+ *
+ * @param service          指向病历服务结构体
+ * @param registration_id  关联的挂号ID
+ * @param chief_complaint  主诉
+ * @param diagnosis        诊断
+ * @param advice           医嘱建议
+ * @param need_exam        是否需要检查
+ * @param need_admission   是否需要住院
+ * @param need_medicine    是否需要开药
+ * @param visit_time       就诊时间
+ * @param out_record       输出参数，创建成功时存放就诊记录
+ * @return Result          操作结果
+ */
 Result MedicalRecordService_create_visit_record(
     MedicalRecordService *service,
     const char *registration_id,
@@ -709,6 +971,7 @@ Result MedicalRecordService_create_visit_record(
         return result;
     }
 
+    /* 加载挂号和就诊记录 */
     result = MedicalRecordService_load_registrations(service, &registrations);
     if (result.success == 0) {
         return result;
@@ -720,6 +983,7 @@ Result MedicalRecordService_create_visit_record(
         return result;
     }
 
+    /* 查找关联的挂号记录 */
     registration = MedicalRecordService_find_registration(&registrations, registration_id);
     if (registration == 0) {
         VisitRecordRepository_clear_list(&visits);
@@ -727,12 +991,14 @@ Result MedicalRecordService_create_visit_record(
         return Result_make_failure("registration not found");
     }
 
+    /* 检查挂号是否已取消 */
     if (registration->status == REG_STATUS_CANCELLED) {
         VisitRecordRepository_clear_list(&visits);
         RegistrationRepository_clear_list(&registrations);
         return Result_make_failure("registration cancelled");
     }
 
+    /* 检查该挂号是否已有就诊记录（每个挂号只能有一条） */
     existing = MedicalRecordService_find_visit_by_registration(&visits, registration_id);
     if (existing != 0) {
         VisitRecordRepository_clear_list(&visits);
@@ -740,6 +1006,7 @@ Result MedicalRecordService_create_visit_record(
         return Result_make_failure("registration already has visit record");
     }
 
+    /* 计算下一个就诊序列号 */
     result = MedicalRecordService_next_visit_sequence_from_list(&visits, &next_sequence);
     if (result.success == 0) {
         VisitRecordRepository_clear_list(&visits);
@@ -747,6 +1014,7 @@ Result MedicalRecordService_create_visit_record(
         return result;
     }
 
+    /* 生成格式化的就诊ID（如 VIS0001） */
     if (!IdGenerator_format(
             generated_visit_id,
             sizeof(generated_visit_id),
@@ -758,6 +1026,7 @@ Result MedicalRecordService_create_visit_record(
         return Result_make_failure("failed to generate visit id");
     }
 
+    /* 构建就诊记录 */
     result = MedicalRecordService_build_visit_record(
         &new_record,
         generated_visit_id,
@@ -776,6 +1045,7 @@ Result MedicalRecordService_create_visit_record(
         return result;
     }
 
+    /* 分配副本并追加到链表 */
     created = (VisitRecord *)malloc(sizeof(*created));
     if (created == 0) {
         VisitRecordRepository_clear_list(&visits);
@@ -791,6 +1061,7 @@ Result MedicalRecordService_create_visit_record(
         return Result_make_failure("failed to append visit record");
     }
 
+    /* 将挂号状态从待诊标记为已诊 */
     if (registration->status == REG_STATUS_PENDING &&
         !Registration_mark_diagnosed(registration, visit_time)) {
         VisitRecordRepository_clear_list(&visits);
@@ -798,6 +1069,7 @@ Result MedicalRecordService_create_visit_record(
         return Result_make_failure("failed to mark registration diagnosed");
     }
 
+    /* 保存就诊记录和挂号记录 */
     result = VisitRecordRepository_save_all(&service->visit_repository, &visits);
     if (result.success == 0) {
         VisitRecordRepository_clear_list(&visits);
@@ -818,6 +1090,24 @@ Result MedicalRecordService_create_visit_record(
     return Result_make_success("visit record created");
 }
 
+/**
+ * @brief 更新就诊记录
+ *
+ * 流程：校验参数 -> 加载挂号和就诊记录 -> 查找目标就诊记录 ->
+ * 查找关联挂号记录 -> 构建更新后的记录 -> 覆盖旧记录 -> 保存。
+ *
+ * @param service          指向病历服务结构体
+ * @param visit_id         待更新的就诊ID
+ * @param chief_complaint  主诉
+ * @param diagnosis        诊断
+ * @param advice           医嘱建议
+ * @param need_exam        是否需要检查
+ * @param need_admission   是否需要住院
+ * @param need_medicine    是否需要开药
+ * @param visit_time       就诊时间
+ * @param out_record       输出参数，更新成功时存放就诊记录
+ * @return Result          操作结果
+ */
 Result MedicalRecordService_update_visit_record(
     MedicalRecordService *service,
     const char *visit_id,
@@ -846,6 +1136,7 @@ Result MedicalRecordService_update_visit_record(
         return result;
     }
 
+    /* 加载挂号和就诊记录 */
     result = MedicalRecordService_load_registrations(service, &registrations);
     if (result.success == 0) {
         return result;
@@ -857,6 +1148,7 @@ Result MedicalRecordService_update_visit_record(
         return result;
     }
 
+    /* 查找目标就诊记录 */
     existing = MedicalRecordService_find_visit(&visits, visit_id);
     if (existing == 0) {
         VisitRecordRepository_clear_list(&visits);
@@ -864,6 +1156,7 @@ Result MedicalRecordService_update_visit_record(
         return Result_make_failure("visit not found");
     }
 
+    /* 查找关联的挂号记录（用于获取患者/医生/科室信息） */
     registration = MedicalRecordService_find_registration(&registrations, existing->registration_id);
     if (registration == 0) {
         VisitRecordRepository_clear_list(&visits);
@@ -871,6 +1164,7 @@ Result MedicalRecordService_update_visit_record(
         return Result_make_failure("registration not found");
     }
 
+    /* 构建更新后的就诊记录 */
     result = MedicalRecordService_build_visit_record(
         &updated_record,
         visit_id,
@@ -889,6 +1183,7 @@ Result MedicalRecordService_update_visit_record(
         return result;
     }
 
+    /* 覆盖旧记录并保存 */
     *existing = updated_record;
     result = VisitRecordRepository_save_all(&service->visit_repository, &visits);
     VisitRecordRepository_clear_list(&visits);
@@ -901,6 +1196,17 @@ Result MedicalRecordService_update_visit_record(
     return Result_make_success("visit record updated");
 }
 
+/**
+ * @brief 删除就诊记录
+ *
+ * 流程：校验参数 -> 加载挂号和就诊记录 -> 查找目标记录 ->
+ * 检查是否有关联的检查记录（有则不允许删除） ->
+ * 将关联挂号状态回退为待诊 -> 从链表中移除 -> 保存。
+ *
+ * @param service   指向病历服务结构体
+ * @param visit_id  待删除的就诊ID
+ * @return Result   操作结果
+ */
 Result MedicalRecordService_delete_visit_record(
     MedicalRecordService *service,
     const char *visit_id
@@ -923,6 +1229,7 @@ Result MedicalRecordService_delete_visit_record(
         return result;
     }
 
+    /* 加载挂号和就诊记录 */
     result = MedicalRecordService_load_registrations(service, &registrations);
     if (result.success == 0) {
         return result;
@@ -934,6 +1241,7 @@ Result MedicalRecordService_delete_visit_record(
         return result;
     }
 
+    /* 在链表中查找目标就诊记录（同时记录前驱节点用于删除） */
     current = visits.head;
     while (current != 0) {
         VisitRecord *record = (VisitRecord *)current->data;
@@ -953,6 +1261,7 @@ Result MedicalRecordService_delete_visit_record(
         return Result_make_failure("visit not found");
     }
 
+    /* 检查该就诊是否有关联的检查记录 */
     LinkedList_init(&examinations);
     result = ExaminationRecordRepository_find_by_visit_id(
         &service->examination_repository,
@@ -965,6 +1274,7 @@ Result MedicalRecordService_delete_visit_record(
         return result;
     }
 
+    /* 如果有检查记录则不允许删除 */
     if (LinkedList_count(&examinations) != 0) {
         ExaminationRecordRepository_clear_list(&examinations);
         VisitRecordRepository_clear_list(&visits);
@@ -973,6 +1283,8 @@ Result MedicalRecordService_delete_visit_record(
     }
 
     ExaminationRecordRepository_clear_list(&examinations);
+
+    /* 将关联挂号状态回退为待诊 */
     registration = MedicalRecordService_find_registration(&registrations, target->registration_id);
     if (registration != 0) {
         registration->status = REG_STATUS_PENDING;
@@ -980,7 +1292,10 @@ Result MedicalRecordService_delete_visit_record(
         registration->cancelled_at[0] = '\0';
     }
 
+    /* 从链表中移除目标就诊记录并释放内存 */
     free(MedicalRecordService_remove_node(&visits, previous, current));
+
+    /* 保存就诊和挂号数据 */
     result = VisitRecordRepository_save_all(&service->visit_repository, &visits);
     if (result.success == 0) {
         VisitRecordRepository_clear_list(&visits);
@@ -998,6 +1313,20 @@ Result MedicalRecordService_delete_visit_record(
     return Result_make_success("visit record deleted");
 }
 
+/**
+ * @brief 创建检查记录
+ *
+ * 流程：校验参数 -> 加载就诊和检查记录 -> 验证就诊记录存在 ->
+ * 生成检查ID -> 填充检查记录 -> 追加到链表 -> 保存。
+ *
+ * @param service       指向病历服务结构体
+ * @param visit_id      关联的就诊ID
+ * @param exam_item     检查项目名称
+ * @param exam_type     检查类型
+ * @param requested_at  申请检查的时间
+ * @param out_record    输出参数，创建成功时存放检查记录
+ * @return Result       操作结果
+ */
 Result MedicalRecordService_create_examination_record(
     MedicalRecordService *service,
     const char *visit_id,
@@ -1018,6 +1347,7 @@ Result MedicalRecordService_create_examination_record(
         return Result_make_failure("exam create arguments invalid");
     }
 
+    /* 校验各文本参数 */
     result = MedicalRecordService_validate_text(visit_id, "visit id", 0);
     if (result.success == 0) {
         return result;
@@ -1038,6 +1368,7 @@ Result MedicalRecordService_create_examination_record(
         return result;
     }
 
+    /* 加载就诊和检查记录 */
     result = MedicalRecordService_load_visits(service, &visits);
     if (result.success == 0) {
         return result;
@@ -1049,6 +1380,7 @@ Result MedicalRecordService_create_examination_record(
         return result;
     }
 
+    /* 验证关联的就诊记录存在 */
     visit = MedicalRecordService_find_visit(&visits, visit_id);
     if (visit == 0) {
         ExaminationRecordRepository_clear_list(&examinations);
@@ -1056,6 +1388,7 @@ Result MedicalRecordService_create_examination_record(
         return Result_make_failure("visit not found");
     }
 
+    /* 计算下一个检查序列号 */
     result = MedicalRecordService_next_examination_sequence_from_list(&examinations, &next_sequence);
     if (result.success == 0) {
         ExaminationRecordRepository_clear_list(&examinations);
@@ -1063,7 +1396,9 @@ Result MedicalRecordService_create_examination_record(
         return result;
     }
 
+    /* 填充检查记录 */
     memset(&new_record, 0, sizeof(new_record));
+    /* 生成格式化的检查ID（如 EXM0001） */
     if (!IdGenerator_format(
             new_record.examination_id,
             sizeof(new_record.examination_id),
@@ -1075,12 +1410,13 @@ Result MedicalRecordService_create_examination_record(
         return Result_make_failure("failed to generate exam id");
     }
 
+    /* 从就诊记录中提取患者ID和医生ID */
     MedicalRecordService_copy_text(new_record.visit_id, sizeof(new_record.visit_id), visit_id);
     MedicalRecordService_copy_text(new_record.patient_id, sizeof(new_record.patient_id), visit->patient_id);
     MedicalRecordService_copy_text(new_record.doctor_id, sizeof(new_record.doctor_id), visit->doctor_id);
     MedicalRecordService_copy_text(new_record.exam_item, sizeof(new_record.exam_item), exam_item);
     MedicalRecordService_copy_text(new_record.exam_type, sizeof(new_record.exam_type), exam_type);
-    new_record.status = EXAM_STATUS_PENDING;
+    new_record.status = EXAM_STATUS_PENDING;  /* 初始状态为待检查 */
     new_record.result[0] = '\0';
     MedicalRecordService_copy_text(
         new_record.requested_at,
@@ -1089,6 +1425,7 @@ Result MedicalRecordService_create_examination_record(
     );
     new_record.completed_at[0] = '\0';
 
+    /* 分配副本并追加到链表 */
     created = (ExaminationRecord *)malloc(sizeof(*created));
     if (created == 0) {
         ExaminationRecordRepository_clear_list(&examinations);
@@ -1104,6 +1441,7 @@ Result MedicalRecordService_create_examination_record(
         return Result_make_failure("failed to append exam record");
     }
 
+    /* 保存检查记录 */
     result = ExaminationRecordRepository_save_all(&service->examination_repository, &examinations);
     ExaminationRecordRepository_clear_list(&examinations);
     VisitRecordRepository_clear_list(&visits);
@@ -1115,6 +1453,20 @@ Result MedicalRecordService_create_examination_record(
     return Result_make_success("exam record created");
 }
 
+/**
+ * @brief 更新检查记录
+ *
+ * 流程：校验参数和状态一致性 -> 加载检查记录 -> 查找目标记录 ->
+ * 更新状态、结果和完成时间 -> 保存。
+ *
+ * @param service         指向病历服务结构体
+ * @param examination_id  检查记录ID
+ * @param status          新的检查状态
+ * @param result_text     检查结果（已完成时必填）
+ * @param completed_at    完成时间（已完成时必填）
+ * @param out_record      输出参数，更新成功时存放检查记录
+ * @return Result         操作结果
+ */
 Result MedicalRecordService_update_examination_record(
     MedicalRecordService *service,
     const char *examination_id,
@@ -1146,10 +1498,12 @@ Result MedicalRecordService_update_examination_record(
         return result;
     }
 
+    /* 检查状态枚举值的合法性 */
     if (status != EXAM_STATUS_PENDING && status != EXAM_STATUS_COMPLETED) {
         return Result_make_failure("exam status invalid");
     }
 
+    /* 状态和字段的一致性校验 */
     if (status == EXAM_STATUS_PENDING && !MedicalRecordService_is_blank_text(completed_at)) {
         return Result_make_failure("pending exam cannot have completed_at");
     }
@@ -1162,17 +1516,20 @@ Result MedicalRecordService_update_examination_record(
         return Result_make_failure("completed exam missing result");
     }
 
+    /* 加载检查记录 */
     result = MedicalRecordService_load_examinations(service, &examinations);
     if (result.success == 0) {
         return result;
     }
 
+    /* 查找目标检查记录 */
     existing = MedicalRecordService_find_examination(&examinations, examination_id);
     if (existing == 0) {
         ExaminationRecordRepository_clear_list(&examinations);
         return Result_make_failure("exam not found");
     }
 
+    /* 更新检查记录的状态、结果和完成时间 */
     existing->status = status;
     MedicalRecordService_copy_text(existing->result, sizeof(existing->result), result_text);
     MedicalRecordService_copy_text(
@@ -1181,6 +1538,7 @@ Result MedicalRecordService_update_examination_record(
         status == EXAM_STATUS_COMPLETED ? completed_at : ""
     );
 
+    /* 保存检查记录 */
     result = ExaminationRecordRepository_save_all(&service->examination_repository, &examinations);
     if (result.success == 0) {
         ExaminationRecordRepository_clear_list(&examinations);
@@ -1192,6 +1550,16 @@ Result MedicalRecordService_update_examination_record(
     return Result_make_success("exam record updated");
 }
 
+/**
+ * @brief 删除检查记录
+ *
+ * 流程：校验参数 -> 加载检查记录 -> 查找目标记录 ->
+ * 从链表中移除 -> 保存。
+ *
+ * @param service         指向病历服务结构体
+ * @param examination_id  待删除的检查记录ID
+ * @return Result         操作结果
+ */
 Result MedicalRecordService_delete_examination_record(
     MedicalRecordService *service,
     const char *examination_id
@@ -1210,11 +1578,13 @@ Result MedicalRecordService_delete_examination_record(
         return result;
     }
 
+    /* 加载检查记录 */
     result = MedicalRecordService_load_examinations(service, &examinations);
     if (result.success == 0) {
         return result;
     }
 
+    /* 在链表中查找目标检查记录（同时记录前驱节点） */
     current = examinations.head;
     while (current != 0) {
         ExaminationRecord *record = (ExaminationRecord *)current->data;
@@ -1232,7 +1602,10 @@ Result MedicalRecordService_delete_examination_record(
         return Result_make_failure("exam not found");
     }
 
+    /* 从链表中移除并释放内存 */
     free(MedicalRecordService_remove_node(&examinations, previous, current));
+
+    /* 保存更新后的检查记录 */
     result = ExaminationRecordRepository_save_all(&service->examination_repository, &examinations);
     ExaminationRecordRepository_clear_list(&examinations);
     if (result.success == 0) {
@@ -1242,6 +1615,17 @@ Result MedicalRecordService_delete_examination_record(
     return Result_make_success("exam record deleted");
 }
 
+/**
+ * @brief 查询患者的完整病历历史
+ *
+ * 聚合该患者的所有挂号记录、就诊记录、检查记录和住院记录，
+ * 分别从各仓库加载并按患者ID筛选。
+ *
+ * @param service      指向病历服务结构体
+ * @param patient_id   患者ID
+ * @param out_history  输出参数，查找成功时存放病历历史
+ * @return Result      操作结果
+ */
 Result MedicalRecordService_find_patient_history(
     MedicalRecordService *service,
     const char *patient_id,
@@ -1265,6 +1649,8 @@ Result MedicalRecordService_find_patient_history(
 
     memset(out_history, 0, sizeof(*out_history));
     MedicalRecordHistory_init(out_history);
+
+    /* 加载该患者的所有挂号记录（通过仓库层按患者ID筛选） */
     RegistrationRepositoryFilter_init(&filter);
     result = RegistrationRepository_find_by_patient_id(
         &service->registration_repository,
@@ -1277,6 +1663,7 @@ Result MedicalRecordService_find_patient_history(
         return result;
     }
 
+    /* 加载所有就诊记录，按患者ID筛选 */
     result = MedicalRecordService_load_visits(service, &visits);
     if (result.success == 0) {
         MedicalRecordHistory_clear(out_history);
@@ -1300,6 +1687,7 @@ Result MedicalRecordService_find_patient_history(
     }
     VisitRecordRepository_clear_list(&visits);
 
+    /* 加载所有检查记录，按患者ID筛选 */
     result = MedicalRecordService_load_examinations(service, &examinations);
     if (result.success == 0) {
         MedicalRecordHistory_clear(out_history);
@@ -1326,6 +1714,7 @@ Result MedicalRecordService_find_patient_history(
     }
     ExaminationRecordRepository_clear_list(&examinations);
 
+    /* 加载所有住院记录，按患者ID筛选 */
     result = MedicalRecordService_load_admissions(service, &admissions);
     if (result.success == 0) {
         MedicalRecordHistory_clear(out_history);
@@ -1352,6 +1741,18 @@ Result MedicalRecordService_find_patient_history(
     return Result_make_success("patient history loaded");
 }
 
+/**
+ * @brief 按时间范围查询病历记录
+ *
+ * 在指定时间范围内查找所有挂号、就诊、检查和住院记录，
+ * 分别使用各记录的时间字段进行范围匹配。
+ *
+ * @param service      指向病历服务结构体
+ * @param time_from    起始时间字符串（空白表示不限制起始）
+ * @param time_to      结束时间字符串（空白表示不限制结束）
+ * @param out_history  输出参数，查找成功时存放病历历史
+ * @return Result      操作结果
+ */
 Result MedicalRecordService_find_records_by_time_range(
     MedicalRecordService *service,
     const char *time_from,
@@ -1369,6 +1770,7 @@ Result MedicalRecordService_find_records_by_time_range(
         return Result_make_failure("time range query arguments invalid");
     }
 
+    /* 校验时间范围的合法性（起始时间不能晚于结束时间） */
     if (!MedicalRecordService_is_blank_text(time_from) &&
         !MedicalRecordService_is_blank_text(time_to) &&
         strcmp(time_from, time_to) > 0) {
@@ -1378,6 +1780,7 @@ Result MedicalRecordService_find_records_by_time_range(
     memset(out_history, 0, sizeof(*out_history));
     MedicalRecordHistory_init(out_history);
 
+    /* 按挂号时间筛选挂号记录 */
     result = MedicalRecordService_load_registrations(service, &registrations);
     if (result.success == 0) {
         return result;
@@ -1407,6 +1810,7 @@ Result MedicalRecordService_find_records_by_time_range(
     }
     RegistrationRepository_clear_list(&registrations);
 
+    /* 按就诊时间筛选就诊记录 */
     result = MedicalRecordService_load_visits(service, &visits);
     if (result.success == 0) {
         MedicalRecordHistory_clear(out_history);
@@ -1430,6 +1834,7 @@ Result MedicalRecordService_find_records_by_time_range(
     }
     VisitRecordRepository_clear_list(&visits);
 
+    /* 按申请时间筛选检查记录 */
     result = MedicalRecordService_load_examinations(service, &examinations);
     if (result.success == 0) {
         MedicalRecordHistory_clear(out_history);
@@ -1456,6 +1861,7 @@ Result MedicalRecordService_find_records_by_time_range(
     }
     ExaminationRecordRepository_clear_list(&examinations);
 
+    /* 按入院时间筛选住院记录 */
     result = MedicalRecordService_load_admissions(service, &admissions);
     if (result.success == 0) {
         MedicalRecordHistory_clear(out_history);

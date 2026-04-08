@@ -1,3 +1,13 @@
+/**
+ * @file DepartmentRepository.c
+ * @brief 科室数据仓储层实现
+ *
+ * 实现科室（Department）数据的持久化存储操作，包括：
+ * - 科室数据的序列化与反序列化
+ * - 数据校验（必填字段、保留字符检测）
+ * - 加载、按ID查找、追加保存、全量保存操作
+ */
+
 #include "repository/DepartmentRepository.h"
 
 #include <stdio.h>
@@ -6,25 +16,39 @@
 
 #include "repository/RepositoryUtils.h"
 
+/** 科室记录的字段数量 */
 #define DEPARTMENT_REPOSITORY_FIELD_COUNT 4
 
+/** 科室数据文件的表头行 */
 static const char *DEPARTMENT_REPOSITORY_HEADER =
     "department_id|name|location|description";
 
+/**
+ * @brief 加载所有科室时使用的上下文结构体
+ */
 typedef struct DepartmentRepositoryLoadContext {
-    LinkedList *departments;
+    LinkedList *departments; /**< 用于存放加载结果的链表 */
 } DepartmentRepositoryLoadContext;
 
+/**
+ * @brief 按ID查找科室时使用的上下文结构体
+ */
 typedef struct DepartmentRepositoryFindContext {
-    const char *department_id;
-    Department *out_department;
-    int found;
+    const char *department_id;  /**< 要查找的科室ID */
+    Department *out_department; /**< 输出：找到的科室数据 */
+    int found;                  /**< 是否已找到标志 */
 } DepartmentRepositoryFindContext;
 
+/**
+ * @brief 判断文本是否非空
+ */
 static int DepartmentRepository_has_text(const char *text) {
     return text != 0 && text[0] != '\0';
 }
 
+/**
+ * @brief 安全复制字符串到目标缓冲区
+ */
 static void DepartmentRepository_copy_string(
     char *destination,
     size_t capacity,
@@ -43,6 +67,11 @@ static void DepartmentRepository_copy_string(
     destination[capacity - 1] = '\0';
 }
 
+/**
+ * @brief 校验科室数据的合法性
+ * @param department 待校验的科室数据
+ * @return 合法返回 success；不合法返回 failure
+ */
 static Result DepartmentRepository_validate(const Department *department) {
     if (department == 0) {
         return Result_make_failure("department missing");
@@ -56,6 +85,7 @@ static Result DepartmentRepository_validate(const Department *department) {
         return Result_make_failure("department name missing");
     }
 
+    /* 检查所有字段是否包含保留字符 */
     if (!RepositoryUtils_is_safe_field_text(department->department_id) ||
         !RepositoryUtils_is_safe_field_text(department->name) ||
         !RepositoryUtils_is_safe_field_text(department->location) ||
@@ -66,6 +96,13 @@ static Result DepartmentRepository_validate(const Department *department) {
     return Result_make_success("department valid");
 }
 
+/**
+ * @brief 将科室结构体格式化为管道符分隔的文本行
+ * @param department    科室数据
+ * @param line          输出缓冲区
+ * @param line_capacity 缓冲区容量
+ * @return 成功返回 success；数据无效或缓冲区不足时返回 failure
+ */
 static Result DepartmentRepository_format_line(
     const Department *department,
     char *line,
@@ -98,6 +135,12 @@ static Result DepartmentRepository_format_line(
     return Result_make_success("department formatted");
 }
 
+/**
+ * @brief 将一行文本解析为科室结构体
+ * @param line       管道符分隔的文本行
+ * @param department 输出参数，解析得到的科室数据
+ * @return 解析成功返回 success；格式不合法时返回 failure
+ */
 static Result DepartmentRepository_parse_line(
     const char *line,
     Department *department
@@ -130,31 +173,27 @@ static Result DepartmentRepository_parse_line(
         return result;
     }
 
+    /* 逐字段复制 */
     memset(department, 0, sizeof(*department));
     DepartmentRepository_copy_string(
-        department->department_id,
-        sizeof(department->department_id),
-        fields[0]
+        department->department_id, sizeof(department->department_id), fields[0]
     );
     DepartmentRepository_copy_string(
-        department->name,
-        sizeof(department->name),
-        fields[1]
+        department->name, sizeof(department->name), fields[1]
     );
     DepartmentRepository_copy_string(
-        department->location,
-        sizeof(department->location),
-        fields[2]
+        department->location, sizeof(department->location), fields[2]
     );
     DepartmentRepository_copy_string(
-        department->description,
-        sizeof(department->description),
-        fields[3]
+        department->description, sizeof(department->description), fields[3]
     );
 
     return DepartmentRepository_validate(department);
 }
 
+/**
+ * @brief 确保科室数据文件包含正确的表头
+ */
 static Result DepartmentRepository_ensure_header(DepartmentRepository *repository) {
     char line[TEXT_FILE_REPOSITORY_LINE_CAPACITY];
     FILE *file = 0;
@@ -174,6 +213,7 @@ static Result DepartmentRepository_ensure_header(DepartmentRepository *repositor
         return Result_make_failure("failed to inspect department repository");
     }
 
+    /* 读取第一个非空行作为表头 */
     while (fgets(line, sizeof(line), file) != 0) {
         RepositoryUtils_strip_line_endings(line);
         if (RepositoryUtils_is_blank_line(line)) {
@@ -193,6 +233,7 @@ static Result DepartmentRepository_ensure_header(DepartmentRepository *repositor
         return Result_make_failure("failed to read department repository");
     }
 
+    /* 空文件：写入表头 */
     fclose(file);
     return TextFileRepository_append_line(
         &repository->storage,
@@ -200,6 +241,9 @@ static Result DepartmentRepository_ensure_header(DepartmentRepository *repositor
     );
 }
 
+/**
+ * @brief 加载科室的行处理回调
+ */
 static Result DepartmentRepository_collect_line(
     const char *line,
     void *context
@@ -232,6 +276,9 @@ static Result DepartmentRepository_collect_line(
     return Result_make_success("department loaded");
 }
 
+/**
+ * @brief 按ID查找科室的行处理回调
+ */
 static Result DepartmentRepository_find_line(
     const char *line,
     void *context
@@ -251,6 +298,7 @@ static Result DepartmentRepository_find_line(
         return result;
     }
 
+    /* ID匹配时复制数据并标记 */
     if (strcmp(department.department_id, find_context->department_id) == 0) {
         *(find_context->out_department) = department;
         find_context->found = 1;
@@ -259,6 +307,11 @@ static Result DepartmentRepository_find_line(
     return Result_make_success("department inspected");
 }
 
+/**
+ * @brief 校验科室链表中每个元素的合法性
+ * @param departments 待校验的科室链表
+ * @return 1 表示全部合法，0 表示存在不合法项
+ */
 static int DepartmentRepository_validate_list(const LinkedList *departments) {
     LinkedListNode *current = 0;
 
@@ -281,10 +334,16 @@ static int DepartmentRepository_validate_list(const LinkedList *departments) {
     return 1;
 }
 
+/**
+ * @brief 释放链表节点中的数据
+ */
 static void DepartmentRepository_free_item(void *data) {
     free(data);
 }
 
+/**
+ * @brief 初始化科室仓储
+ */
 Result DepartmentRepository_init(DepartmentRepository *repository, const char *path) {
     Result result;
 
@@ -300,6 +359,9 @@ Result DepartmentRepository_init(DepartmentRepository *repository, const char *p
     return DepartmentRepository_ensure_header(repository);
 }
 
+/**
+ * @brief 加载所有科室记录到链表
+ */
 Result DepartmentRepository_load_all(
     DepartmentRepository *repository,
     LinkedList *out_departments
@@ -332,6 +394,9 @@ Result DepartmentRepository_load_all(
     return Result_make_success("departments loaded");
 }
 
+/**
+ * @brief 按科室ID查找科室
+ */
 Result DepartmentRepository_find_by_department_id(
     DepartmentRepository *repository,
     const char *department_id,
@@ -370,6 +435,9 @@ Result DepartmentRepository_find_by_department_id(
     return Result_make_success("department found");
 }
 
+/**
+ * @brief 追加保存一条科室记录到文件末尾
+ */
 Result DepartmentRepository_save(
     DepartmentRepository *repository,
     const Department *department
@@ -389,6 +457,9 @@ Result DepartmentRepository_save(
     return TextFileRepository_append_line(&repository->storage, line);
 }
 
+/**
+ * @brief 全量保存科室列表到文件（覆盖写入）
+ */
 Result DepartmentRepository_save_all(
     DepartmentRepository *repository,
     const LinkedList *departments
@@ -415,11 +486,13 @@ Result DepartmentRepository_save_all(
         return Result_make_failure("failed to rewrite department repository");
     }
 
+    /* 写入表头 */
     if (fprintf(file, "%s\n", DEPARTMENT_REPOSITORY_HEADER) < 0) {
         fclose(file);
         return Result_make_failure("failed to write department header");
     }
 
+    /* 逐个写入科室记录 */
     current = departments->head;
     while (current != 0) {
         char line[TEXT_FILE_REPOSITORY_LINE_CAPACITY];
@@ -445,6 +518,9 @@ Result DepartmentRepository_save_all(
     return Result_make_success("departments saved");
 }
 
+/**
+ * @brief 清空并释放科室链表中的所有元素
+ */
 void DepartmentRepository_clear_list(LinkedList *departments) {
     LinkedList_clear(departments, DepartmentRepository_free_item);
 }

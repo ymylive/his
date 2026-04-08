@@ -1,3 +1,21 @@
+/**
+ * @file MenuApplication.c
+ * @brief 菜单应用程序实现 - HIS 系统核心业务协调层
+ *
+ * 本文件实现了 HIS 系统应用层的全部功能，包括：
+ * 1. 系统初始化：验证路径、初始化所有业务服务
+ * 2. 用户认证：登录/登出、患者会话绑定
+ * 3. 患者管理：增删改查
+ * 4. 科室与医生管理：增加/更新/查询/按科室列出
+ * 5. 挂号管理：创建/取消/查询挂号记录
+ * 6. 诊疗记录：创建就诊记录、检查记录、历史查询
+ * 7. 住院管理：入院/出院/转床/出院检查
+ * 8. 药房管理：添加药品/入库/发药/库存查询/低库存预警
+ * 9. 交互式表单：患者/医生/科室/药品信息采集
+ * 10. 模糊搜索选择器：支持关键字过滤和编号直选
+ * 11. 操作分派：将菜单操作映射到具体业务处理流程
+ */
+
 #include "ui/MenuApplication.h"
 
 #include <ctype.h>
@@ -12,6 +30,11 @@
 #include "common/InputHelper.h"
 #include "service/DepartmentService.h"
 
+/**
+ * @brief 检查字符串是否为空白（NULL、空字符串或仅含空白字符）
+ * @param text 待检查的字符串
+ * @return 1 表示空白，0 表示非空白
+ */
 static int MenuApplication_is_blank(const char *text) {
     if (text == 0) {
         return 1;
@@ -28,6 +51,12 @@ static int MenuApplication_is_blank(const char *text) {
     return 1;
 }
 
+/**
+ * @brief 验证必填文本字段不为空
+ * @param text       待验证的文本
+ * @param field_name 字段名称（用于错误消息）
+ * @return Result    验证通过或失败
+ */
 static Result MenuApplication_validate_required_text(
     const char *text,
     const char *field_name
@@ -42,6 +71,11 @@ static Result MenuApplication_validate_required_text(
     return Result_make_success("text valid");
 }
 
+/**
+ * @brief 自动生成患者编号
+ *
+ * 根据当前患者总数 + 1 生成顺序编号，格式为 "PAT0001" 等。
+ */
 static Result MenuApplication_generate_patient_id(
     MenuApplication *application,
     char *buffer,
@@ -70,6 +104,7 @@ static Result MenuApplication_generate_patient_id(
     return Result_make_success("patient id generated");
 }
 
+/** @brief 自动生成科室编号（格式 "DEP0001" 等） */
 static Result MenuApplication_generate_department_id(
     MenuApplication *application,
     char *buffer,
@@ -101,6 +136,7 @@ static Result MenuApplication_generate_department_id(
     return Result_make_success("department id generated");
 }
 
+/** @brief 自动生成医生工号（格式 "DOC0001" 等） */
 static Result MenuApplication_generate_doctor_id(
     MenuApplication *application,
     char *buffer,
@@ -129,6 +165,7 @@ static Result MenuApplication_generate_doctor_id(
     return Result_make_success("doctor id generated");
 }
 
+/** @brief 自动生成药品编号（格式 "MED0001" 等） */
 static Result MenuApplication_generate_medicine_id(
     MenuApplication *application,
     char *buffer,
@@ -157,6 +194,7 @@ static Result MenuApplication_generate_medicine_id(
     return Result_make_success("medicine id generated");
 }
 
+/** @brief 安全复制字符串到目标缓冲区 */
 static void MenuApplication_copy_text(
     char *destination,
     size_t capacity,
@@ -175,6 +213,7 @@ static void MenuApplication_copy_text(
     destination[capacity - 1] = '\0';
 }
 
+/** @brief 清除患者会话状态 */
 static void MenuApplication_clear_patient_session_state(MenuApplication *application) {
     if (application == 0) {
         return;
@@ -184,6 +223,7 @@ static void MenuApplication_clear_patient_session_state(MenuApplication *applica
     memset(application->bound_patient_id, 0, sizeof(application->bound_patient_id));
 }
 
+/** @brief 清除已认证用户状态 */
 static void MenuApplication_clear_authenticated_user_state(MenuApplication *application) {
     if (application == 0) {
         return;
@@ -193,6 +233,7 @@ static void MenuApplication_clear_authenticated_user_state(MenuApplication *appl
     memset(&application->authenticated_user, 0, sizeof(application->authenticated_user));
 }
 
+/** @brief 检查是否已绑定患者会话（患者角色操作的前置条件） */
 static Result MenuApplication_require_patient_session(MenuApplication *application) {
     if (application == 0) {
         return Result_make_failure("menu application missing");
@@ -206,6 +247,7 @@ static Result MenuApplication_require_patient_session(MenuApplication *applicati
     return Result_make_success("patient session ready");
 }
 
+/** @brief 验证请求的患者编号是否与当前绑定的会话匹配（数据隔离） */
 static Result MenuApplication_authorize_patient_session(
     MenuApplication *application,
     const char *requested_patient_id
@@ -227,6 +269,7 @@ static Result MenuApplication_authorize_patient_session(
     return Result_make_success("patient session authorized");
 }
 
+/** @brief 格式化文本写入缓冲区（类似 snprintf 的封装） */
 static Result MenuApplication_write_text(
     char *buffer,
     size_t capacity,
@@ -251,6 +294,7 @@ static Result MenuApplication_write_text(
     return Result_make_success("output ready");
 }
 
+/** @brief 追加格式化文本到缓冲区已有内容之后 */
 static Result MenuApplication_append_text(
     char *buffer,
     size_t capacity,
@@ -277,6 +321,7 @@ static Result MenuApplication_append_text(
     return Result_make_success("output appended");
 }
 
+/** @brief 将失败信息写入缓冲区并返回失败结果 */
 static Result MenuApplication_write_failure(
     const char *message,
     char *buffer,
@@ -293,6 +338,7 @@ static Result MenuApplication_write_failure(
     return Result_make_failure(message);
 }
 
+/** @brief 根据操作结果显示成功或错误动画 */
 static void MenuApplication_print_result(FILE *out, const char *text, int success) {
     if (out == 0 || text == 0 || text[0] == '\0') {
         return;
@@ -304,6 +350,7 @@ static void MenuApplication_print_result(FILE *out, const char *text, int succes
     }
 }
 
+/** @brief 将性别枚举转换为中文标签 */
 static const char *MenuApplication_gender_label(PatientGender gender) {
     switch (gender) {
         case PATIENT_GENDER_MALE:
@@ -315,6 +362,7 @@ static const char *MenuApplication_gender_label(PatientGender gender) {
     }
 }
 
+/** @brief 将挂号状态枚举转换为中文标签 */
 static const char *MenuApplication_registration_status_label(RegistrationStatus status) {
     switch (status) {
         case REG_STATUS_PENDING:
@@ -328,6 +376,7 @@ static const char *MenuApplication_registration_status_label(RegistrationStatus 
     }
 }
 
+/** @brief 将床位状态枚举转换为中文标签 */
 static const char *MenuApplication_bed_status_label(BedStatus status) {
     switch (status) {
         case BED_STATUS_AVAILABLE:
@@ -341,6 +390,7 @@ static const char *MenuApplication_bed_status_label(BedStatus status) {
     }
 }
 
+/** @brief 将病房状态枚举转换为中文标签 */
 static const char *MenuApplication_ward_status_label(WardStatus status) {
     switch (status) {
         case WARD_STATUS_ACTIVE:
@@ -352,6 +402,7 @@ static const char *MenuApplication_ward_status_label(WardStatus status) {
     }
 }
 
+/** @brief 将住院状态枚举转换为中文标签 */
 static const char *MenuApplication_admission_status_label(AdmissionStatus status) {
     switch (status) {
         case ADMISSION_STATUS_ACTIVE:
@@ -363,6 +414,7 @@ static const char *MenuApplication_admission_status_label(AdmissionStatus status
     }
 }
 
+/** @brief 将就诊记录数据填充到交接结构体中 */
 static void MenuApplication_fill_visit_handoff(
     const VisitRecord *record,
     MenuApplicationVisitHandoff *out_handoff
@@ -1774,18 +1826,29 @@ static Result MenuApplication_query_dispense_history_by_patient_id(
     return Result_make_success("dispense patient history ready");
 }
 
+/**
+ * @brief 交互式输入上下文 - 持有输入输出流的引用
+ */
 typedef struct MenuApplicationPromptContext {
-    FILE *input;
-    FILE *output;
+    FILE *input;   /**< 输入流（通常为 stdin） */
+    FILE *output;  /**< 输出流（通常为 stdout） */
 } MenuApplicationPromptContext;
 
-#define MENU_APPLICATION_SELECT_OPTION_MAX 256
+#define MENU_APPLICATION_SELECT_OPTION_MAX 256  /**< 选择器最大候选项数 */
 
+/**
+ * @brief 选择器候选项 - 用于模糊搜索选择界面
+ */
 typedef struct MenuApplicationSelectionOption {
     char id[HIS_DOMAIN_ID_CAPACITY];
     char label[256];
 } MenuApplicationSelectionOption;
 
+/**
+ * @brief 交互式读取一行文本输入
+ *
+ * 显示提示文本，等待用户输入一行。支持 ESC 取消和 EOF 检测。
+ */
 static Result MenuApplication_prompt_line(
     MenuApplicationPromptContext *context,
     const char *prompt,
@@ -1820,6 +1883,7 @@ static Result MenuApplication_prompt_line(
     return Result_make_success("line read");
 }
 
+/** @brief 交互式读取一个整数值 */
 static Result MenuApplication_prompt_int(
     MenuApplicationPromptContext *context,
     const char *prompt,
@@ -1851,10 +1915,12 @@ static Result MenuApplication_prompt_int(
     return Result_make_success("number parsed");
 }
 
+/** @brief 忽略大小写比较两个字符是否相等 */
 static int MenuApplication_char_equal_ignore_case(char left, char right) {
     return tolower((unsigned char)left) == tolower((unsigned char)right);
 }
 
+/** @brief 忽略大小写检查 text 中是否包含 query 子串 */
 static int MenuApplication_text_contains_ignore_case(const char *text, const char *query) {
     size_t text_index = 0;
     size_t query_length = 0;
@@ -1886,6 +1952,7 @@ static int MenuApplication_text_contains_ignore_case(const char *text, const cha
     return 0;
 }
 
+/** @brief 在选项数组中精确匹配编号或标签 */
 static int MenuApplication_find_exact_selection(
     const MenuApplicationSelectionOption *options,
     int option_count,
@@ -1906,6 +1973,13 @@ static int MenuApplication_find_exact_selection(
     return -1;
 }
 
+/**
+ * @brief 交互式模糊搜索选择器
+ *
+ * 支持两种选择方式：
+ * 1. 直接输入编号或完整标签精确匹配
+ * 2. 输入关键字模糊过滤，从候选列表中选择序号
+ */
 static Result MenuApplication_prompt_select_option(
     MenuApplicationPromptContext *context,
     const char *title,
@@ -1979,6 +2053,7 @@ static Result MenuApplication_prompt_select_option(
     return Result_make_success("selection chosen");
 }
 
+/** @brief 交互式选择患者（加载全部患者，通过模糊搜索选择） */
 static Result MenuApplication_prompt_select_patient(
     MenuApplication *application,
     MenuApplicationPromptContext *context,
@@ -2027,6 +2102,7 @@ static Result MenuApplication_prompt_select_patient(
     return result;
 }
 
+/** @brief 交互式选择科室 */
 static Result MenuApplication_prompt_select_department(
     MenuApplication *application,
     MenuApplicationPromptContext *context,
@@ -2074,6 +2150,7 @@ static Result MenuApplication_prompt_select_department(
     return result;
 }
 
+/** @brief 交互式选择医生（可按科室过滤） */
 static Result MenuApplication_prompt_select_doctor(
     MenuApplication *application,
     MenuApplicationPromptContext *context,
@@ -2131,6 +2208,7 @@ static Result MenuApplication_prompt_select_doctor(
     return result;
 }
 
+/** @brief 交互式选择挂号记录（可按患者、医生、状态过滤） */
 static Result MenuApplication_prompt_select_registration(
     MenuApplication *application,
     MenuApplicationPromptContext *context,
@@ -2204,6 +2282,7 @@ static Result MenuApplication_prompt_select_registration(
     return result;
 }
 
+/** @brief 交互式选择就诊记录（可按患者、医生过滤） */
 static Result MenuApplication_prompt_select_visit(
     MenuApplication *application,
     MenuApplicationPromptContext *context,
@@ -2269,6 +2348,7 @@ static Result MenuApplication_prompt_select_visit(
     return result;
 }
 
+/** @brief 交互式选择检查记录（可按医生过滤、仅显示待完成） */
 static Result MenuApplication_prompt_select_examination(
     MenuApplication *application,
     MenuApplicationPromptContext *context,
@@ -2337,6 +2417,7 @@ static Result MenuApplication_prompt_select_examination(
     return result;
 }
 
+/** @brief 交互式选择病房 */
 static Result MenuApplication_prompt_select_ward(
     MenuApplication *application,
     MenuApplicationPromptContext *context,
@@ -2386,6 +2467,7 @@ static Result MenuApplication_prompt_select_ward(
     return result;
 }
 
+/** @brief 交互式选择床位（可按病房过滤、仅空闲/仅占用） */
 static Result MenuApplication_prompt_select_bed(
     MenuApplication *application,
     MenuApplicationPromptContext *context,
@@ -2452,6 +2534,7 @@ static Result MenuApplication_prompt_select_bed(
     return result;
 }
 
+/** @brief 交互式选择住院记录（可按患者过滤、仅在院） */
 static Result MenuApplication_prompt_select_admission(
     MenuApplication *application,
     MenuApplicationPromptContext *context,
@@ -2517,6 +2600,7 @@ static Result MenuApplication_prompt_select_admission(
     return result;
 }
 
+/** @brief 交互式选择药品（可按科室过滤） */
 static Result MenuApplication_prompt_select_medicine(
     MenuApplication *application,
     MenuApplicationPromptContext *context,
@@ -2572,6 +2656,7 @@ static Result MenuApplication_prompt_select_medicine(
     return result;
 }
 
+/** @brief 交互式采集患者信息表单（姓名、性别、年龄、联系方式等） */
 static Result MenuApplication_prompt_patient_form(
     MenuApplicationPromptContext *context,
     Patient *out_patient,
@@ -2666,6 +2751,7 @@ static Result MenuApplication_prompt_patient_form(
     );
 }
 
+/** @brief 交互式采集药品信息表单（名称、单价、库存、阈值等） */
 static Result MenuApplication_prompt_medicine_form(
     MenuApplicationPromptContext *context,
     Medicine *out_medicine,
@@ -2739,6 +2825,7 @@ static Result MenuApplication_prompt_medicine_form(
     return Result_make_success("medicine form ready");
 }
 
+/** @brief 交互式采集科室信息表单（名称、位置、描述） */
 static Result MenuApplication_prompt_department_form(
     MenuApplicationPromptContext *context,
     Department *out_department,
@@ -2783,6 +2870,7 @@ static Result MenuApplication_prompt_department_form(
     );
 }
 
+/** @brief 交互式采集医生信息表单（姓名、职称、科室、排班等） */
 static Result MenuApplication_prompt_doctor_form(
     MenuApplicationPromptContext *context,
     Doctor *out_doctor,
@@ -3227,6 +3315,7 @@ Result MenuApplication_discharge_check(
     );
 }
 
+/** @brief 以表格形式打印病房列表 */
 static void MenuApplication_print_ward_table(MenuApplication *application, FILE *out) {
     LinkedList wards;
     const LinkedListNode *current = 0;
@@ -3270,6 +3359,7 @@ static void MenuApplication_print_ward_table(MenuApplication *application, FILE 
     BedService_clear_wards(&wards);
 }
 
+/** @brief 以表格形式打印指定病房的床位列表 */
 static void MenuApplication_print_bed_table(MenuApplication *application, FILE *out, const char *ward_id) {
     LinkedList beds;
     const LinkedListNode *current = 0;

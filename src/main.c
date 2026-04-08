@@ -1,3 +1,14 @@
+/**
+ * @file main.c
+ * @brief HIS 医院信息系统 - 程序入口
+ *
+ * 本文件是 HIS 系统的主入口，负责：
+ * 1. 系统初始化（数据加载、Windows 控制台配置）
+ * 2. 启动动画展示
+ * 3. 主菜单循环（角色选择 -> 登录 -> 角色菜单 -> 操作执行）
+ * 4. 用户输入处理（支持 ESC 返回、EOF 退出）
+ */
+
 #include <stdio.h>
 #include <string.h>
 
@@ -13,6 +24,12 @@
 #include "ui/TuiStyle.h"
 
 #ifdef _WIN32
+/**
+ * @brief 初始化 Windows 控制台
+ *
+ * 设置控制台代码页为 UTF-8，启用 ANSI 转义序列处理，
+ * 确保中文字符和彩色输出在 Windows 终端中正确显示。
+ */
 static void init_windows_console(void) {
     HANDLE hOut = INVALID_HANDLE_VALUE;
     HANDLE hIn  = INVALID_HANDLE_VALUE;
@@ -38,6 +55,11 @@ static void init_windows_console(void) {
 }
 #endif
 
+/**
+ * @brief 将菜单角色枚举转换为用户角色枚举
+ * @param role 菜单角色
+ * @return 对应的用户角色（无法映射时返回 USER_ROLE_UNKNOWN）
+ */
 static UserRole role_to_user_role(MenuRole role) {
     switch (role) {
         case MENU_ROLE_ADMIN:
@@ -55,6 +77,11 @@ static UserRole role_to_user_role(MenuRole role) {
     }
 }
 
+/**
+ * @brief 将菜单角色枚举转换为 TUI 主题枚举
+ * @param role 菜单角色
+ * @return 对应的 TUI 角色主题
+ */
 static TuiRoleTheme role_to_theme(MenuRole role) {
     switch (role) {
         case MENU_ROLE_ADMIN:
@@ -72,12 +99,22 @@ static TuiRoleTheme role_to_theme(MenuRole role) {
     }
 }
 
+/**
+ * @brief 程序主入口
+ *
+ * 执行流程：
+ * 1. 初始化控制台和应用程序
+ * 2. 显示启动动画（矩阵雨 -> Logo -> 标题闪烁 -> Banner）
+ * 3. 检查更新
+ * 4. 进入主循环：角色选择 -> 登录验证 -> 角色菜单 -> 操作执行
+ * 5. 用户可通过 ESC 逐级返回，输入 0 或 EOF 退出系统
+ */
 int main(void) {
-    char menu_text[2048];
-    char input[128];
-    char password[128];
-    char prompt_buf[256];
-    char user_id[128];
+    char menu_text[2048];   /* 菜单渲染缓冲区 */
+    char input[128];        /* 用户输入缓冲区 */
+    char password[128];     /* 密码输入缓冲区 */
+    char prompt_buf[256];   /* 提示信息格式化缓冲区 */
+    char user_id[128];      /* 登录用户编号缓存 */
     MenuApplication application;
     MenuApplicationPaths paths;
 
@@ -85,6 +122,7 @@ int main(void) {
     init_windows_console();
 #endif
 
+    /* 配置所有数据文件的路径 */
     paths = (MenuApplicationPaths){
         "data/users.txt",
         "data/patients.txt",
@@ -99,6 +137,7 @@ int main(void) {
         "data/medicines.txt",
         "data/dispense_records.txt"
     };
+    /* 初始化应用程序（加载所有业务服务） */
     Result init_result = MenuApplication_init(&application, &paths);
 
     if (init_result.success == 0) {
@@ -106,21 +145,21 @@ int main(void) {
         return 1;
     }
 
+    /* 启动动画序列：矩阵雨 -> Logo -> 故障标题 -> Banner（约 2 秒） */
     tui_clear_screen();
-    /* Startup: matrix rain → logo → glitch title → banner (~2s total) */
     tui_animate_matrix_rain(stdout, 44, 8, 800);
     tui_animate_logo(stdout);
     tui_animate_glitch(stdout, "  H I S  -  Hospital Information System", 3, 400);
     tui_animate_banner(stdout, "轻量级医院信息系统 (HIS)");
 
-    /* ── startup update check ── */
+    /* ── 启动时检查更新 ── */
     {
         UpdateInfo update_info;
         tui_spinner_run(stdout, "正在检查更新...", 300);
         if (UpdateChecker_check(&update_info) && update_info.has_update) {
             int update_result = UpdateChecker_prompt(stdout, stdin, &update_info);
             if (update_result == 2) {
-                /* Update installed — exit so new version can start */
+                /* 更新已安装，退出以便新版本启动 */
                 tui_delay(1500);
                 tui_show_cursor(stdout);
                 return 0;
@@ -129,9 +168,11 @@ int main(void) {
         }
     }
 
+    /* ═══════════════ 主循环：角色选择 -> 登录 -> 操作 ═══════════════ */
     for (;;) {
         MenuRole role = MENU_ROLE_INVALID;
         TuiRoleTheme theme = TUI_THEME_DEFAULT;
+        /* 渲染主菜单（角色选择菜单）到缓冲区 */
         Result result = MenuController_render_main_menu(menu_text, sizeof(menu_text));
 
         if (result.success == 0) {
@@ -175,6 +216,7 @@ int main(void) {
             return 0;
         }
 
+        /* 处理演示数据重置（特殊角色，不需要登录） */
         if (role == MENU_ROLE_RESET_DEMO) {
             char reset_message[RESULT_MESSAGE_CAPACITY];
             tui_print_section(stdout, TUI_SPARKLE, "重置演示数据");
@@ -190,11 +232,13 @@ int main(void) {
             continue;
         }
 
+        /* 获取角色对应的主题配色 */
         theme = role_to_theme(role);
 
+        /* ── 登录流程 ── */
         {
             UserRole required_role = role_to_user_role(role);
-            int login_ok = 0;
+            int login_ok = 0;  /* 登录是否成功标志 */
 
             if (required_role == USER_ROLE_UNKNOWN) {
                 tui_print_warning(stdout, "角色未配置登录映射。");
@@ -202,8 +246,8 @@ int main(void) {
                 continue;
             }
 
-            /* Login loop: ESC at user-ID → back to role selection,
-               ESC at password → back to user-ID prompt */
+            /* 登录循环：用户编号处按 ESC 返回角色选择，
+               密码处按 ESC 返回用户编号输入 */
             for (;;) {
                 int read_result = 0;
 
@@ -244,8 +288,9 @@ int main(void) {
                     continue; /* retry from user-ID */
                 }
 
+                /* 尝试登录验证 */
                 result = MenuApplication_login(&application, input, password, required_role);
-                /* Secure clear: volatile prevents optimizer from removing */
+                /* 安全清除密码：使用 volatile 防止编译器优化掉清零操作 */
                 { volatile char *p = password; size_t n = sizeof(password); while (n--) *p++ = 0; }
                 if (result.success == 0) {
                     tui_animate_error(stdout, result.message);
@@ -262,11 +307,12 @@ int main(void) {
             }
         }
 
+        /* 保存已登录的用户编号 */
         strncpy(user_id, input, sizeof(user_id) - 1);
         user_id[sizeof(user_id) - 1] = '\0';
 
+        /* 主题入场动画：等离子 -> 汇聚 -> 扩展 -> 欢迎框 */
         tui_clear_screen();
-        /* Themed entrance: plasma → converge → expand, then welcome */
         tui_animate_entrance(stdout, theme);
         tui_animate_welcome(stdout, theme, user_id);
         tui_animate_heartbeat(stdout, 40, 1);
@@ -286,9 +332,11 @@ int main(void) {
         }
         tui_animate_transition(stdout);
 
+        /* ── 角色菜单循环：显示操作列表，执行用户选择的操作 ── */
         for (;;) {
             MenuAction action = MENU_ACTION_INVALID;
 
+            /* 渲染当前角色的操作菜单 */
             result = MenuController_render_role_menu(role, menu_text, sizeof(menu_text));
             if (result.success == 0) {
                 fputs("角色菜单渲染失败。\n", stderr);
@@ -328,7 +376,9 @@ int main(void) {
                 break;
             }
 
+            /* 执行选中的操作（包括交互式输入和业务逻辑处理） */
             result = MenuApplication_execute_action(&application, action, stdin, stdout);
+            /* 仅在真正的错误时显示错误消息（跳过"未实现"和"ESC取消"） */
             if (result.success == 0 &&
                 strcmp(result.message, "action not implemented yet") != 0 &&
                 !InputHelper_is_esc_cancel(result.message)) {
@@ -352,6 +402,7 @@ int main(void) {
             }
         }
 
+        /* 退出角色菜单循环后，执行登出操作 */
         MenuApplication_logout(&application);
     }
 }

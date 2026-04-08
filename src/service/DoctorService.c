@@ -1,8 +1,22 @@
+/**
+ * @file DoctorService.c
+ * @brief 医生服务模块实现
+ *
+ * 实现医生信息的添加和查询功能。在添加医生时会校验医生信息的完整性，
+ * 并验证所属科室是否存在，确保医生ID不重复。
+ */
+
 #include "service/DoctorService.h"
 
 #include <ctype.h>
 #include <string.h>
 
+/**
+ * @brief 判断文本是否非空（至少包含一个非空白字符）
+ *
+ * @param text  待检查的字符串
+ * @return int  1=非空，0=空白或NULL
+ */
 static int DoctorService_has_non_empty_text(const char *text) {
     const unsigned char *current = (const unsigned char *)text;
 
@@ -10,6 +24,7 @@ static int DoctorService_has_non_empty_text(const char *text) {
         return 0;
     }
 
+    /* 逐字符检查，找到任意非空白字符即返回1 */
     while (*current != '\0') {
         if (isspace(*current) == 0) {
             return 1;
@@ -21,6 +36,15 @@ static int DoctorService_has_non_empty_text(const char *text) {
     return 0;
 }
 
+/**
+ * @brief 校验医生信息的完整性
+ *
+ * 检查医生ID、姓名、职称、所属科室ID、排班信息是否非空，
+ * 以及医生状态是否为有效的枚举值。
+ *
+ * @param doctor  指向待校验的医生结构体
+ * @return Result 校验结果
+ */
 static Result DoctorService_validate(const Doctor *doctor) {
     if (doctor == 0) {
         return Result_make_failure("doctor missing");
@@ -46,6 +70,7 @@ static Result DoctorService_validate(const Doctor *doctor) {
         return Result_make_failure("doctor schedule missing");
     }
 
+    /* 状态只允许 INACTIVE 或 ACTIVE */
     if (doctor->status != DOCTOR_STATUS_INACTIVE &&
         doctor->status != DOCTOR_STATUS_ACTIVE) {
         return Result_make_failure("doctor status invalid");
@@ -54,6 +79,13 @@ static Result DoctorService_validate(const Doctor *doctor) {
     return Result_make_success("doctor valid");
 }
 
+/**
+ * @brief 在医生链表中按ID查找医生
+ *
+ * @param doctors    医生链表
+ * @param doctor_id  待查找的医生ID
+ * @return Doctor*   找到时返回指向该医生的指针，未找到返回 NULL
+ */
 static Doctor *DoctorService_find_in_list(
     LinkedList *doctors,
     const char *doctor_id
@@ -78,6 +110,15 @@ static Doctor *DoctorService_find_in_list(
     return 0;
 }
 
+/**
+ * @brief 验证科室是否存在
+ *
+ * 通过科室仓库查找指定科室ID，确认科室记录存在。
+ *
+ * @param service        指向医生服务结构体
+ * @param department_id  科室ID
+ * @return Result        验证结果
+ */
 static Result DoctorService_ensure_department_exists(
     DoctorService *service,
     const char *department_id
@@ -92,6 +133,7 @@ static Result DoctorService_ensure_department_exists(
         return Result_make_failure("doctor department missing");
     }
 
+    /* 从科室仓库中查找，验证科室是否存在 */
     if (DepartmentRepository_find_by_department_id(
             &service->department_repository,
             department_id,
@@ -103,6 +145,16 @@ static Result DoctorService_ensure_department_exists(
     return Result_make_success("doctor department exists");
 }
 
+/**
+ * @brief 初始化医生服务
+ *
+ * 分别初始化医生仓库和科室仓库。
+ *
+ * @param service          指向待初始化的医生服务结构体
+ * @param doctor_path      医生数据文件路径
+ * @param department_path  科室数据文件路径
+ * @return Result          操作结果
+ */
 Result DoctorService_init(
     DoctorService *service,
     const char *doctor_path,
@@ -114,17 +166,29 @@ Result DoctorService_init(
         return Result_make_failure("doctor service missing");
     }
 
+    /* 先初始化医生仓库 */
     result = DoctorRepository_init(&service->doctor_repository, doctor_path);
     if (result.success == 0) {
         return result;
     }
 
+    /* 再初始化科室仓库 */
     return DepartmentRepository_init(
         &service->department_repository,
         department_path
     );
 }
 
+/**
+ * @brief 添加新医生
+ *
+ * 流程：校验医生信息 -> 验证科室存在 -> 加载已有医生列表 ->
+ * 检查医生ID唯一性 -> 保存新医生记录。
+ *
+ * @param service  指向医生服务结构体
+ * @param doctor   指向待添加的医生信息
+ * @return Result  操作结果
+ */
 Result DoctorService_add(DoctorService *service, const Doctor *doctor) {
     LinkedList doctors;
     Doctor *existing = 0;
@@ -138,6 +202,7 @@ Result DoctorService_add(DoctorService *service, const Doctor *doctor) {
         return Result_make_failure("doctor service missing");
     }
 
+    /* 验证所属科室是否存在 */
     result = DoctorService_ensure_department_exists(
         service,
         doctor->department_id
@@ -146,6 +211,7 @@ Result DoctorService_add(DoctorService *service, const Doctor *doctor) {
         return result;
     }
 
+    /* 加载已有医生列表，检查ID是否重复 */
     result = DoctorRepository_load_all(&service->doctor_repository, &doctors);
     if (result.success == 0) {
         return result;
@@ -157,9 +223,18 @@ Result DoctorService_add(DoctorService *service, const Doctor *doctor) {
         return Result_make_failure("doctor already exists");
     }
 
+    /* ID唯一性校验通过，保存新医生记录 */
     return DoctorRepository_save(&service->doctor_repository, doctor);
 }
 
+/**
+ * @brief 根据医生ID查找医生
+ *
+ * @param service     指向医生服务结构体
+ * @param doctor_id   待查找的医生ID
+ * @param out_doctor  输出参数，查找成功时存放医生信息
+ * @return Result     操作结果
+ */
 Result DoctorService_get_by_id(
     DoctorService *service,
     const char *doctor_id,
@@ -173,6 +248,7 @@ Result DoctorService_get_by_id(
         return Result_make_failure("doctor query arguments missing");
     }
 
+    /* 委托仓库层按ID查找 */
     return DoctorRepository_find_by_doctor_id(
         &service->doctor_repository,
         doctor_id,
@@ -180,6 +256,16 @@ Result DoctorService_get_by_id(
     );
 }
 
+/**
+ * @brief 根据科室ID列出该科室下的所有医生
+ *
+ * 先验证科室存在，再从仓库中按科室ID筛选医生。
+ *
+ * @param service        指向医生服务结构体
+ * @param department_id  科室ID
+ * @param out_doctors    输出参数，查找结果链表
+ * @return Result        操作结果
+ */
 Result DoctorService_list_by_department(
     DoctorService *service,
     const char *department_id,
@@ -195,11 +281,13 @@ Result DoctorService_list_by_department(
         return Result_make_failure("doctor output list missing");
     }
 
+    /* 先验证科室是否存在 */
     result = DoctorService_ensure_department_exists(service, department_id);
     if (result.success == 0) {
         return result;
     }
 
+    /* 从仓库中按科室ID筛选 */
     return DoctorRepository_find_by_department_id(
         &service->doctor_repository,
         department_id,
@@ -207,6 +295,13 @@ Result DoctorService_list_by_department(
     );
 }
 
+/**
+ * @brief 清理医生列表
+ *
+ * 释放链表中所有动态分配的 Doctor 节点。
+ *
+ * @param doctors  指向待清理的医生链表
+ */
 void DoctorService_clear_list(LinkedList *doctors) {
     DoctorRepository_clear_list(doctors);
 }

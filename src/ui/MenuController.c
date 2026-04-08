@@ -1,3 +1,14 @@
+/**
+ * @file MenuController.c
+ * @brief 菜单控制器实现 - 菜单渲染、用户输入解析与操作路由
+ *
+ * 本文件实现了 HIS 系统的菜单渲染与交互控制逻辑，包括：
+ * 1. 主菜单（角色选择）和各角色子菜单的文本渲染
+ * 2. 用户输入解析（字符串 -> 角色/操作枚举）
+ * 3. 角色和操作的中文标签映射
+ * 4. 使用 TUI 样式系统绘制美观的菜单框
+ */
+
 #include "ui/MenuController.h"
 #include "ui/TuiStyle.h"
 
@@ -6,18 +17,30 @@
 #include <stdlib.h>
 #include <string.h>
 
-#define MENU_BOX_WIDTH 44
-#define MENU_INNER     (MENU_BOX_WIDTH - 2)
+#define MENU_BOX_WIDTH 44              /**< 菜单框的总宽度（字符数） */
+#define MENU_INNER     (MENU_BOX_WIDTH - 2)  /**< 菜单框内部可用宽度 */
 
+/**
+ * @brief 菜单选项结构体 - 描述菜单中的一个可选项
+ */
 typedef struct MenuOption {
-    int selection;
-    MenuAction action;
-    const char *label;
-    const char *icon;
+    int selection;       /**< 用户输入的选择编号（0 表示返回） */
+    MenuAction action;   /**< 对应的操作枚举值 */
+    const char *label;   /**< 菜单项的中文标签 */
+    const char *icon;    /**< 菜单项前的 Unicode 图标 */
 } MenuOption;
 
-/* ---- snprintf helpers for styled menu boxes ---- */
+/* ---- 菜单框渲染辅助函数（使用 snprintf 将样式化文本写入缓冲区） ---- */
 
+/**
+ * @brief 向缓冲区追加一条水平分隔线
+ * @param buf   目标缓冲区
+ * @param cap   缓冲区容量
+ * @param used  已使用字节数（会被更新）
+ * @param left  左端角字符（如 TUI_TL, TUI_LT, TUI_BL）
+ * @param right 右端角字符（如 TUI_TR, TUI_RT, TUI_BR）
+ * @return 0 成功，-1 缓冲区不足
+ */
 static int menu_append_hline(
     char *buf, size_t cap, size_t *used,
     const char *left, const char *right
@@ -39,16 +62,25 @@ static int menu_append_hline(
     return 0;
 }
 
+/**
+ * @brief 向缓冲区追加居中的标题行
+ * @param buf   目标缓冲区
+ * @param cap   缓冲区容量
+ * @param used  已使用字节数（会被更新）
+ * @param title 标题文本（UTF-8 编码）
+ * @return 0 成功，-1 缓冲区不足
+ */
 static int menu_append_title(
     char *buf, size_t cap, size_t *used,
     const char *title
 ) {
     int w = 0;
-    int dw = tui_display_width(title);
+    int dw = tui_display_width(title);  /* 计算标题的终端显示宽度 */
     int pad_left = 0;
     int pad_right = 0;
     int i = 0;
 
+    /* 计算左右填充以实现居中对齐 */
     pad_left = (MENU_INNER - dw) / 2;
     pad_right = MENU_INNER - dw - pad_left;
     if (pad_left < 0) pad_left = 0;
@@ -76,6 +108,17 @@ static int menu_append_title(
     return 0;
 }
 
+/**
+ * @brief 向缓冲区追加一个菜单选项行
+ * @param buf    目标缓冲区
+ * @param cap    缓冲区容量
+ * @param used   已使用字节数（会被更新）
+ * @param number 选项编号
+ * @param icon   选项图标（可为 NULL）
+ * @param label  选项文字标签
+ * @param is_dim 是否以暗淡样式显示（用于"返回"等次要选项）
+ * @return 0 成功，-1 缓冲区不足
+ */
 static int menu_append_item(
     char *buf, size_t cap, size_t *used,
     int number, const char *icon, const char *label, int is_dim
@@ -122,6 +165,9 @@ static int menu_append_item(
     return 0;
 }
 
+/* ---- 各角色的菜单选项定义 ---- */
+
+/** @brief 系统管理员菜单选项 */
 static const MenuOption MENU_ADMIN_OPTIONS[] = {
     {1, MENU_ACTION_ADMIN_PATIENT_MANAGEMENT, "患者信息管理", TUI_HEART},
     {2, MENU_ACTION_ADMIN_DOCTOR_DEPARTMENT, "医生与科室管理/按科室查看医生", TUI_MEDICAL},
@@ -131,6 +177,7 @@ static const MenuOption MENU_ADMIN_OPTIONS[] = {
     {0, MENU_ACTION_BACK, "返回上级菜单", TUI_ARROW_R}
 };
 
+/** @brief 医生菜单选项 */
 static const MenuOption MENU_DOCTOR_OPTIONS[] = {
     {1, MENU_ACTION_DOCTOR_PENDING_LIST, "待诊列表", TUI_LOZENGE},
     {2, MENU_ACTION_DOCTOR_QUERY_PATIENT_HISTORY, "查询患者信息与历史", TUI_HEART},
@@ -140,6 +187,7 @@ static const MenuOption MENU_DOCTOR_OPTIONS[] = {
     {0, MENU_ACTION_BACK, "返回上级菜单", TUI_ARROW_R}
 };
 
+/** @brief 患者菜单选项 */
 static const MenuOption MENU_PATIENT_OPTIONS[] = {
     {1, MENU_ACTION_PATIENT_BASIC_INFO, "基本信息", TUI_HEART},
     {2, MENU_ACTION_PATIENT_QUERY_REGISTRATION, "挂号查询", TUI_LOZENGE},
@@ -151,6 +199,7 @@ static const MenuOption MENU_PATIENT_OPTIONS[] = {
     {0, MENU_ACTION_BACK, "返回上级菜单", TUI_ARROW_R}
 };
 
+/** @brief 住院管理员菜单选项 */
 static const MenuOption MENU_INPATIENT_OPTIONS[] = {
     {1, MENU_ACTION_INPATIENT_QUERY_BED, "病区床位查询", TUI_CIRCLE},
     {2, MENU_ACTION_INPATIENT_ADMIT, "入院登记", TUI_HEAVY_CROSS},
@@ -163,6 +212,7 @@ static const MenuOption MENU_INPATIENT_OPTIONS[] = {
     {0, MENU_ACTION_BACK, "返回上级菜单", TUI_ARROW_R}
 };
 
+/** @brief 药房人员菜单选项 */
 static const MenuOption MENU_PHARMACY_OPTIONS[] = {
     {1, MENU_ACTION_PHARMACY_ADD_MEDICINE, "添加药品", TUI_HEAVY_CROSS},
     {2, MENU_ACTION_PHARMACY_RESTOCK, "药品入库", TUI_TRIANGLE},
@@ -172,6 +222,13 @@ static const MenuOption MENU_PHARMACY_OPTIONS[] = {
     {0, MENU_ACTION_BACK, "返回上级菜单", TUI_ARROW_R}
 };
 
+/**
+ * @brief 安全复制文本到缓冲区
+ * @param buffer   目标缓冲区
+ * @param capacity 缓冲区容量
+ * @param text     源文本
+ * @return Result  成功或失败的结果
+ */
 static Result MenuController_copy_text(char *buffer, size_t capacity, const char *text) {
     int written = 0;
 
@@ -187,6 +244,12 @@ static Result MenuController_copy_text(char *buffer, size_t capacity, const char
     return Result_make_success("menu ready");
 }
 
+/**
+ * @brief 根据角色获取对应的菜单选项数组
+ * @param role      角色枚举
+ * @param out_count 输出参数，选项数量
+ * @return 菜单选项数组指针，角色无效时返回 NULL
+ */
 static const MenuOption *MenuController_options_for_role(
     MenuRole role,
     size_t *out_count
@@ -217,6 +280,15 @@ static const MenuOption *MenuController_options_for_role(
     }
 }
 
+/**
+ * @brief 将用户输入字符串解析为整数
+ *
+ * 自动跳过前后空白字符，不允许包含非空白的非数字字符。
+ *
+ * @param input     用户输入字符串
+ * @param out_value 输出参数，解析后的整数值
+ * @return Result   成功或失败的结果
+ */
 static Result MenuController_parse_number(const char *input, int *out_value) {
     const char *start = input;
     char *end_pointer = 0;

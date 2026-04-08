@@ -1,13 +1,29 @@
+/**
+ * @file TuiStyle.h
+ * @brief TUI 样式与动画模块 - 终端用户界面的视觉呈现系统
+ *
+ * 本模块提供完整的终端 UI 工具集，包括：
+ * 1. ANSI 颜色与样式宏定义（前景色、背景色、粗体、暗淡等）
+ * 2. Unicode 制表符与特殊符号宏定义（单线框、双线框、粗线框、方块元素等）
+ * 3. 角色主题系统（不同角色使用不同配色方案）
+ * 4. 屏幕操作（清屏、光标移动、显隐）
+ * 5. CJK 中文字符显示宽度计算
+ * 6. Logo/Banner/状态栏/菜单等 UI 组件的打印函数
+ * 7. 消息反馈（成功、错误、警告、信息、徽章等）
+ * 8. 表格系统（支持彩色行、对齐、边框）
+ * 9. 动画系统（打字机、矩阵雨、粒子爆炸、心跳监护、烟花等特效）
+ */
+
 #ifndef HIS_UI_TUI_STYLE_H
 #define HIS_UI_TUI_STYLE_H
 
 #include <stdio.h>
 
 /* ═══════════════════════════════════════════════════════════════
- *  ANSI Color System
+ *  ANSI 颜色系统 - 终端颜色与样式控制序列
  * ═══════════════════════════════════════════════════════════════ */
 
-/* Basic */
+/* 基础样式 */
 #define TUI_RESET       "\033[0m"
 #define TUI_BOLD        "\033[1m"
 #define TUI_DIM         "\033[2m"
@@ -16,7 +32,7 @@
 #define TUI_BLINK       "\033[5m"
 #define TUI_REVERSE     "\033[7m"
 
-/* Standard colors */
+/* 标准前景色 */
 #define TUI_RED         "\033[31m"
 #define TUI_GREEN       "\033[32m"
 #define TUI_YELLOW      "\033[33m"
@@ -25,7 +41,7 @@
 #define TUI_CYAN        "\033[36m"
 #define TUI_WHITE       "\033[37m"
 
-/* Bright colors (256-color) */
+/* 亮色前景色（256色模式） */
 #define TUI_BRIGHT_RED     "\033[91m"
 #define TUI_BRIGHT_GREEN   "\033[92m"
 #define TUI_BRIGHT_YELLOW  "\033[93m"
@@ -34,7 +50,7 @@
 #define TUI_BRIGHT_CYAN    "\033[96m"
 #define TUI_BRIGHT_WHITE   "\033[97m"
 
-/* Bold colors */
+/* 粗体前景色 */
 #define TUI_BOLD_RED    "\033[1;31m"
 #define TUI_BOLD_GREEN  "\033[1;32m"
 #define TUI_BOLD_YELLOW "\033[1;33m"
@@ -43,7 +59,7 @@
 #define TUI_BOLD_CYAN   "\033[1;36m"
 #define TUI_BOLD_WHITE  "\033[1;37m"
 
-/* Background colors */
+/* 背景色 */
 #define TUI_BG_RED      "\033[41m"
 #define TUI_BG_GREEN    "\033[42m"
 #define TUI_BG_YELLOW   "\033[43m"
@@ -52,15 +68,15 @@
 #define TUI_BG_CYAN     "\033[46m"
 #define TUI_BG_WHITE    "\033[47m"
 
-/* 256-color custom palette */
-#define TUI_FG256(n)    "\033[38;5;" #n "m"
-#define TUI_BG256(n)    "\033[48;5;" #n "m"
+/* 256色自定义调色板宏 */
+#define TUI_FG256(n)    "\033[38;5;" #n "m"  /**< 256色前景色 */
+#define TUI_BG256(n)    "\033[48;5;" #n "m"  /**< 256色背景色 */
 
 /* ═══════════════════════════════════════════════════════════════
- *  Unicode Box Drawing
+ *  Unicode 制表符 - 用于绘制边框和表格
  * ═══════════════════════════════════════════════════════════════ */
 
-/* Single line */
+/* 单线制表符 */
 #define TUI_H    "\xe2\x94\x80"  /* ─ */
 #define TUI_V    "\xe2\x94\x82"  /* │ */
 #define TUI_TL   "\xe2\x94\x8c"  /* ┌ */
@@ -73,7 +89,7 @@
 #define TUI_BT   "\xe2\x94\xb4"  /* ┴ */
 #define TUI_X    "\xe2\x94\xbc"  /* ┼ */
 
-/* Double line */
+/* 双线制表符 */
 #define TUI_DH   "\xe2\x95\x90"  /* ═ */
 #define TUI_DV   "\xe2\x95\x91"  /* ║ */
 #define TUI_DTL  "\xe2\x95\x94"  /* ╔ */
@@ -86,7 +102,7 @@
 #define TUI_DBT  "\xe2\x95\xa9"  /* ╩ */
 #define TUI_DX   "\xe2\x95\xac"  /* ╬ */
 
-/* Heavy line */
+/* 粗线制表符 */
 #define TUI_HH   "\xe2\x94\x81"  /* ━ */
 #define TUI_HV   "\xe2\x94\x83"  /* ┃ */
 #define TUI_HTL  "\xe2\x94\x8f"  /* ┏ */
@@ -94,7 +110,7 @@
 #define TUI_HBL  "\xe2\x94\x97"  /* ┗ */
 #define TUI_HBR  "\xe2\x94\x9b"  /* ┛ */
 
-/* Block elements */
+/* 方块元素 - 用于进度条、动画等 */
 #define TUI_BLOCK_FULL   "\xe2\x96\x88"  /* █ */
 #define TUI_BLOCK_DARK   "\xe2\x96\x93"  /* ▓ */
 #define TUI_BLOCK_MED    "\xe2\x96\x92"  /* ▒ */
@@ -105,7 +121,7 @@
 #define TUI_BLOCK_RIGHT  "\xe2\x96\x90"  /* ▐ */
 
 /* ═══════════════════════════════════════════════════════════════
- *  Unicode Symbols
+ *  Unicode 符号 - 用于菜单图标和装饰
  * ═══════════════════════════════════════════════════════════════ */
 
 #define TUI_BULLET       "\xe2\x97\x86"  /* ◆ */
@@ -142,9 +158,12 @@
 #define TUI_LOZENGE      "\xe2\x97\x88"  /* ◈ */
 
 /* ═══════════════════════════════════════════════════════════════
- *  Role Theme System
+ *  角色主题系统 - 为不同角色分配独立配色方案
  * ═══════════════════════════════════════════════════════════════ */
 
+/**
+ * @brief 角色主题枚举 - 定义各角色的视觉主题
+ */
 typedef enum TuiRoleTheme {
     TUI_THEME_DEFAULT = 0,
     TUI_THEME_ADMIN = 1,
@@ -154,59 +173,85 @@ typedef enum TuiRoleTheme {
     TUI_THEME_PHARMACY = 5
 } TuiRoleTheme;
 
+/** @brief 获取角色主题的前景色 ANSI 序列 */
 const char *tui_role_color(TuiRoleTheme theme);
+/** @brief 获取角色主题的背景色 ANSI 序列 */
 const char *tui_role_bg(TuiRoleTheme theme);
+/** @brief 获取角色主题的图标符号 */
 const char *tui_role_icon(TuiRoleTheme theme);
+/** @brief 获取角色主题的中文标签 */
 const char *tui_role_label(TuiRoleTheme theme);
 
 /* ═══════════════════════════════════════════════════════════════
- *  Screen Operations
+ *  屏幕操作 - 清屏、光标控制
  * ═══════════════════════════════════════════════════════════════ */
 
+/** @brief 清除屏幕并将光标移至左上角 */
 void tui_clear_screen(void);
+/** @brief 移动光标到指定行列位置（1-based） */
 void tui_move_cursor(FILE *out, int row, int col);
+/** @brief 隐藏光标 */
 void tui_hide_cursor(FILE *out);
+/** @brief 显示光标 */
 void tui_show_cursor(FILE *out);
 
 /* ═══════════════════════════════════════════════════════════════
- *  Display Width (CJK-aware)
+ *  显示宽度计算 - 中日韩(CJK)字符感知
  * ═══════════════════════════════════════════════════════════════ */
 
+/** @brief 计算 UTF-8 字符串的终端显示宽度（CJK 字符占 2 列） */
 int tui_display_width(const char *text);
+/** @brief 输出文本并右侧填充空格至指定宽度 */
 void tui_pad_right(FILE *out, const char *text, int width);
 
 /* ═══════════════════════════════════════════════════════════════
- *  Logo & Banner
+ *  Logo 与 Banner - 系统标识打印
  * ═══════════════════════════════════════════════════════════════ */
 
+/** @brief 打印 HIS 系统 ASCII Art Logo（渐变色） */
 void tui_print_logo(FILE *out);
+/** @brief 打印带边框的标题横幅 */
 void tui_print_banner(FILE *out, const char *title);
+/** @brief 以渐变色逐字符打印文本 */
 void tui_print_gradient_text(FILE *out, const char *text);
+/** @brief 打印欢迎登录框（含角色主题色） */
 void tui_print_welcome(FILE *out, TuiRoleTheme theme, const char *user_id);
+/** @brief 打印再见/退出消息 */
 void tui_print_goodbye(FILE *out);
 
 /* ═══════════════════════════════════════════════════════════════
- *  Status Bar & Headers
+ *  状态栏与标题 - 页面头部组件
  * ═══════════════════════════════════════════════════════════════ */
 
+/** @brief 打印简单状态栏（蓝底白字） */
 void tui_print_status_bar(FILE *out, const char *role, const char *user_id);
+/** @brief 打印带角色主题的状态栏 */
 void tui_print_status_bar_themed(FILE *out, TuiRoleTheme theme, const char *user_id);
+/** @brief 打印居中标题框 */
 void tui_print_header(FILE *out, const char *title, int width);
+/** @brief 打印带图标和下划线的节标题 */
 void tui_print_section(FILE *out, const char *icon, const char *title);
+/** @brief 打印单线水平分隔线 */
 void tui_print_hline(FILE *out, int width);
+/** @brief 打印双线水平分隔线 */
 void tui_print_double_hline(FILE *out, int width);
 
 /* ═══════════════════════════════════════════════════════════════
- *  Messages & Feedback
+ *  消息与反馈 - 操作结果展示
  * ═══════════════════════════════════════════════════════════════ */
 
+/** @brief 打印成功消息（绿色勾号） */
 void tui_print_success(FILE *out, const char *message);
+/** @brief 打印错误消息（红色叉号） */
 void tui_print_error(FILE *out, const char *message);
+/** @brief 打印警告消息（黄色三角） */
 void tui_print_warning(FILE *out, const char *message);
+/** @brief 打印信息消息（蓝色圆点） */
 void tui_print_info(FILE *out, const char *message);
+/** @brief 打印输入提示符（箭头 + 文本） */
 void tui_print_prompt(FILE *out, const char *text);
 
-/* Badge: colored inline label */
+/** @brief 徽章颜色枚举 - 用于彩色内联标签 */
 typedef enum TuiBadgeColor {
     TUI_BADGE_GREEN = 0,
     TUI_BADGE_RED = 1,
@@ -216,122 +261,144 @@ typedef enum TuiBadgeColor {
     TUI_BADGE_CYAN = 5
 } TuiBadgeColor;
 
+/** @brief 打印彩色徽章标签 */
 void tui_print_badge(FILE *out, const char *text, TuiBadgeColor color);
+/** @brief 打印键值对信息 */
 void tui_print_kv(FILE *out, const char *key, const char *value);
+/** @brief 打印带自定义颜色的键值对信息 */
 void tui_print_kv_colored(FILE *out, const char *key, const char *value, const char *value_color);
 
-/* Progress bar */
+/** @brief 打印静态进度条（label 当前/总数） */
 void tui_print_progress(FILE *out, const char *label, int current, int total, int bar_width);
 
 /* ═══════════════════════════════════════════════════════════════
- *  Table System
+ *  表格系统 - 终端表格绘制
  * ═══════════════════════════════════════════════════════════════ */
 
-#define TUI_TABLE_MAX_COLUMNS 10
+#define TUI_TABLE_MAX_COLUMNS 10  /**< 表格最大列数 */
 
+/**
+ * @brief 表格结构体 - 描述表格的列定义和样式
+ */
 typedef struct TuiTable {
-    int column_count;
-    int widths[TUI_TABLE_MAX_COLUMNS];
-    char headers[TUI_TABLE_MAX_COLUMNS][64];
-    int row_count;
-    const char *border_color;
-    const char *header_color;
+    int column_count;                          /**< 列数 */
+    int widths[TUI_TABLE_MAX_COLUMNS];         /**< 每列的显示宽度 */
+    char headers[TUI_TABLE_MAX_COLUMNS][64];   /**< 每列的表头文字 */
+    int row_count;                             /**< 数据行数 */
+    const char *border_color;                  /**< 边框颜色 ANSI 序列 */
+    const char *header_color;                  /**< 表头颜色 ANSI 序列 */
 } TuiTable;
 
+/** @brief 初始化表格结构体 */
 void TuiTable_init(TuiTable *table, int column_count);
+/** @brief 设置指定列的表头文字和宽度 */
 void TuiTable_set_header(TuiTable *table, int col, const char *header, int width);
+/** @brief 设置表格的边框色和表头色 */
 void TuiTable_set_colors(TuiTable *table, const char *border_color, const char *header_color);
+/** @brief 打印表格顶部边框 */
 void TuiTable_print_top(const TuiTable *table, FILE *out);
+/** @brief 打印表格表头行 */
 void TuiTable_print_header_row(const TuiTable *table, FILE *out);
+/** @brief 打印表格行间分隔线 */
 void TuiTable_print_separator(const TuiTable *table, FILE *out);
+/** @brief 打印一行数据 */
 void TuiTable_print_row(const TuiTable *table, FILE *out, const char *values[], int count);
+/** @brief 打印带自定义颜色的一行数据 */
 void TuiTable_print_row_colored(const TuiTable *table, FILE *out, const char *values[], const char *colors[], int count);
+/** @brief 打印表格底部边框 */
 void TuiTable_print_bottom(const TuiTable *table, FILE *out);
+/** @brief 打印空表格提示消息 */
 void TuiTable_print_empty(const TuiTable *table, FILE *out, const char *message);
 
 /* ═══════════════════════════════════════════════════════════════
- *  Menu Styling
+ *  菜单样式 - 菜单框架组件
  * ═══════════════════════════════════════════════════════════════ */
 
+/** @brief 打印菜单标题（委托给 tui_print_header） */
 void tui_print_menu_title(FILE *out, const char *title, int width);
+/** @brief 打印菜单项（编号 + 标签） */
 void tui_print_menu_item(FILE *out, int number, const char *label, int width);
+/** @brief 打印带图标的菜单项（编号 + 图标 + 标签） */
 void tui_print_menu_item_icon(FILE *out, int number, const char *icon, const char *label, int width);
+/** @brief 打印菜单底部边框 */
 void tui_print_menu_bottom(FILE *out, int width);
 
 /* ═══════════════════════════════════════════════════════════════
- *  Animation System
+ *  动画系统 - 终端动画特效
+ *  注意: 当 stdout 被管道重定向时，动画自动跳过
  * ═══════════════════════════════════════════════════════════════ */
 
-/* TTY detection: animations are skipped when stdout is piped */
+/** @brief 检测当前终端是否为交互式（非管道重定向） */
 int tui_is_interactive(void);
 
-/* Delay in milliseconds (no-op if not interactive) */
+/** @brief 延迟指定毫秒（非交互模式下不执行） */
 void tui_delay(int ms);
 
-/* Animated logo: each line cascades down with color sweep */
+/** @brief 动画 Logo：逐行级联显示，带颜色渐变效果 */
 void tui_animate_logo(FILE *out);
 
-/* Animated banner: rainbow bar sweeps, then title typewriters in */
+/** @brief 动画 Banner：彩虹条扫过 + 标题打字机效果 */
 void tui_animate_banner(FILE *out, const char *title);
 
-/* Typewriter: prints text char-by-char with per-char delay */
+/** @brief 打字机效果：逐字符输出文本，每个字符间有延迟 */
 void tui_animate_typewriter(FILE *out, const char *text, int char_delay_ms);
 
-/* Animated welcome: box draws itself, then content fades in */
+/** @brief 动画欢迎框：边框自绘 + 内容渐入 */
 void tui_animate_welcome(FILE *out, TuiRoleTheme theme, const char *user_id);
 
-/* Animated goodbye: rainbow wave + fade out */
+/** @brief 动画再见：彩虹波浪 + 淡出效果 */
 void tui_animate_goodbye(FILE *out);
 
-/* Screen transition: horizontal wipe with gradient blocks */
+/** @brief 屏幕过渡动画：渐变方块水平擦除 */
 void tui_animate_transition(FILE *out);
 
-/* Print multi-line string line-by-line with slide-in effect */
+/** @brief 逐行滑入动画：多行文本按行依次显示 */
 void tui_animate_lines(FILE *out, const char *text, int line_delay_ms);
 
-/* Spinner for brief waits (call start, then stop when done) */
+/** @brief 旋转加载指示器：在指定时长内显示旋转动画 */
 void tui_spinner_run(FILE *out, const char *message, int duration_ms);
 
-/* Animated progress bar that fills up */
+/** @brief 动画进度条：从 0% 填充到 100% */
 void tui_animate_progress(FILE *out, const char *label, int steps, int bar_width);
 
-/* Success/error with brief flash highlight */
+/** @brief 成功消息动画：绿色闪烁高亮 */
 void tui_animate_success(FILE *out, const char *message);
+/** @brief 错误消息动画：红色闪烁高亮 */
 void tui_animate_error(FILE *out, const char *message);
 
-/* Rainbow color cycling text (each char gets next color) */
+/** @brief 彩虹文本动画：颜色循环变幻 */
 void tui_animate_rainbow(FILE *out, const char *text, int cycles, int frame_delay_ms);
 
-/* ── Advanced Animation Effects ─────────────────────────────── */
+/* ── 高级动画特效 ─────────────────────────────────────────── */
 
-/* Matrix digital rain with medical symbols */
+/** @brief 矩阵数字雨动画：医疗符号从上往下飘落 */
 void tui_animate_matrix_rain(FILE *out, int width, int height, int duration_ms);
 
-/* Particle explosion burst from center */
+/** @brief 粒子爆炸动画：从中心向四周扩散 */
 void tui_animate_particle_explosion(FILE *out, int width, int height);
 
-/* ECG heartbeat monitor line */
+/** @brief 心电图动画：ECG 波形扫描显示 */
 void tui_animate_heartbeat(FILE *out, int width, int beats);
 
-/* Text glitch/distortion effect */
+/** @brief 文本故障/扭曲效果动画 */
 void tui_animate_glitch(FILE *out, const char *text, int intensity, int duration_ms);
 
-/* Fireworks celebration */
+/** @brief 烟花庆祝动画 */
 void tui_animate_fireworks(FILE *out, int width, int height, int count);
 
-/* DNA double helix rotation */
+/** @brief DNA 双螺旋旋转动画 */
 void tui_animate_dna_helix(FILE *out, int height, int frames);
 
-/* Text fade-in using block density progression */
+/** @brief 文本淡入动画：通过方块密度渐变揭示文字 */
 void tui_animate_fade_reveal(FILE *out, const char *text, int steps);
 
-/* Sine wave animated text */
+/** @brief 正弦波浪文本动画 */
 void tui_animate_wave_text(FILE *out, const char *text, int cycles, int frame_delay_ms);
 
-/* Plasma gradient background effect */
+/** @brief 等离子体渐变背景动画 */
 void tui_animate_plasma(FILE *out, int width, int height, int frames);
 
-/* Themed screen entrance: combines multiple effects for login */
+/** @brief 角色主题入场动画：组合等离子+汇聚+扩展效果 */
 void tui_animate_entrance(FILE *out, TuiRoleTheme theme);
 
 #endif

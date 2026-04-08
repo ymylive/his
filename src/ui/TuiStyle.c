@@ -1,5 +1,20 @@
+/**
+ * @file TuiStyle.c
+ * @brief TUI 样式与动画系统实现
+ *
+ * 本文件实现了 HIS 系统完整的终端用户界面视觉系统，包含：
+ * - 角色主题配色（管理员=红, 医生=绿, 患者=蓝, 住院=品红, 药房=黄）
+ * - 屏幕操作（清屏、光标控制）
+ * - CJK 字符显示宽度计算（3字节以上 UTF-8 按双宽处理）
+ * - Logo/Banner/欢迎框/再见框等 UI 组件
+ * - 状态栏、节标题、消息反馈等页面元素
+ * - 完整的表格绘制系统（支持彩色行）
+ * - 菜单框架组件
+ * - 丰富的动画特效系统（需要交互式终端支持）
+ */
+
 #include "ui/TuiStyle.h"
-#include "common/UpdateChecker.h"  /* HIS_VERSION */
+#include "common/UpdateChecker.h"  /* HIS_VERSION 版本号 */
 
 #include <string.h>
 #include <stdlib.h>
@@ -7,11 +22,11 @@
 #include <time.h>
 
 #ifndef M_PI
-#define M_PI 3.14159265358979323846
+#define M_PI 3.14159265358979323846  /**< 圆周率常量 */
 #endif
 
 /* ═══════════════════════════════════════════════════════════════
- *  Role Theme System
+ *  角色主题系统 - 为各角色分配前景色、背景色、图标和标签
  * ═══════════════════════════════════════════════════════════════ */
 
 const char *tui_role_color(TuiRoleTheme theme) {
@@ -59,7 +74,7 @@ const char *tui_role_label(TuiRoleTheme theme) {
 }
 
 /* ═══════════════════════════════════════════════════════════════
- *  Screen Operations
+ *  屏幕操作 - 终端控制序列
  * ═══════════════════════════════════════════════════════════════ */
 
 void tui_clear_screen(void) {
@@ -85,9 +100,18 @@ void tui_show_cursor(FILE *out) {
 }
 
 /* ═══════════════════════════════════════════════════════════════
- *  Display Width (CJK-aware)
+ *  显示宽度计算 - 中日韩字符宽度感知
  * ═══════════════════════════════════════════════════════════════ */
 
+/**
+ * @brief 计算 UTF-8 字符串的终端显示宽度
+ *
+ * 根据 UTF-8 编码字节数判断字符宽度：
+ * - 1 字节 (ASCII): 宽度 1
+ * - 2 字节: 宽度 1（拉丁扩展等）
+ * - 3 字节: 宽度 2（CJK 中文字符等）
+ * - 4 字节: 宽度 2（表情符号等）
+ */
 int tui_display_width(const char *text) {
     int width = 0;
     const unsigned char *p = (const unsigned char *)text;
@@ -126,12 +150,13 @@ void tui_pad_right(FILE *out, const char *text, int width) {
     for (i = 0; i < width - dw; i++) fputc(' ', out);
 }
 
+/** @brief 重复输出指定字符串若干次 */
 static void tui_repeat(FILE *out, const char *str, int count) {
     int i = 0;
     for (i = 0; i < count; i++) fputs(str, out);
 }
 
-/* Output one UTF-8 character and advance pointer. Returns bytes consumed. */
+/** @brief 输出一个 UTF-8 字符并返回消耗的字节数 */
 static int tui_fputc_utf8(FILE *out, const unsigned char *p) {
     if (*p < 0x80) {
         fputc(*p, out);
@@ -149,10 +174,10 @@ static int tui_fputc_utf8(FILE *out, const unsigned char *p) {
 }
 
 /* ═══════════════════════════════════════════════════════════════
- *  Logo & Banner
+ *  Logo 与 Banner - 系统标识与标题展示
  * ═══════════════════════════════════════════════════════════════ */
 
-/* Gradient colors for the logo (red -> yellow -> green -> cyan -> blue -> magenta) */
+/* 渐变色数组：红 -> 黄 -> 绿 -> 青 -> 蓝 -> 品红 */
 static const char *GRADIENT_COLORS[] = {
     "\033[1;31m",  /* red */
     "\033[1;33m",  /* yellow */
@@ -163,7 +188,7 @@ static const char *GRADIENT_COLORS[] = {
 };
 #define GRADIENT_COUNT 6
 
-/* 256-color smooth gradient for premium effects (warm sunset palette) */
+/* 256色平滑渐变色板（暖色日落调色板，用于高级效果） */
 static const int GRADIENT_256[] = {
     196, 202, 208, 214, 220, 226,  /* red → orange → yellow */
     190, 154, 118, 82, 46,         /* yellow-green → green */
@@ -408,7 +433,7 @@ void tui_print_goodbye(FILE *out) {
 }
 
 /* ═══════════════════════════════════════════════════════════════
- *  Status Bar & Headers
+ *  状态栏与标题 - 页面顶部组件
  * ═══════════════════════════════════════════════════════════════ */
 
 void tui_print_status_bar(FILE *out, const char *role, const char *user_id) {
@@ -552,7 +577,7 @@ void tui_print_double_hline(FILE *out, int width) {
 }
 
 /* ═══════════════════════════════════════════════════════════════
- *  Messages & Feedback
+ *  消息与反馈 - 操作结果展示组件
  * ═══════════════════════════════════════════════════════════════ */
 
 void tui_print_success(FILE *out, const char *message) {
@@ -662,7 +687,7 @@ void tui_print_progress(FILE *out, const char *label, int current, int total, in
 }
 
 /* ═══════════════════════════════════════════════════════════════
- *  Table System
+ *  表格系统 - 终端表格绘制与格式化
  * ═══════════════════════════════════════════════════════════════ */
 
 void TuiTable_init(TuiTable *table, int column_count) {
@@ -831,7 +856,7 @@ void TuiTable_print_empty(const TuiTable *table, FILE *out, const char *message)
 }
 
 /* ═══════════════════════════════════════════════════════════════
- *  Menu Styling
+ *  菜单样式 - 菜单框架组件
  * ═══════════════════════════════════════════════════════════════ */
 
 void tui_print_menu_title(FILE *out, const char *title, int width) {
@@ -909,7 +934,8 @@ void tui_print_menu_bottom(FILE *out, int width) {
 }
 
 /* ═══════════════════════════════════════════════════════════════
- *  Animation System
+ *  动画系统 - 终端动画特效引擎
+ *  所有动画在非交互模式（管道重定向）下自动降级为静态输出
  * ═══════════════════════════════════════════════════════════════ */
 
 #ifdef _WIN32
@@ -930,7 +956,7 @@ static void tui_sleep_ms(int ms) { usleep(ms * 1000); }
 static int tui_check_tty(void) { return isatty(STDOUT_FILENO); }
 #endif
 
-static int g_animation_interactive = -1; /* -1 = not checked */
+static int g_animation_interactive = -1; /* -1 = 未检测，0 = 非交互，1 = 交互 */
 
 int tui_is_interactive(void) {
     if (g_animation_interactive < 0)
@@ -1507,10 +1533,10 @@ void tui_animate_rainbow(FILE *out, const char *text, int cycles, int frame_dela
 }
 
 /* ═══════════════════════════════════════════════════════════════
- *  Advanced Animation Effects
+ *  高级动画特效 - 矩阵雨/粒子爆炸/心跳/故障/烟花/DNA螺旋等
  * ═══════════════════════════════════════════════════════════════ */
 
-/* Simple pseudo-random using xorshift32 */
+/* 简单伪随机数生成器（xorshift32 算法） */
 static unsigned int tui_rand_state = 0;
 
 static void tui_rand_seed(void) {
@@ -1524,7 +1550,7 @@ static int tui_rand(void) {
     return (int)(tui_rand_state & 0x7FFF);
 }
 
-/* 256-color helpers */
+/* 256色辅助函数 */
 static void tui_set_fg256(FILE *out, int color) {
     fprintf(out, "\033[38;5;%dm", color);
 }
@@ -1533,7 +1559,7 @@ static void tui_set_bg256(FILE *out, int color) {
     fprintf(out, "\033[48;5;%dm", color);
 }
 
-/* Pre-computed sine table for animation performance (256 entries, range -1.0 to 1.0) */
+/* 预计算正弦查找表，用于提升动画性能（256 个条目，范围 -1.0 到 1.0） */
 static double SIN_LUT[256];
 static int g_sin_lut_ready = 0;
 

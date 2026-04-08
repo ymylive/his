@@ -1,12 +1,32 @@
+/**
+ * @file DemoData.c
+ * @brief 演示数据模块实现 - 提供演示数据重置和种子文件路径解析功能
+ *
+ * 本文件实现了将预设的种子数据文件复制到运行时数据目录的功能，
+ * 用于将系统恢复到初始演示状态。
+ */
+
 #include "ui/DemoData.h"
 
 #include <stdio.h>
 #include <string.h>
 
+/**
+ * @brief 演示数据文件路径封装结构体
+ *
+ * 用于将运行时数据文件路径统一存储在数组中，便于批量处理。
+ */
 typedef struct DemoDataFilePath {
-    const char *runtime_path;
+    const char *runtime_path;  /**< 运行时数据文件路径 */
 } DemoDataFilePath;
 
+/**
+ * @brief 安全复制字符串
+ * @param destination 目标缓冲区
+ * @param capacity    目标缓冲区容量
+ * @param source      源字符串（可为 NULL）
+ * @return 1 表示成功，0 表示失败（参数无效）
+ */
 static int DemoData_copy_text(char *destination, size_t capacity, const char *source) {
     if (destination == 0 || capacity == 0) {
         return 0;
@@ -22,6 +42,14 @@ static int DemoData_copy_text(char *destination, size_t capacity, const char *so
     return 1;
 }
 
+/**
+ * @brief 查找路径中最后一个目录分隔符的位置
+ *
+ * 同时支持正斜杠(/)和反斜杠(\)，适配 Unix 和 Windows 路径。
+ *
+ * @param path 文件路径字符串
+ * @return 最后一个分隔符的指针，未找到时返回 NULL
+ */
 static const char *DemoData_find_last_separator(const char *path) {
     const char *last_slash = 0;
     const char *last_backslash = 0;
@@ -55,13 +83,16 @@ Result DemoData_resolve_seed_path(
         return Result_make_failure("demo data path arguments missing");
     }
 
+    /* 查找路径中最后一个目录分隔符 */
     separator = DemoData_find_last_separator(runtime_path);
     if (separator == 0) {
         return Result_make_failure("demo data runtime path invalid");
     }
 
+    /* 计算目录前缀长度和文件名 */
     prefix_length = (size_t)(separator - runtime_path);
     file_name = separator + 1;
+    /* 构造种子路径：在父目录下插入 "demo_seed" 子目录 */
     written = snprintf(
         seed_path,
         seed_path_capacity,
@@ -78,6 +109,15 @@ Result DemoData_resolve_seed_path(
     return Result_make_success("demo data seed path ready");
 }
 
+/**
+ * @brief 复制文件内容
+ *
+ * 以二进制模式读取源文件，写入目标文件。使用 4096 字节缓冲区分块传输。
+ *
+ * @param source_path      源文件路径
+ * @param destination_path 目标文件路径
+ * @return Result          成功或失败的结果
+ */
 static Result DemoData_copy_file(const char *source_path, const char *destination_path) {
     FILE *source = 0;
     FILE *destination = 0;
@@ -112,7 +152,14 @@ static Result DemoData_copy_file(const char *source_path, const char *destinatio
     return Result_make_success("demo data file copied");
 }
 
+/**
+ * @brief 重置所有演示数据
+ *
+ * 遍历所有数据文件路径，为每个文件推导对应的种子文件路径，
+ * 然后将种子文件复制覆盖运行时文件，实现数据重置。
+ */
 Result DemoData_reset(const MenuApplicationPaths *paths, char *buffer, size_t capacity) {
+    /* 将所有数据文件路径收集到数组中，便于统一遍历处理 */
     DemoDataFilePath files[] = {
         { paths != 0 ? paths->user_path : 0 },
         { paths != 0 ? paths->patient_path : 0 },
@@ -138,7 +185,9 @@ Result DemoData_reset(const MenuApplicationPaths *paths, char *buffer, size_t ca
         return Result_make_failure("demo data paths missing");
     }
 
+    /* 逐一处理每个数据文件：推导种子路径 -> 复制种子文件到运行时路径 */
     for (index = 0; index < sizeof(files) / sizeof(files[0]); index++) {
+        /* 第一步：推导种子文件路径 */
         Result result = DemoData_resolve_seed_path(
             files[index].runtime_path,
             seed_path,
@@ -149,6 +198,7 @@ Result DemoData_reset(const MenuApplicationPaths *paths, char *buffer, size_t ca
             return result;
         }
 
+        /* 第二步：将种子文件复制到运行时路径 */
         result = DemoData_copy_file(seed_path, files[index].runtime_path);
         if (result.success == 0) {
             if (buffer != 0 && capacity > 0) {
