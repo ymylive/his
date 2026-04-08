@@ -140,7 +140,7 @@ static int menu_append_item(
     snprintf(content, sizeof(content), "%d. %s", number, label);
     dw = tui_display_width(content);
     if (icon != 0) {
-        icon_extra = 2;  /* icon is 1 display column + 1 space */
+        icon_extra = tui_display_width(icon) + 1;  /* 图标显示宽度 + 后面的空格 */
     }
     pad = MENU_INNER - 2 - icon_extra - dw;  /* 2 for leading spaces */
     if (pad < 0) pad = 0;

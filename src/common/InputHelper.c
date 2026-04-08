@@ -347,6 +347,35 @@ int InputHelper_read_line(FILE *input, char *buffer, size_t capacity) {
     /* 去除末尾的换行符 */
     if (length > 0 && buffer[length - 1] == '\n') {
         buffer[length - 1] = '\0';
+        length--;
+    }
+
+    /*
+     * 后备 ESC 检测：当平台特定的预读（_getch / termios raw）未能拦截 ESC 时，
+     * fgets 会将 ESC 字符（0x1B）读入缓冲区。某些终端会将其显示为 "^["。
+     * 如果缓冲区内容仅包含 ESC 字符或其文本表示 "^["，则视为 ESC 取消。
+     */
+    if (length > 0) {
+        const char *p = buffer;
+        int all_esc = 1;
+        /* 检查是否全部由 ESC 字符(0x1B)和转义序列尾部字节([A-Z~)组成 */
+        while (*p != '\0') {
+            unsigned char ch = (unsigned char)*p;
+            if (ch != 0x1B && ch != '[' && !(ch >= 'A' && ch <= 'Z') && ch != '~') {
+                /* 也检查 "^[" 文本表示 */
+                if (ch == '^' && *(p + 1) == '[') {
+                    p += 2;
+                    continue;
+                }
+                all_esc = 0;
+                break;
+            }
+            p++;
+        }
+        if (all_esc && length > 0) {
+            buffer[0] = '\0';
+            return -2;
+        }
     }
 
     return 1; /* 成功读取一行 */
