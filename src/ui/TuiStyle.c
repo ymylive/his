@@ -201,21 +201,24 @@ const int TUI_GRADIENT_256[] = {
 #define GRADIENT_256_COUNT TUI_GRADIENT_256_COUNT
 
 static const char *LOGO_LINES[] = {
-    "  \xe2\x96\x88\xe2\x96\x88\xe2\x95\x97  \xe2\x96\x88\xe2\x96\x88\xe2\x95\x97 \xe2\x96\x88\xe2\x96\x88\xe2\x95\x97 \xe2\x96\x88\xe2\x96\x88\xe2\x96\x88\xe2\x96\x88\xe2\x96\x88\xe2\x96\x88\xe2\x96\x88\xe2\x95\x97",
-    "  \xe2\x96\x88\xe2\x96\x88\xe2\x95\x91  \xe2\x96\x88\xe2\x96\x88\xe2\x95\x91 \xe2\x96\x88\xe2\x96\x88\xe2\x95\x91 \xe2\x96\x88\xe2\x96\x88\xe2\x95\x94\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x9d",
-    "  \xe2\x96\x88\xe2\x96\x88\xe2\x96\x88\xe2\x96\x88\xe2\x96\x88\xe2\x96\x88\xe2\x96\x88\xe2\x95\x91 \xe2\x96\x88\xe2\x96\x88\xe2\x95\x91 \xe2\x96\x88\xe2\x96\x88\xe2\x96\x88\xe2\x96\x88\xe2\x96\x88\xe2\x96\x88\xe2\x96\x88\xe2\x95\x97",
-    "  \xe2\x96\x88\xe2\x96\x88\xe2\x95\x94\xe2\x95\x90\xe2\x95\x90\xe2\x96\x88\xe2\x96\x88\xe2\x95\x91 \xe2\x96\x88\xe2\x96\x88\xe2\x95\x91 \xe2\x95\x9a\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x96\x88\xe2\x96\x88\xe2\x95\x91",
-    "  \xe2\x96\x88\xe2\x96\x88\xe2\x95\x91  \xe2\x96\x88\xe2\x96\x88\xe2\x95\x91 \xe2\x96\x88\xe2\x96\x88\xe2\x95\x91 \xe2\x96\x88\xe2\x96\x88\xe2\x96\x88\xe2\x96\x88\xe2\x96\x88\xe2\x96\x88\xe2\x96\x88\xe2\x95\x91",
-    "  \xe2\x95\x9a\xe2\x95\x90\xe2\x95\x9d  \xe2\x95\x9a\xe2\x95\x90\xe2\x95\x9d \xe2\x95\x9a\xe2\x95\x90\xe2\x95\x9d \xe2\x95\x9a\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x9d"
+    "\xe2\x96\x88\xe2\x96\x88\xe2\x95\x97  \xe2\x96\x88\xe2\x96\x88\xe2\x95\x97 \xe2\x96\x88\xe2\x96\x88\xe2\x95\x97 \xe2\x96\x88\xe2\x96\x88\xe2\x96\x88\xe2\x96\x88\xe2\x96\x88\xe2\x96\x88\xe2\x96\x88\xe2\x95\x97",
+    "\xe2\x96\x88\xe2\x96\x88\xe2\x95\x91  \xe2\x96\x88\xe2\x96\x88\xe2\x95\x91 \xe2\x96\x88\xe2\x96\x88\xe2\x95\x91 \xe2\x96\x88\xe2\x96\x88\xe2\x95\x94\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x9d",
+    "\xe2\x96\x88\xe2\x96\x88\xe2\x96\x88\xe2\x96\x88\xe2\x96\x88\xe2\x96\x88\xe2\x96\x88\xe2\x95\x91 \xe2\x96\x88\xe2\x96\x88\xe2\x95\x91 \xe2\x96\x88\xe2\x96\x88\xe2\x96\x88\xe2\x96\x88\xe2\x96\x88\xe2\x96\x88\xe2\x96\x88\xe2\x95\x97",
+    "\xe2\x96\x88\xe2\x96\x88\xe2\x95\x94\xe2\x95\x90\xe2\x95\x90\xe2\x96\x88\xe2\x96\x88\xe2\x95\x91 \xe2\x96\x88\xe2\x96\x88\xe2\x95\x91 \xe2\x95\x9a\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x96\x88\xe2\x96\x88\xe2\x95\x91",
+    "\xe2\x96\x88\xe2\x96\x88\xe2\x95\x91  \xe2\x96\x88\xe2\x96\x88\xe2\x95\x91 \xe2\x96\x88\xe2\x96\x88\xe2\x95\x91 \xe2\x96\x88\xe2\x96\x88\xe2\x96\x88\xe2\x96\x88\xe2\x96\x88\xe2\x96\x88\xe2\x96\x88\xe2\x95\x91",
+    "\xe2\x95\x9a\xe2\x95\x90\xe2\x95\x9d  \xe2\x95\x9a\xe2\x95\x90\xe2\x95\x9d \xe2\x95\x9a\xe2\x95\x90\xe2\x95\x9d \xe2\x95\x9a\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x90\xe2\x95\x9d"
 };
 #define LOGO_LINE_COUNT 6
 
 void tui_print_logo(FILE *out) {
     int i = 0;
+    int logo_width = 0;
     if (out == 0) return;
 
+    logo_width = tui_display_width(LOGO_LINES[0]);
     fputc('\n', out);
     for (i = 0; i < LOGO_LINE_COUNT; i++) {
+        tui_print_margin(out, logo_width);
         fputs(GRADIENT_COLORS[i % GRADIENT_COUNT], out);
         fputs(LOGO_LINES[i], out);
         fputs(TUI_RESET, out);
@@ -696,8 +699,9 @@ void tui_print_progress(FILE *out, const char *label, int current, int total, in
     if (filled > bar_width) filled = bar_width;
     pct = (current * 100) / total;
 
+    { int content_w = bar_width + 8; if (label != 0) content_w += tui_display_width(label) + 1; tui_print_margin(out, content_w); }
     if (label != 0) {
-        fprintf(out, "  %s ", label);
+        fprintf(out, "%s ", label);
     }
     fprintf(out, "\033[38;5;240m" TUI_V "\033[0m");
     for (i = 0; i < filled; i++) {
@@ -1043,6 +1047,7 @@ void tui_delay(int ms) {
 
 void tui_animate_logo(FILE *out) {
     int i = 0;
+    int logo_width = 0;
     if (out == 0) return;
 
     if (!tui_is_interactive()) {
@@ -1050,21 +1055,11 @@ void tui_animate_logo(FILE *out) {
         return;
     }
 
+    logo_width = tui_display_width(LOGO_LINES[0]);
     tui_hide_cursor(out);
     fputc('\n', out);
     for (i = 0; i < LOGO_LINE_COUNT; i++) {
-        /* Sweep: print spaces then reveal */
-        int j = 0;
-        tui_print_margin(out, 46);
-        fputs(TUI_DIM, out);
-        /* ghost pass */
-        for (j = 0; j < 24; j++) fputs(TUI_BLOCK_LIGHT, out);
-        fputs(TUI_RESET, out);
-        fflush(out);
-        tui_sleep_ms(30);
-
-        /* overwrite with real line */
-        fputs("\r", out);
+        tui_print_margin(out, logo_width);
         fputs(GRADIENT_COLORS[i % GRADIENT_COUNT], out);
         fputs(LOGO_LINES[i], out);
         fputs(TUI_RESET, out);
@@ -1268,7 +1263,7 @@ void tui_animate_welcome(FILE *out, TuiRoleTheme theme, const char *user_id) {
     fputs(color, out);
     fputs(TUI_HV, out);
     fputs(TUI_RESET, out);
-    tui_print_margin(out, 46);
+    fputs("  ", out);
     fputs(TUI_SPARKLE, out);
     fputs(" ", out);
     fputs(TUI_BOLD_WHITE, out);
@@ -1479,17 +1474,25 @@ void tui_spinner_run(FILE *out, const char *message, int duration_ms) {
     int elapsed = 0;
     int frame = 0;
     int step = 80;
+    int msg_w = 0;
 
     if (out == 0) return;
     if (!tui_is_interactive()) {
-        if (message != 0) fprintf(out, "  %s\n", message);
+        if (message != 0) {
+            msg_w = tui_display_width(message);
+            tui_print_margin(out, msg_w);
+            fprintf(out, "%s\n", message);
+        }
         return;
     }
     if (duration_ms <= 0) duration_ms = 500;
 
+    msg_w = tui_display_width(message != 0 ? message : "") + 2; /* spinner + space + message */
     tui_hide_cursor(out);
     while (elapsed < duration_ms) {
-        fprintf(out, "\r  %s%s%s %s%s%s",
+        fputs("\r\033[2K", out);
+        tui_print_margin(out, msg_w);
+        fprintf(out, "%s%s%s %s%s%s",
             GRADIENT_COLORS[frame % GRADIENT_COUNT],
             SPINNER_FRAMES[frame % SPINNER_FRAME_COUNT],
             TUI_RESET,
@@ -1524,7 +1527,10 @@ void tui_animate_progress(FILE *out, const char *label, int steps, int bar_width
     tui_hide_cursor(out);
     for (i = 0; i <= steps; i++) {
         int filled = (i * bar_width) / steps;
-        fputs("\r  ", out);
+        int content_w = bar_width + 8; /* bar + borders + percentage + spaces */
+        if (label != 0) content_w += tui_display_width(label) + 1;
+        fputs("\r\033[2K", out);
+        tui_print_margin(out, content_w);
         if (label != 0) fprintf(out, "%s ", label);
         fputs(TUI_DIM TUI_V TUI_RESET, out);
         for (j = 0; j < filled; j++) {
@@ -1553,28 +1559,40 @@ void tui_animate_progress(FILE *out, const char *label, int steps, int bar_width
 /* ── Animated Success / Error ─────────────────────────────────── */
 
 void tui_animate_success(FILE *out, const char *message) {
+    int msg_w = 0;
     if (out == 0 || message == 0) return;
     if (!tui_is_interactive()) { tui_print_success(out, message); return; }
 
+    msg_w = tui_display_width(message) + 4; /* icon + spaces + message */
     /* Flash: reverse green → normal green */
-    fprintf(out, "\n  " TUI_REVERSE TUI_BOLD_GREEN " %s %s " TUI_RESET, TUI_CHECK, message);
+    fputc('\n', out);
+    tui_print_margin(out, msg_w);
+    fprintf(out, TUI_REVERSE TUI_BOLD_GREEN " %s %s " TUI_RESET, TUI_CHECK, message);
     fflush(out);
     tui_sleep_ms(150);
-    fprintf(out, "\r\033[2K");
-    fprintf(out, "\n  " TUI_BOLD_GREEN "%s %s" TUI_RESET "\n", TUI_CHECK, message);
+    fputs("\r\033[2K", out);
+    fputc('\n', out);
+    tui_print_margin(out, msg_w);
+    fprintf(out, TUI_BOLD_GREEN "%s %s" TUI_RESET "\n", TUI_CHECK, message);
     fflush(out);
 }
 
 void tui_animate_error(FILE *out, const char *message) {
+    int msg_w = 0;
     if (out == 0 || message == 0) return;
     if (!tui_is_interactive()) { tui_print_error(out, message); return; }
 
+    msg_w = tui_display_width(message) + 4; /* icon + spaces + message */
     /* Flash: reverse red → normal red */
-    fprintf(out, "\n  " TUI_REVERSE TUI_BOLD_RED " %s %s " TUI_RESET, TUI_CROSS, message);
+    fputc('\n', out);
+    tui_print_margin(out, msg_w);
+    fprintf(out, TUI_REVERSE TUI_BOLD_RED " %s %s " TUI_RESET, TUI_CROSS, message);
     fflush(out);
     tui_sleep_ms(150);
-    fprintf(out, "\r\033[2K");
-    fprintf(out, "\n  " TUI_BOLD_RED "%s %s" TUI_RESET "\n", TUI_CROSS, message);
+    fputs("\r\033[2K", out);
+    fputc('\n', out);
+    tui_print_margin(out, msg_w);
+    fprintf(out, TUI_BOLD_RED "%s %s" TUI_RESET "\n", TUI_CROSS, message);
     fflush(out);
 }
 
@@ -1597,7 +1615,8 @@ void tui_animate_rainbow(FILE *out, const char *text, int cycles, int frame_dela
     for (cycle = 0; cycle < cycles * GRADIENT_COUNT; cycle++) {
         offset = cycle;
         p = (const unsigned char *)text;
-        fputs("\r  ", out);
+        fputs("\r\033[2K", out);
+        tui_print_margin(out, len);
         while (*p != 0) {
             fputs(GRADIENT_COLORS[offset % GRADIENT_COUNT], out);
             fputs(TUI_BOLD, out);
@@ -1605,8 +1624,6 @@ void tui_animate_rainbow(FILE *out, const char *text, int cycles, int frame_dela
             offset++;
         }
         fputs(TUI_RESET, out);
-        /* pad to clear any leftover */
-        { int tw = tui_display_width(text); int pad = len - tw + 2; int pi; for (pi = 0; pi < pad; pi++) fputc(' ', out); }
         fflush(out);
         tui_sleep_ms(frame_delay_ms);
     }
@@ -1706,7 +1723,7 @@ void tui_animate_matrix_rain(FILE *out, int width, int height, int duration_ms) 
         /* Draw frame */
         for (r = 0; r < height; r++) {
             tui_move_cursor(out, r + 1, 1);
-            tui_print_margin(out, 46);
+            tui_print_margin(out, width);
             for (col = 0; col < width; col++) {
                 int dist = r - drops[col];
                 if (dist == 0) {
@@ -1779,11 +1796,13 @@ void tui_animate_particle_explosion(FILE *out, int width, int height) {
     double cy = 0;
     double angle = 0;
     double speed = 0;
+    int margin_col = 0;
 
     if (out == 0 || !tui_is_interactive()) return;
     if (width <= 0) width = 44;
     if (height <= 0) height = 12;
 
+    { int tw = tui_get_terminal_width(); margin_col = (tw - width) / 2; if (margin_col < 2) margin_col = 2; }
     tui_rand_seed();
     cx = width / 2.0;
     cy = height / 2.0;
@@ -1819,7 +1838,7 @@ void tui_animate_particle_explosion(FILE *out, int width, int height) {
             int ix = (int)(px[i] + 0.5);
             int iy = (int)(py[i] + 0.5);
             if (ix >= 0 && ix < width && iy >= 0 && iy < height) {
-                tui_move_cursor(out, iy + 1, ix + 3);
+                tui_move_cursor(out, iy + 1, ix + margin_col);
                 /* Fade based on distance from center */
                 if (frame < 8) {
                     fputs(GRADIENT_COLORS[colors[i]], out);
@@ -1892,12 +1911,14 @@ void tui_animate_heartbeat(FILE *out, int width, int beats) {
     int baseline = 5;             /* 基线位于波形区第5行(0-indexed)，留出上方空间给R峰 */
     int total_rows = ECG_ROWS + 3; /* 框架总高度(含顶部标签行+顶边框+底边框) */
     int frame_w = 0;
+    int margin_col = 0;           /* 居中起始列 */
 
     if (out == 0 || !tui_is_interactive()) return;
     if (width <= 0) width = 48;
     if (width > 60) width = 60;
     if (beats <= 0) beats = 2;
     frame_w = width + 2;          /* 框架宽度 = 波形宽度 + 左右边框 */
+    { int tw = tui_get_terminal_width(); margin_col = (tw - frame_w) / 2; if (margin_col < 2) margin_col = 2; }
 
     tui_hide_cursor(out);
 
@@ -1910,7 +1931,7 @@ void tui_animate_heartbeat(FILE *out, int width, int beats) {
     /* ── 绘制监护仪框架 ── */
 
     /* 标签行: ♥ ECG Monitor */
-    tui_move_cursor(out, ECG_FRAME_TOP, 3);
+    tui_move_cursor(out, ECG_FRAME_TOP, margin_col);
     tui_set_fg256(out, 34);  /* 暗绿色 */
     fputs(TUI_BOLD, out);
     fputs(TUI_HEART, out);
@@ -1921,7 +1942,7 @@ void tui_animate_heartbeat(FILE *out, int width, int beats) {
     fputs(TUI_RESET, out);
 
     /* 顶边框: ╔═══════════════════════╗ */
-    tui_move_cursor(out, ECG_FRAME_TOP + 1, 3);
+    tui_move_cursor(out, ECG_FRAME_TOP + 1, margin_col);
     tui_set_fg256(out, 22);  /* 深绿色边框 */
     fputs(TUI_DTL, out);
     for (i = 0; i < width; i++) fputs(TUI_DH, out);
@@ -1930,7 +1951,7 @@ void tui_animate_heartbeat(FILE *out, int width, int beats) {
 
     /* 侧边框: ║ ... ║ (9行波形区) */
     for (i = 0; i < ECG_ROWS; i++) {
-        tui_move_cursor(out, ECG_WAVE_TOP + 1 + i, 3);
+        tui_move_cursor(out, ECG_WAVE_TOP + 1 + i, margin_col);
         tui_set_fg256(out, 22);
         fputs(TUI_DV, out);
         /* 暗色网格线 */
@@ -1962,7 +1983,7 @@ void tui_animate_heartbeat(FILE *out, int width, int beats) {
         pad_left = (width - label_len) / 2;
         pad_right = width - label_len - pad_left;
 
-        tui_move_cursor(out, ECG_WAVE_TOP + 1 + ECG_ROWS, 3);
+        tui_move_cursor(out, ECG_WAVE_TOP + 1 + ECG_ROWS, margin_col);
         tui_set_fg256(out, 22);
         fputs(TUI_DBL, out);
         for (i = 0; i < pad_left; i++) fputs(TUI_DH, out);
@@ -1991,7 +2012,7 @@ void tui_animate_heartbeat(FILE *out, int width, int beats) {
             /* 新一轮扫描开始时清除波形区内容 */
             if (col == 0 && (beat > 0 || pos > 0)) {
                 for (row = 0; row < ECG_ROWS; row++) {
-                    tui_move_cursor(out, ECG_WAVE_TOP + 1 + row, 4);
+                    tui_move_cursor(out, ECG_WAVE_TOP + 1 + row, margin_col + 1);
                     for (i = 0; i < width; i++) {
                         if (row == baseline) {
                             tui_set_fg256(out, 236);
@@ -2016,7 +2037,7 @@ void tui_animate_heartbeat(FILE *out, int width, int beats) {
             if (curr_y == prev_y) {
                 /* 水平线 */
                 if (curr_y >= 0 && curr_y < ECG_ROWS) {
-                    tui_move_cursor(out, ECG_WAVE_TOP + 1 + curr_y, 4 + col);
+                    tui_move_cursor(out, ECG_WAVE_TOP + 1 + curr_y, margin_col + 1 + col);
                     fputs(TUI_H, out);  /* ─ */
                 }
             } else {
@@ -2029,14 +2050,14 @@ void tui_animate_heartbeat(FILE *out, int width, int beats) {
                 if (y_max - y_min <= 1) {
                     /* 差值为1: 用斜线字符 */
                     if (curr_y >= 0 && curr_y < ECG_ROWS) {
-                        tui_move_cursor(out, ECG_WAVE_TOP + 1 + curr_y, 4 + col);
+                        tui_move_cursor(out, ECG_WAVE_TOP + 1 + curr_y, margin_col + 1 + col);
                         fputs(curr_y < prev_y ? "/" : "\\", out);
                     }
                 } else {
                     /* 大于1的跨度: 用竖线连接中间行，端点用拐角 */
                     for (row = y_min; row <= y_max; row++) {
                         if (row >= 0 && row < ECG_ROWS) {
-                            tui_move_cursor(out, ECG_WAVE_TOP + 1 + row, 4 + col);
+                            tui_move_cursor(out, ECG_WAVE_TOP + 1 + row, margin_col + 1 + col);
                             if (row == curr_y) {
                                 fputs(TUI_H, out);    /* ─ 当前点用水平线 */
                             } else if (row == y_min || row == y_max) {
@@ -2055,14 +2076,14 @@ void tui_animate_heartbeat(FILE *out, int width, int beats) {
     }
 
     /* 心跳闪烁效果：让心形符号闪烁一次 */
-    tui_move_cursor(out, ECG_FRAME_TOP, 3);
+    tui_move_cursor(out, ECG_FRAME_TOP, margin_col);
     tui_set_fg256(out, 196);  /* 红色 */
     fputs(TUI_BOLD, out);
     fputs(TUI_HEART, out);
     fputs(TUI_RESET, out);
     fflush(out);
     tui_sleep_ms(300);
-    tui_move_cursor(out, ECG_FRAME_TOP, 3);
+    tui_move_cursor(out, ECG_FRAME_TOP, margin_col);
     tui_set_fg256(out, 34);
     fputs(TUI_BOLD, out);
     fputs(TUI_HEART, out);
@@ -2109,7 +2130,8 @@ void tui_animate_glitch(FILE *out, const char *text, int intensity, int duration
         int char_idx = 0;
         int glitch_count = intensity;
 
-        fputs("\r  ", out);
+        fputs("\r\033[2K", out);
+        tui_print_margin(out, text_len);
 
         /* Decide which positions get glitched this frame */
         if (elapsed > duration_ms * 3 / 4) {
@@ -2168,7 +2190,9 @@ void tui_animate_glitch(FILE *out, const char *text, int intensity, int duration
     }
 
     /* Final clean render */
-    fputs("\r  " TUI_BOLD_WHITE, out);
+    fputs("\r\033[2K", out);
+    tui_print_margin(out, text_len);
+    fputs(TUI_BOLD_WHITE, out);
     fputs(text, out);
     fputs(TUI_RESET, out);
     fputc('\n', out);
@@ -2185,6 +2209,7 @@ void tui_animate_fireworks(FILE *out, int width, int height, int count) {
     int frame = 0;
     int r = 0;
     int i = 0;
+    int margin_col = 0;
 
     static const char *SPARK_SYMS[] = {
         "\xe2\x9c\xa8", /* ✨ */
@@ -2202,6 +2227,7 @@ void tui_animate_fireworks(FILE *out, int width, int height, int count) {
     if (height <= 0) height = 14;
     if (count <= 0) count = 3;
 
+    { int tw = tui_get_terminal_width(); margin_col = (tw - width) / 2; if (margin_col < 2) margin_col = 2; }
     tui_rand_seed();
     tui_hide_cursor(out);
 
@@ -2222,13 +2248,13 @@ void tui_animate_fireworks(FILE *out, int width, int height, int count) {
             for (trail_y = height - 1; trail_y > burst_y; trail_y--) {
                 /* Clear previous trail dot */
                 if (trail_y < height - 1) {
-                    tui_move_cursor(out, trail_y + 2, launch_x + 3);
+                    tui_move_cursor(out, trail_y + 2, launch_x + margin_col);
                     tui_set_fg256(out, 240);
                     fputs(TUI_DOT, out);
                     fputs(TUI_RESET, out);
                 }
                 /* Draw current position */
-                tui_move_cursor(out, trail_y + 1, launch_x + 3);
+                tui_move_cursor(out, trail_y + 1, launch_x + margin_col);
                 fputs(TUI_BOLD_YELLOW, out);
                 fputs(TUI_BLOCK_FULL, out);
                 fputs(TUI_RESET, out);
@@ -2237,7 +2263,7 @@ void tui_animate_fireworks(FILE *out, int width, int height, int count) {
             }
             /* Clear launch trail */
             for (trail_y = height - 1; trail_y > burst_y; trail_y--) {
-                tui_move_cursor(out, trail_y + 1, launch_x + 3);
+                tui_move_cursor(out, trail_y + 1, launch_x + margin_col);
                 fputc(' ', out);
             }
         }
@@ -2261,7 +2287,7 @@ void tui_animate_fireworks(FILE *out, int width, int height, int count) {
             for (frame = 0; frame < 18; frame++) {
                 /* Clear area */
                 for (r = 0; r < height; r++) {
-                    tui_move_cursor(out, r + 1, 3);
+                    tui_move_cursor(out, r + 1, margin_col);
                     for (i = 0; i < width; i++) fputc(' ', out);
                 }
 
@@ -2270,7 +2296,7 @@ void tui_animate_fireworks(FILE *out, int width, int height, int count) {
                     int ix = (int)(sx[i] + 0.5);
                     int iy = (int)(sy[i] + 0.5);
                     if (ix >= 0 && ix < width && iy >= 0 && iy < height) {
-                        tui_move_cursor(out, iy + 1, ix + 3);
+                        tui_move_cursor(out, iy + 1, ix + margin_col);
                         if (frame < 6) {
                             fputs(GRADIENT_COLORS[(color_base + i) % GRADIENT_COUNT], out);
                             fputs(TUI_BOLD, out);
@@ -2322,6 +2348,13 @@ void tui_animate_dna_helix(FILE *out, int height, int frames) {
     tui_rand_seed();
     tui_hide_cursor(out);
 
+    {
+    int dna_w = 40; /* total DNA display width (amplitude 10 * 2 + some margin) */
+    int dna_margin = 0;
+    int dna_center = 0;
+    { int tw = tui_get_terminal_width(); dna_margin = (tw - dna_w) / 2; if (dna_margin < 2) dna_margin = 2; }
+    dna_center = dna_margin + dna_w / 2;
+
     /* Reserve space */
     fputc('\n', out);
     for (row = 0; row < height; row++) fputc('\n', out);
@@ -2332,8 +2365,8 @@ void tui_animate_dna_helix(FILE *out, int height, int frames) {
         for (row = 0; row < height; row++) {
             double phase = (row + frame) * 0.5;
             double x = tui_fast_sin(phase) * 10.0;
-            int left_pos = 20 + (int)(x);
-            int right_pos = 20 - (int)(x);
+            int left_pos = dna_center + (int)(x);
+            int right_pos = dna_center - (int)(x);
             int pair_idx = (row + frame) % 4;
             int i_b = 0;
 
@@ -2395,6 +2428,7 @@ void tui_animate_dna_helix(FILE *out, int height, int frames) {
     tui_move_cursor(out, 1, 1);
     fflush(out);
     tui_show_cursor(out);
+    } /* end dna_center scope */
 }
 
 /* ── Fade Reveal ─────────────────────────────────────────────── */
@@ -2412,7 +2446,7 @@ void tui_animate_fade_reveal(FILE *out, const char *text, int steps) {
     int i = 0;
 
     if (out == 0 || text == 0) return;
-    if (!tui_is_interactive()) { tui_print_margin(out, 46); fputs(text, out); fputc('\n', out); return; }
+    if (!tui_is_interactive()) { text_dw = tui_display_width(text); tui_print_margin(out, text_dw); fputs(text, out); fputc('\n', out); return; }
     if (steps <= 0) steps = 4;
 
     text_dw = tui_display_width(text);
@@ -2420,7 +2454,8 @@ void tui_animate_fade_reveal(FILE *out, const char *text, int steps) {
 
     /* Each density level */
     for (step = 0; step < 4 && step < steps; step++) {
-        fputs("\r  ", out);
+        fputs("\r\033[2K", out);
+        tui_print_margin(out, text_dw);
         fputs(GRADIENT_COLORS[step % GRADIENT_COUNT], out);
         for (i = 0; i < text_dw; i++) {
             fputs(DENSITY[step], out);
@@ -2431,7 +2466,8 @@ void tui_animate_fade_reveal(FILE *out, const char *text, int steps) {
     }
 
     /* Final: reveal actual text with color sweep */
-    fputs("\r  ", out);
+    fputs("\r\033[2K", out);
+    tui_print_margin(out, text_dw);
     {
         const unsigned char *p = (const unsigned char *)text;
         int idx = 0;
@@ -2456,13 +2492,15 @@ void tui_animate_wave_text(FILE *out, const char *text, int cycles, int frame_de
     int frame = 0;
     int total_frames = 0;
     int max_height = 3;
+    int wave_margin = 0;
 
     if (out == 0 || text == 0) return;
-    if (!tui_is_interactive()) { tui_print_margin(out, 46); fputs(text, out); fputc('\n', out); return; }
+    if (!tui_is_interactive()) { int tw = tui_display_width(text); tui_print_margin(out, tw); fputs(text, out); fputc('\n', out); return; }
     if (cycles <= 0) cycles = 2;
     if (frame_delay_ms <= 0) frame_delay_ms = 60;
 
     total_frames = cycles * 20;
+    { int text_dw = tui_display_width(text); int tw = tui_get_terminal_width(); wave_margin = (tw - text_dw * 2) / 2; if (wave_margin < 2) wave_margin = 2; }
 
     tui_init_sin_lut();
     tui_hide_cursor(out);
@@ -2488,7 +2526,7 @@ void tui_animate_wave_text(FILE *out, const char *text, int cycles, int frame_de
         while (*p != 0) {
             double wave_y = tui_fast_sin((char_idx * 0.6) + (frame * 0.3)) * max_height;
             int row_offset = max_height + (int)(wave_y + 0.5);
-            int col = char_idx * 2 + 3;
+            int col = char_idx * 2 + wave_margin;
             char ch_buf[5];
             int ch_len = 0;
 
@@ -2523,7 +2561,9 @@ void tui_animate_wave_text(FILE *out, const char *text, int cycles, int frame_de
         fputs("\033[2K", out);
     }}
     tui_move_cursor(out, max_height + 1, 1);
-    fputs("  " TUI_BOLD_WHITE, out);
+    fputs("\033[2K", out);
+    { int tw = tui_display_width(text); tui_print_margin(out, tw); }
+    fputs(TUI_BOLD_WHITE, out);
     fputs(text, out);
     fputs(TUI_RESET, out);
     fputc('\n', out);
@@ -2540,12 +2580,14 @@ void tui_animate_plasma(FILE *out, int width, int height, int frames) {
     int frame = 0;
     int row = 0;
     int col = 0;
+    int margin_col = 0;
 
     if (out == 0 || !tui_is_interactive()) return;
     if (width <= 0) width = 44;
     if (height <= 0) height = 8;
     if (frames <= 0) frames = 30;
 
+    { int tw = tui_get_terminal_width(); margin_col = (tw - width) / 2; if (margin_col < 2) margin_col = 2; }
     tui_init_sin_lut();
     tui_hide_cursor(out);
 
@@ -2555,7 +2597,7 @@ void tui_animate_plasma(FILE *out, int width, int height, int frames) {
 
     for (frame = 0; frame < frames; frame++) {
         for (row = 0; row < height; row++) {
-            tui_move_cursor(out, row + 1, 3);
+            tui_move_cursor(out, row + 1, margin_col);
             for (col = 0; col < width; col++) {
                 /* Plasma function: combine multiple sine waves */
                 double v = 0.0;
@@ -2604,8 +2646,14 @@ void tui_animate_entrance(FILE *out, TuiRoleTheme theme) {
     const char *icon = tui_role_icon(theme);
     int i = 0;
     int row = 0;
+    int ent_w = 44;
+    int margin_col = 0;
+    int center_col = 0;
 
     if (out == 0 || !tui_is_interactive()) return;
+
+    { int tw = tui_get_terminal_width(); margin_col = (tw - ent_w) / 2; if (margin_col < 2) margin_col = 2; }
+    center_col = margin_col + ent_w / 2;
 
     tui_init_sin_lut();
     tui_hide_cursor(out);
@@ -2617,8 +2665,8 @@ void tui_animate_entrance(FILE *out, TuiRoleTheme theme) {
         int f = 0;
         for (f = 0; f < 8; f++) {
             for (row = 0; row < 6; row++) {
-                tui_move_cursor(out, row + 1, 3);
-                for (i = 0; i < 44; i++) {
+                tui_move_cursor(out, row + 1, margin_col);
+                for (i = 0; i < ent_w; i++) {
                     double v = tui_fast_sin(i * 0.2 + f * 0.5) + tui_fast_sin(row * 0.3 + f * 0.4);
                     int bright = (int)((v + 2.0) * 32.0);
                     if (bright > 255) bright = 255;
@@ -2644,7 +2692,7 @@ void tui_animate_entrance(FILE *out, TuiRoleTheme theme) {
             }
 
             /* Left particle */
-            tui_move_cursor(out, 3, 3 + (22 - step));
+            tui_move_cursor(out, 3, margin_col + (22 - step));
             fputs(color, out);
             fputs(TUI_BOLD, out);
             for (i = 0; i < 3 && i <= 22 - step; i++) {
@@ -2654,8 +2702,8 @@ void tui_animate_entrance(FILE *out, TuiRoleTheme theme) {
 
             /* Right particle */
             {
-                int rpos = 3 + 44 - (22 - step);
-                if (rpos > 3) {
+                int rpos = margin_col + ent_w - (22 - step);
+                if (rpos > margin_col) {
                     tui_move_cursor(out, 3, rpos - 3);
                     fputs(color, out);
                     fputs(TUI_BOLD, out);
@@ -2668,7 +2716,7 @@ void tui_animate_entrance(FILE *out, TuiRoleTheme theme) {
 
             if (step == 0) {
                 /* Center collision - show icon with burst */
-                tui_move_cursor(out, 3, 24);
+                tui_move_cursor(out, 3, center_col);
                 fputs(color, out);
                 fputs(TUI_BOLD, out);
                 fputs(icon, out);
@@ -2686,13 +2734,13 @@ void tui_animate_entrance(FILE *out, TuiRoleTheme theme) {
         for (step = 0; step < 22; step++) {
             tui_move_cursor(out, 3, 1);
             fputs("\033[2K", out);
-            tui_move_cursor(out, 3, 24 - step);
+            tui_move_cursor(out, 3, center_col - step);
             fputs(color, out);
             tui_repeat(out, TUI_HH, step * 2 + 1);
             fputs(TUI_RESET, out);
 
             /* Center icon stays */
-            tui_move_cursor(out, 3, 24);
+            tui_move_cursor(out, 3, center_col);
             fputs(color, out);
             fputs(TUI_BOLD, out);
             fputs(icon, out);
@@ -2721,10 +2769,12 @@ void tui_animate_scanline(FILE *out, int width, int height) {
     int sweep_col = 0;
     int row = 0;
     int c = 0;
+    int margin_col = 0;
 
     if (out == 0 || !tui_is_interactive()) return;
     if (width <= 0) width = 48;
     if (height <= 0) height = 6;
+    { int tw = tui_get_terminal_width(); margin_col = (tw - width) / 2; if (margin_col < 2) margin_col = 2; }
 
     tui_hide_cursor(out);
 
@@ -2736,7 +2786,7 @@ void tui_animate_scanline(FILE *out, int width, int height) {
     /* 一道亮光带从左到右扫过暗色背景 */
     for (sweep_col = -3; sweep_col < width + 4; sweep_col++) {
         for (row = 0; row < height; row++) {
-            tui_move_cursor(out, row + 1, 3);
+            tui_move_cursor(out, row + 1, margin_col);
             for (c = 0; c < width; c++) {
                 int dist = c - sweep_col;
                 if (dist < 0) dist = -dist;
@@ -2793,40 +2843,49 @@ void tui_animate_logo_pulse(FILE *out, int cycles) {
     if (out == 0 || !tui_is_interactive()) { tui_print_logo(out); return; }
     if (cycles <= 0) cycles = 2;
 
-    tui_hide_cursor(out);
-    fputc('\n', out);
+    {
+        int logo_width = tui_display_width(LOGO_LINES[0]);
+        int term_w = tui_get_terminal_width();
+        int margin_cols = (term_w - logo_width) / 2;
+        if (margin_cols < 2) margin_cols = 2;
 
-    /* 预留 Logo 行空间 */
-    for (i = 0; i < LOGO_LINE_COUNT; i++) fputc('\n', out);
-    fprintf(out, "\033[%dA", LOGO_LINE_COUNT);
-    fflush(out);
+        tui_hide_cursor(out);
+        fputc('\n', out);
 
-    for (cycle = 0; cycle < cycles; cycle++) {
-        for (step = 0; step < PULSE_STEPS; step++) {
-            int gray = BRIGHTNESS[step];
-            for (i = 0; i < LOGO_LINE_COUNT; i++) {
-                tui_move_cursor(out, i + 2, 1);
-                if (gray >= 250) {
-                    /* 峰值亮度：使用彩色渐变 */
-                    fputs(GRADIENT_COLORS[i % GRADIENT_COUNT], out);
-                } else {
-                    /* 呼吸态：使用灰阶 */
-                    fprintf(out, "\033[38;5;%dm", gray);
+        /* 预留 Logo 行空间 */
+        for (i = 0; i < LOGO_LINE_COUNT; i++) fputc('\n', out);
+        fprintf(out, "\033[%dA", LOGO_LINE_COUNT);
+        fflush(out);
+
+        for (cycle = 0; cycle < cycles; cycle++) {
+            for (step = 0; step < PULSE_STEPS; step++) {
+                int gray = BRIGHTNESS[step];
+                for (i = 0; i < LOGO_LINE_COUNT; i++) {
+                    tui_move_cursor(out, i + 2, 1);
+                    fputs("\033[2K", out);
+                    tui_print_margin(out, logo_width);
+                    if (gray >= 250) {
+                        fputs(GRADIENT_COLORS[i % GRADIENT_COUNT], out);
+                    } else {
+                        fprintf(out, "\033[38;5;%dm", gray);
+                    }
+                    fputs(LOGO_LINES[i], out);
+                    fputs(TUI_RESET, out);
                 }
-                fputs(LOGO_LINES[i], out);
-                fputs(TUI_RESET, out);
+                fflush(out);
+                tui_sleep_ms(45);
             }
-            fflush(out);
-            tui_sleep_ms(45);
         }
-    }
 
-    /* 最终以彩色渐变定格 */
-    for (i = 0; i < LOGO_LINE_COUNT; i++) {
-        tui_move_cursor(out, i + 2, 1);
-        fputs(GRADIENT_COLORS[i % GRADIENT_COUNT], out);
-        fputs(LOGO_LINES[i], out);
-        fputs(TUI_RESET, out);
+        /* 最终以彩色渐变定格 */
+        for (i = 0; i < LOGO_LINE_COUNT; i++) {
+            tui_move_cursor(out, i + 2, 1);
+            fputs("\033[2K", out);
+            tui_print_margin(out, logo_width);
+            fputs(GRADIENT_COLORS[i % GRADIENT_COUNT], out);
+            fputs(LOGO_LINES[i], out);
+            fputs(TUI_RESET, out);
+        }
     }
     tui_move_cursor(out, LOGO_LINE_COUNT + 2, 1);
     fflush(out);
