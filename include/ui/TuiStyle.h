@@ -345,6 +345,11 @@ void tui_print_menu_bottom(FILE *out, int width);
 /** @brief 检测当前终端是否为交互式（非管道重定向） */
 int tui_is_interactive(void);
 
+/** @brief 获取终端宽度（列数），无法获取时返回 80 */
+int tui_get_terminal_width(void);
+/** @brief 打印居中左边距，width 为内容的显示宽度 */
+void tui_print_margin(FILE *out, int width);
+
 /** @brief 延迟指定毫秒（非交互模式下不执行） */
 void tui_delay(int ms);
 
