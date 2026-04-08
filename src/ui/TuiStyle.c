@@ -979,9 +979,9 @@ void tui_print_menu_bottom(FILE *out, int width) {
 static void tui_sleep_ms(int ms) { Sleep(ms); }
 static int tui_check_tty(void) { return _isatty(_fileno(stdout)); }
 #else
-/* MinGW: POSIX-compatible */
+/* MinGW: POSIX sleep + Windows console API */
+#include <windows.h>
 #include <unistd.h>
-#include <sys/ioctl.h>
 static void tui_sleep_ms(int ms) { usleep(ms * 1000); }
 static int tui_check_tty(void) { return isatty(STDOUT_FILENO); }
 #endif
@@ -1006,17 +1006,10 @@ int tui_is_interactive(void) {
  */
 int tui_get_terminal_width(void) {
 #ifdef _WIN32
-#ifndef __MINGW32__
     CONSOLE_SCREEN_BUFFER_INFO csbi;
     if (GetConsoleScreenBufferInfo(GetStdHandle(STD_OUTPUT_HANDLE), &csbi)) {
         return csbi.srWindow.Right - csbi.srWindow.Left + 1;
     }
-#else
-    struct winsize ws;
-    if (ioctl(STDOUT_FILENO, TIOCGWINSZ, &ws) == 0 && ws.ws_col > 0) {
-        return ws.ws_col;
-    }
-#endif
 #else
     struct winsize ws;
     if (ioctl(STDOUT_FILENO, TIOCGWINSZ, &ws) == 0 && ws.ws_col > 0) {
