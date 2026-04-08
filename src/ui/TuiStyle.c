@@ -1876,6 +1876,20 @@ void tui_animate_particle_explosion(FILE *out, int width, int height) {
 
 /* ── Heartbeat Monitor ───────────────────────────────────────── */
 
+/**
+ * @brief 心电图内部定位：恢复保存的光标位置并移动到指定偏移
+ * @param out   输出流
+ * @param row_offset 相对于保存位置的行偏移（0=同行）
+ * @param col   目标列号
+ */
+static void ecg_move(FILE *out, int row_offset, int col) {
+    fprintf(out, "\033[u");  /* 恢复到保存的锚点位置 */
+    if (row_offset > 0) {
+        fprintf(out, "\033[%dB", row_offset);  /* 向下移动 */
+    }
+    fprintf(out, "\033[%dG", col);  /* 移到目标列 */
+}
+
 void tui_animate_heartbeat(FILE *out, int width, int beats) {
     /*
      * 真实 PQRST 心电图波形数据（行偏移量，负=向上，正=向下）
@@ -1925,13 +1939,14 @@ void tui_animate_heartbeat(FILE *out, int width, int beats) {
     /* 预留屏幕空间 */
     fputc('\n', out);
     for (i = 0; i < total_rows; i++) fputc('\n', out);
-    fprintf(out, "\033[%dA", total_rows);
+    fprintf(out, "\033[%dA", total_rows);  /* 回到预留区顶部 */
+    fprintf(out, "\033[s");                /* 保存此位置作为锚点 */
     fflush(out);
 
     /* ── 绘制监护仪框架 ── */
 
     /* 标签行: ♥ ECG Monitor */
-    tui_move_cursor(out, ECG_FRAME_TOP, margin_col);
+    ecg_move(out, 0, margin_col);
     tui_set_fg256(out, 34);  /* 暗绿色 */
     fputs(TUI_BOLD, out);
     fputs(TUI_HEART, out);
@@ -1942,7 +1957,7 @@ void tui_animate_heartbeat(FILE *out, int width, int beats) {
     fputs(TUI_RESET, out);
 
     /* 顶边框: ╔═══════════════════════╗ */
-    tui_move_cursor(out, ECG_FRAME_TOP + 1, margin_col);
+    ecg_move(out,1, margin_col);
     tui_set_fg256(out, 22);  /* 深绿色边框 */
     fputs(TUI_DTL, out);
     for (i = 0; i < width; i++) fputs(TUI_DH, out);
@@ -1951,7 +1966,7 @@ void tui_animate_heartbeat(FILE *out, int width, int beats) {
 
     /* 侧边框: ║ ... ║ (9行波形区) */
     for (i = 0; i < ECG_ROWS; i++) {
-        tui_move_cursor(out, ECG_WAVE_TOP + 1 + i, margin_col);
+        ecg_move(out,2 + i, margin_col);
         tui_set_fg256(out, 22);
         fputs(TUI_DV, out);
         /* 暗色网格线 */
@@ -1983,7 +1998,7 @@ void tui_animate_heartbeat(FILE *out, int width, int beats) {
         pad_left = (width - label_len) / 2;
         pad_right = width - label_len - pad_left;
 
-        tui_move_cursor(out, ECG_WAVE_TOP + 1 + ECG_ROWS, margin_col);
+        ecg_move(out,2 + ECG_ROWS, margin_col);
         tui_set_fg256(out, 22);
         fputs(TUI_DBL, out);
         for (i = 0; i < pad_left; i++) fputs(TUI_DH, out);
@@ -2012,7 +2027,7 @@ void tui_animate_heartbeat(FILE *out, int width, int beats) {
             /* 新一轮扫描开始时清除波形区内容 */
             if (col == 0 && (beat > 0 || pos > 0)) {
                 for (row = 0; row < ECG_ROWS; row++) {
-                    tui_move_cursor(out, ECG_WAVE_TOP + 1 + row, margin_col + 1);
+                    ecg_move(out,2 + row, margin_col + 1);
                     for (i = 0; i < width; i++) {
                         if (row == baseline) {
                             tui_set_fg256(out, 236);
@@ -2037,7 +2052,7 @@ void tui_animate_heartbeat(FILE *out, int width, int beats) {
             if (curr_y == prev_y) {
                 /* 水平线 */
                 if (curr_y >= 0 && curr_y < ECG_ROWS) {
-                    tui_move_cursor(out, ECG_WAVE_TOP + 1 + curr_y, margin_col + 1 + col);
+                    ecg_move(out,2 + curr_y, margin_col + 1 + col);
                     fputs(TUI_H, out);  /* ─ */
                 }
             } else {
@@ -2050,14 +2065,14 @@ void tui_animate_heartbeat(FILE *out, int width, int beats) {
                 if (y_max - y_min <= 1) {
                     /* 差值为1: 用斜线字符 */
                     if (curr_y >= 0 && curr_y < ECG_ROWS) {
-                        tui_move_cursor(out, ECG_WAVE_TOP + 1 + curr_y, margin_col + 1 + col);
+                        ecg_move(out,2 + curr_y, margin_col + 1 + col);
                         fputs(curr_y < prev_y ? "/" : "\\", out);
                     }
                 } else {
                     /* 大于1的跨度: 用竖线连接中间行，端点用拐角 */
                     for (row = y_min; row <= y_max; row++) {
                         if (row >= 0 && row < ECG_ROWS) {
-                            tui_move_cursor(out, ECG_WAVE_TOP + 1 + row, margin_col + 1 + col);
+                            ecg_move(out,2 + row, margin_col + 1 + col);
                             if (row == curr_y) {
                                 fputs(TUI_H, out);    /* ─ 当前点用水平线 */
                             } else if (row == y_min || row == y_max) {
@@ -2076,14 +2091,14 @@ void tui_animate_heartbeat(FILE *out, int width, int beats) {
     }
 
     /* 心跳闪烁效果：让心形符号闪烁一次 */
-    tui_move_cursor(out, ECG_FRAME_TOP, margin_col);
+    ecg_move(out, 0, margin_col);
     tui_set_fg256(out, 196);  /* 红色 */
     fputs(TUI_BOLD, out);
     fputs(TUI_HEART, out);
     fputs(TUI_RESET, out);
     fflush(out);
     tui_sleep_ms(300);
-    tui_move_cursor(out, ECG_FRAME_TOP, margin_col);
+    ecg_move(out, 0, margin_col);
     tui_set_fg256(out, 34);
     fputs(TUI_BOLD, out);
     fputs(TUI_HEART, out);
@@ -2091,7 +2106,7 @@ void tui_animate_heartbeat(FILE *out, int width, int beats) {
     fflush(out);
 
     /* 移动光标到框架下方 */
-    tui_move_cursor(out, ECG_WAVE_TOP + 2 + ECG_ROWS, 1);
+    ecg_move(out,3 + ECG_ROWS, 1);
     fputc('\n', out);
     fflush(out);
     tui_show_cursor(out);
