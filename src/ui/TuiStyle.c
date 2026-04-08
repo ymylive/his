@@ -1580,21 +1580,14 @@ static double tui_fast_sin(double x) {
 /* ── Matrix Digital Rain ─────────────────────────────────────── */
 
 void tui_animate_matrix_rain(FILE *out, int width, int height, int duration_ms) {
-    /* Medical/tech symbols for the rain drops */
+    /* 数字流 + 少量医疗符号，保持简洁不杂乱 */
     static const char *RAIN_CHARS[] = {
+        "0", "1", "0", "1", "0", "1",   /* 以二进制数字为主 */
+        "0", "1", "0", "1",
         "\xe2\x9a\x95", /* ⚕ */
         "\xe2\x9c\x9a", /* ✚ */
         "\xe2\x99\xa5", /* ♥ */
-        "\xe2\x97\x86", /* ◆ */
-        "\xe2\x96\x88", /* █ */
-        "\xe2\x96\x93", /* ▓ */
-        "\xe2\x96\x92", /* ▒ */
-        "\xe2\x96\x91", /* ░ */
-        "H", "I", "S",
-        "\xe2\x9a\x99", /* ⚙ */
-        "\xe2\x9a\xa1", /* ⚡ */
-        "\xe2\x9c\xa8", /* ✨ */
-        "0", "1"
+        "H", "I", "S"
     };
     #define RAIN_CHAR_COUNT 16
 
@@ -1643,9 +1636,9 @@ void tui_animate_matrix_rain(FILE *out, int width, int height, int duration_ms) 
                     tui_set_fg256(out, green_shades[dist - 1]);
                     fputs(RAIN_CHARS[tui_rand() % RAIN_CHAR_COUNT], out);
                 } else if (dist >= 6 && dist < 10) {
-                    /* Far trail: dim */
+                    /* Far trail: dim digits only */
                     tui_set_fg256(out, 22);
-                    fputs(TUI_BLOCK_LIGHT, out);
+                    fputs(RAIN_CHARS[tui_rand() % 2], out);  /* 仅 "0" 或 "1" */
                 } else {
                     fputc(' ', out);
                 }
@@ -1782,93 +1775,227 @@ void tui_animate_particle_explosion(FILE *out, int width, int height) {
 /* ── Heartbeat Monitor ───────────────────────────────────────── */
 
 void tui_animate_heartbeat(FILE *out, int width, int beats) {
-    /* ECG waveform pattern: flat -> small bump -> big spike -> dip -> recovery -> flat */
-    static const int ECG_PATTERN[] = {
-        0, 0, 0, 0, 0, 1, 0, -1, 0, 0,
-        0, 1, 2, 4, 6, 3, -3, -2, 0, 1,
-        0, 0, 0, 0, 0, 0, 0, 0, 0, 0
+    /*
+     * 真实 PQRST 心电图波形数据（行偏移量，负=向上，正=向下）
+     * 波形结构: 基线 → P波(小隆起) → PR段 → QRS波群(尖锐脉冲) →
+     *           ST段 → T波(宽隆起) → 基线
+     */
+    static const int ECG[] = {
+        /* 基线平坦段 */
+         0, 0, 0, 0, 0, 0, 0, 0,
+        /* P波：心房去极化，温和向上隆起 */
+         0,-1,-1,-1,-1, 0,
+        /* PR段：短暂平坦 */
+         0, 0, 0,
+        /* QRS波群：心室去极化，特征性尖锐脉冲 */
+         1, 2,            /* Q波下行 */
+        -2,-5,-7,-6,-3,   /* R波急剧上冲至顶峰 */
+         1, 3, 2,         /* S波下行回落 */
+        /* ST段：回归基线 */
+         0, 0, 0,
+        /* T波：心室复极化，宽缓隆起 */
+         0,-1,-2,-2,-2,-1, 0,
+        /* 尾部基线平坦段 */
+         0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
     };
-    #define ECG_LEN 30
+    #define ECG_LEN 52
+    #define ECG_ROWS 9
+    #define ECG_FRAME_TOP 2       /* 监护仪框架起始行 */
+    #define ECG_WAVE_TOP 3        /* 波形绘制区起始行 */
+
     int beat = 0;
     int pos = 0;
     int i = 0;
-    int baseline = 4;
+    int baseline = 5;             /* 基线位于波形区第5行(0-indexed)，留出上方空间给R峰 */
+    int total_rows = ECG_ROWS + 3; /* 框架总高度(含顶部标签行+顶边框+底边框) */
+    int frame_w = 0;
 
     if (out == 0 || !tui_is_interactive()) return;
-    if (width <= 0) width = 50;
-    if (beats <= 0) beats = 3;
+    if (width <= 0) width = 48;
+    if (width > 60) width = 60;
+    if (beats <= 0) beats = 2;
+    frame_w = width + 2;          /* 框架宽度 = 波形宽度 + 左右边框 */
 
     tui_hide_cursor(out);
 
-    /* Draw frame */
+    /* 预留屏幕空间 */
     fputc('\n', out);
-    fputs("  ", out);
-    fputs(TUI_BOLD_RED, out);
-    fputs(TUI_HEART, out);
-    fputs(TUI_RESET TUI_DIM " ECG Monitor " TUI_RESET, out);
-    fputc('\n', out);
-
-    /* Reserve 9 rows for the waveform display */
-    for (i = 0; i < 9; i++) fputc('\n', out);
-    fprintf(out, "\033[9A");
+    for (i = 0; i < total_rows; i++) fputc('\n', out);
+    fprintf(out, "\033[%dA", total_rows);
     fflush(out);
 
+    /* ── 绘制监护仪框架 ── */
+
+    /* 标签行: ♥ ECG Monitor */
+    tui_move_cursor(out, ECG_FRAME_TOP, 3);
+    tui_set_fg256(out, 34);  /* 暗绿色 */
+    fputs(TUI_BOLD, out);
+    fputs(TUI_HEART, out);
+    fputs(" ECG", out);
+    fputs(TUI_RESET, out);
+    tui_set_fg256(out, 238);
+    fputs(" Monitor", out);
+    fputs(TUI_RESET, out);
+
+    /* 顶边框: ╔═══════════════════════╗ */
+    tui_move_cursor(out, ECG_FRAME_TOP + 1, 3);
+    tui_set_fg256(out, 22);  /* 深绿色边框 */
+    fputs(TUI_DTL, out);
+    for (i = 0; i < width; i++) fputs(TUI_DH, out);
+    fputs(TUI_DTR, out);
+    fputs(TUI_RESET, out);
+
+    /* 侧边框: ║ ... ║ (9行波形区) */
+    for (i = 0; i < ECG_ROWS; i++) {
+        tui_move_cursor(out, ECG_WAVE_TOP + 1 + i, 3);
+        tui_set_fg256(out, 22);
+        fputs(TUI_DV, out);
+        /* 暗色网格线 */
+        {
+            int c = 0;
+            for (c = 0; c < width; c++) {
+                if (i == baseline) {
+                    tui_set_fg256(out, 236);
+                    fputs(TUI_H, out);     /* 基线用暗灰色水平虚线标记 */
+                } else {
+                    fputc(' ', out);
+                }
+            }
+        }
+        tui_set_fg256(out, 22);
+        fputs(TUI_DV, out);
+        fputs(TUI_RESET, out);
+    }
+
+    /* 底边框: ╚══════ BPM: 72 ═══════╝ */
+    {
+        char bpm_label[32];
+        int label_len = 0;
+        int pad_left = 0;
+        int pad_right = 0;
+
+        snprintf(bpm_label, sizeof(bpm_label), " BPM: 72 ");
+        label_len = (int)strlen(bpm_label);
+        pad_left = (width - label_len) / 2;
+        pad_right = width - label_len - pad_left;
+
+        tui_move_cursor(out, ECG_WAVE_TOP + 1 + ECG_ROWS, 3);
+        tui_set_fg256(out, 22);
+        fputs(TUI_DBL, out);
+        for (i = 0; i < pad_left; i++) fputs(TUI_DH, out);
+        tui_set_fg256(out, 46);
+        fputs(TUI_BOLD, out);
+        fputs(bpm_label, out);
+        fputs(TUI_RESET, out);
+        tui_set_fg256(out, 22);
+        for (i = 0; i < pad_right; i++) fputs(TUI_DH, out);
+        fputs(TUI_DBR, out);
+        fputs(TUI_RESET, out);
+    }
+    fflush(out);
+
+    /* ── 绘制波形 ── */
     for (beat = 0; beat < beats; beat++) {
         for (pos = 0; pos < ECG_LEN; pos++) {
-            int y = baseline - ECG_PATTERN[pos];
+            int col = (beat * ECG_LEN + pos) % width;
+            int curr_y = baseline + ECG[pos];
+            int prev_y = (pos > 0) ? baseline + ECG[pos - 1]
+                                   : (beat > 0 ? baseline + ECG[ECG_LEN - 1] : baseline);
+            int row = 0;
+            int y_min = 0;
+            int y_max = 0;
 
-            /* Simpler approach: draw the waveform building left to right */
-            {
-                int col = (beat * ECG_LEN + pos) % width;
-                int row = 0;
-                if (col == 0 && (beat > 0 || pos > 0)) {
-                    /* Clear area for new sweep */
-                    for (row = 0; row < 9; row++) {
-                        tui_move_cursor(out, row + 3, 3);
-                        for (i = 0; i < width; i++) fputc(' ', out);
-                    }
-                }
-
-                /* Draw the dot */
-                if (y >= 0 && y < 9) {
-                    tui_move_cursor(out, y + 3, col + 3);
-                    if (ECG_PATTERN[pos] > 3) {
-                        fputs(TUI_BOLD_RED, out);
-                        fputs(TUI_BLOCK_FULL, out);
-                    } else if (ECG_PATTERN[pos] > 1) {
-                        tui_set_fg256(out, 196); /* bright red */
-                        fputs(TUI_BLOCK_FULL, out);
-                    } else if (ECG_PATTERN[pos] < -1) {
-                        tui_set_fg256(out, 202); /* orange-red */
-                        fputs(TUI_BLOCK_FULL, out);
-                    } else {
-                        tui_set_fg256(out, 46); /* green */
-                        fputs(TUI_DOT, out);
+            /* 新一轮扫描开始时清除波形区内容 */
+            if (col == 0 && (beat > 0 || pos > 0)) {
+                for (row = 0; row < ECG_ROWS; row++) {
+                    tui_move_cursor(out, ECG_WAVE_TOP + 1 + row, 4);
+                    for (i = 0; i < width; i++) {
+                        if (row == baseline) {
+                            tui_set_fg256(out, 236);
+                            fputs(TUI_H, out);
+                        } else {
+                            fputc(' ', out);
+                        }
                     }
                     fputs(TUI_RESET, out);
                 }
+            }
 
-                /* Draw sweeping cursor line */
-                if (col + 1 < width) {
-                    for (row = 0; row < 9; row++) {
-                        tui_move_cursor(out, row + 3, col + 4);
-                        tui_set_fg256(out, 238);
-                        fputs(TUI_V, out);
-                        fputs(TUI_RESET, out);
+            /* 选择波形颜色: R峰用亮绿色，其余用标准绿色 */
+            if (ECG[pos] <= -5) {
+                tui_set_fg256(out, 82);  /* 亮绿色 - R峰 */
+                fputs(TUI_BOLD, out);
+            } else {
+                tui_set_fg256(out, 46);  /* 标准绿色 */
+            }
+
+            /* 绘制连续线段：连接前一个点和当前点 */
+            if (curr_y == prev_y) {
+                /* 水平线 */
+                if (curr_y >= 0 && curr_y < ECG_ROWS) {
+                    tui_move_cursor(out, ECG_WAVE_TOP + 1 + curr_y, 4 + col);
+                    fputs(TUI_H, out);  /* ─ */
+                }
+            } else {
+                /* 垂直或斜线：绘制从 prev_y 到 curr_y 的连线 */
+                y_min = prev_y < curr_y ? prev_y : curr_y;
+                y_max = prev_y < curr_y ? curr_y : prev_y;
+                if (y_min < 0) y_min = 0;
+                if (y_max >= ECG_ROWS) y_max = ECG_ROWS - 1;
+
+                if (y_max - y_min <= 1) {
+                    /* 差值为1: 用斜线字符 */
+                    if (curr_y >= 0 && curr_y < ECG_ROWS) {
+                        tui_move_cursor(out, ECG_WAVE_TOP + 1 + curr_y, 4 + col);
+                        fputs(curr_y < prev_y ? "/" : "\\", out);
+                    }
+                } else {
+                    /* 大于1的跨度: 用竖线连接中间行，端点用拐角 */
+                    for (row = y_min; row <= y_max; row++) {
+                        if (row >= 0 && row < ECG_ROWS) {
+                            tui_move_cursor(out, ECG_WAVE_TOP + 1 + row, 4 + col);
+                            if (row == curr_y) {
+                                fputs(TUI_H, out);    /* ─ 当前点用水平线 */
+                            } else if (row == y_min || row == y_max) {
+                                fputs(TUI_V, out);    /* │ 端点 */
+                            } else {
+                                fputs(TUI_V, out);    /* │ 中间段 */
+                            }
+                        }
                     }
                 }
             }
+            fputs(TUI_RESET, out);
             fflush(out);
-            tui_sleep_ms(35);
+            tui_sleep_ms(30);
         }
     }
 
-    /* Move cursor below the waveform */
-    tui_move_cursor(out, 13, 1);
+    /* 心跳闪烁效果：让心形符号闪烁一次 */
+    tui_move_cursor(out, ECG_FRAME_TOP, 3);
+    tui_set_fg256(out, 196);  /* 红色 */
+    fputs(TUI_BOLD, out);
+    fputs(TUI_HEART, out);
+    fputs(TUI_RESET, out);
+    fflush(out);
+    tui_sleep_ms(300);
+    tui_move_cursor(out, ECG_FRAME_TOP, 3);
+    tui_set_fg256(out, 34);
+    fputs(TUI_BOLD, out);
+    fputs(TUI_HEART, out);
+    fputs(TUI_RESET, out);
+    fflush(out);
+
+    /* 移动光标到框架下方 */
+    tui_move_cursor(out, ECG_WAVE_TOP + 2 + ECG_ROWS, 1);
     fputc('\n', out);
     fflush(out);
     tui_show_cursor(out);
+
     #undef ECG_LEN
+    #undef ECG_ROWS
+    #undef ECG_FRAME_TOP
+    #undef ECG_WAVE_TOP
 }
 
 /* ── Glitch Effect ───────────────────────────────────────────── */

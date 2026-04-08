@@ -145,11 +145,10 @@ int main(void) {
         return 1;
     }
 
-    /* 启动动画序列：矩阵雨 -> Logo -> 故障标题 -> Banner（约 2 秒） */
+    /* 启动动画序列：矩阵雨 -> Logo -> Banner */
     tui_clear_screen();
-    tui_animate_matrix_rain(stdout, 44, 8, 800);
+    tui_animate_matrix_rain(stdout, 44, 8, 500);
     tui_animate_logo(stdout);
-    tui_animate_glitch(stdout, "  H I S  -  Hospital Information System", 3, 400);
     tui_animate_banner(stdout, "轻量级医院信息系统 (HIS)");
 
     /* ── 启动时检查更新 ── */
@@ -182,7 +181,7 @@ int main(void) {
 
         tui_clear_screen();
         tui_animate_logo(stdout);
-        tui_animate_fade_reveal(stdout, "\xe2\x9a\x95 \xe8\xaf\xb7\xe9\x80\x89\xe6\x8b\xa9\xe6\x82\xa8\xe7\x9a\x84\xe8\xa7\x92\xe8\x89\xb2" /* ⚕ 请选择您的角色 */, 4);
+        tui_print_section(stdout, TUI_MEDICAL, "\xe8\xaf\xb7\xe9\x80\x89\xe6\x8b\xa9\xe6\x82\xa8\xe7\x9a\x84\xe8\xa7\x92\xe8\x89\xb2" /* 请选择您的角色 */);
         tui_animate_lines(stdout, menu_text, 30);
         tui_print_prompt(stdout, "请选择角色编号 (ESC返回): ");
         result = Result_make_success("line ready");
@@ -210,7 +209,6 @@ int main(void) {
 
         if (MenuController_is_exit_role(role)) {
             tui_clear_screen();
-            tui_animate_wave_text(stdout, "\xe6\x84\x9f\xe8\xb0\xa2\xe4\xbd\xbf\xe7\x94\xa8 HIS \xe7\xb3\xbb\xe7\xbb\x9f" /* 感谢使用 HIS 系统 */, 2, 60);
             tui_animate_goodbye(stdout);
             tui_show_cursor(stdout);
             return 0;
@@ -220,13 +218,11 @@ int main(void) {
         if (role == MENU_ROLE_RESET_DEMO) {
             char reset_message[RESULT_MESSAGE_CAPACITY];
             tui_print_section(stdout, TUI_SPARKLE, "重置演示数据");
-            tui_animate_dna_helix(stdout, 10, 20);
-            tui_spinner_run(stdout, "正在重置数据...", 800);
+            tui_spinner_run(stdout, "正在重置数据...", 600);
             result = DemoData_reset(&paths, reset_message, sizeof(reset_message));
             if (result.success == 0) {
                 tui_animate_error(stdout, reset_message[0] != '\0' ? reset_message : result.message);
             } else {
-                tui_animate_fireworks(stdout, 50, 12, 2);
                 tui_animate_success(stdout, reset_message);
             }
             continue;
@@ -311,11 +307,10 @@ int main(void) {
         strncpy(user_id, input, sizeof(user_id) - 1);
         user_id[sizeof(user_id) - 1] = '\0';
 
-        /* 主题入场动画：等离子 -> 汇聚 -> 扩展 -> 欢迎框 */
+        /* 登录成功：欢迎框 -> 心电图 */
         tui_clear_screen();
-        tui_animate_entrance(stdout, theme);
         tui_animate_welcome(stdout, theme, user_id);
-        tui_animate_heartbeat(stdout, 40, 1);
+        tui_animate_heartbeat(stdout, 44, 1);
         tui_print_info(stdout, "按回车键进入系统 (ESC返回)...");
         {
             int enter_result = InputHelper_read_line(stdin, input, sizeof(input));
@@ -330,7 +325,6 @@ int main(void) {
                 return 0;
             }
         }
-        tui_animate_transition(stdout);
 
         /* ── 角色菜单循环：显示操作列表，执行用户选择的操作 ── */
         for (;;) {
