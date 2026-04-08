@@ -11,6 +11,7 @@
 
 #include "ui/MenuController.h"
 #include "ui/TuiStyle.h"
+#include "common/UpdateChecker.h"
 
 #include <ctype.h>
 #include <stdio.h>
@@ -47,16 +48,20 @@ static int menu_append_hline(
 ) {
     int w = 0;
     int i = 0;
-    w = snprintf(buf + *used, cap - *used,
-                 TUI_BOLD_CYAN "%s", left);
+    /* 左角使用青色 */
+    w = snprintf(buf + *used, cap - *used, "\033[38;5;51m%s", left);
     if (w < 0 || (size_t)w >= cap - *used) return -1;
     *used += (size_t)w;
+    /* 中间每个 ═ 使用256色渐变 */
     for (i = 0; i < MENU_INNER; i++) {
-        w = snprintf(buf + *used, cap - *used, TUI_H);
+        w = snprintf(buf + *used, cap - *used,
+                     "\033[38;5;%dm" TUI_DH,
+                     TUI_GRADIENT_256[i % TUI_GRADIENT_256_COUNT]);
         if (w < 0 || (size_t)w >= cap - *used) return -1;
         *used += (size_t)w;
     }
-    w = snprintf(buf + *used, cap - *used, "%s" TUI_RESET "\n", right);
+    /* 右角使用青色 */
+    w = snprintf(buf + *used, cap - *used, "\033[38;5;51m%s" TUI_RESET "\n", right);
     if (w < 0 || (size_t)w >= cap - *used) return -1;
     *used += (size_t)w;
     return 0;
@@ -86,7 +91,7 @@ static int menu_append_title(
     if (pad_left < 0) pad_left = 0;
     if (pad_right < 0) pad_right = 0;
 
-    w = snprintf(buf + *used, cap - *used, TUI_BOLD_CYAN TUI_V TUI_BOLD_WHITE);
+    w = snprintf(buf + *used, cap - *used, "\033[38;5;51m" TUI_DV TUI_BOLD_WHITE);
     if (w < 0 || (size_t)w >= cap - *used) return -1;
     *used += (size_t)w;
     for (i = 0; i < pad_left; i++) {
@@ -102,7 +107,7 @@ static int menu_append_title(
         if (w < 0 || (size_t)w >= cap - *used) return -1;
         *used += (size_t)w;
     }
-    w = snprintf(buf + *used, cap - *used, TUI_BOLD_CYAN TUI_V TUI_RESET "\n");
+    w = snprintf(buf + *used, cap - *used, "\033[38;5;51m" TUI_DV TUI_RESET "\n");
     if (w < 0 || (size_t)w >= cap - *used) return -1;
     *used += (size_t)w;
     return 0;
@@ -142,12 +147,12 @@ static int menu_append_item(
 
     if (icon != 0) {
         w = snprintf(buf + *used, cap - *used,
-                     TUI_BOLD_CYAN TUI_V "  "
+                     "\033[38;5;51m" TUI_DV "  "
                      TUI_CYAN "%s " "%s%d. %s%s",
                      icon, num_color, number, lbl_color, label);
     } else {
         w = snprintf(buf + *used, cap - *used,
-                     TUI_BOLD_CYAN TUI_V "  "
+                     "\033[38;5;51m" TUI_DV "  "
                      "%s%d. %s%s",
                      num_color, number, lbl_color, label);
     }
@@ -159,7 +164,24 @@ static int menu_append_item(
         *used += (size_t)w;
     }
     w = snprintf(buf + *used, cap - *used,
-                 TUI_BOLD_CYAN TUI_V TUI_RESET "\n");
+                 "\033[38;5;51m" TUI_DV TUI_RESET "\n");
+    if (w < 0 || (size_t)w >= cap - *used) return -1;
+    *used += (size_t)w;
+    return 0;
+}
+
+/**
+ * @brief 向缓冲区追加菜单底部品牌页脚
+ */
+static int menu_append_footer(
+    char *buf, size_t cap, size_t *used
+) {
+    int w = 0;
+    w = snprintf(buf + *used, cap - *used,
+                 TUI_DIM "       ─── HIS v" HIS_VERSION
+                 " ── " TUI_MEDICAL
+                 " \xe8\xbd\xbb\xe9\x87\x8f\xe7\xba\xa7\xe5\x8c\xbb\xe9\x99\xa2\xe4\xbf\xa1\xe6\x81\xaf\xe7\xb3\xbb\xe7\xbb\x9f"
+                 " ───" TUI_RESET "\n");
     if (w < 0 || (size_t)w >= cap - *used) return -1;
     *used += (size_t)w;
     return 0;
@@ -330,13 +352,13 @@ Result MenuController_render_main_menu(char *buffer, size_t capacity) {
         return Result_make_failure("menu buffer invalid");
     }
 
-    if (menu_append_hline(buffer, capacity, &used, TUI_TL, TUI_TR) < 0) {
+    if (menu_append_hline(buffer, capacity, &used, TUI_DTL, TUI_DTR) < 0) {
         return Result_make_failure("menu buffer too small");
     }
     if (menu_append_title(buffer, capacity, &used, "登录与角色菜单") < 0) {
         return Result_make_failure("menu buffer too small");
     }
-    if (menu_append_hline(buffer, capacity, &used, TUI_LT, TUI_RT) < 0) {
+    if (menu_append_hline(buffer, capacity, &used, TUI_DLT, TUI_DRT) < 0) {
         return Result_make_failure("menu buffer too small");
     }
     if (menu_append_item(buffer, capacity, &used, 1, TUI_GEAR, "系统管理员", 0) < 0) {
@@ -360,7 +382,10 @@ Result MenuController_render_main_menu(char *buffer, size_t capacity) {
     if (menu_append_item(buffer, capacity, &used, 0, TUI_ARROW_R, "退出系统", 1) < 0) {
         return Result_make_failure("menu buffer too small");
     }
-    if (menu_append_hline(buffer, capacity, &used, TUI_BL, TUI_BR) < 0) {
+    if (menu_append_hline(buffer, capacity, &used, TUI_DBL, TUI_DBR) < 0) {
+        return Result_make_failure("menu buffer too small");
+    }
+    if (menu_append_footer(buffer, capacity, &used) < 0) {
         return Result_make_failure("menu buffer too small");
     }
 
@@ -387,14 +412,14 @@ Result MenuController_render_role_menu(
         return Result_make_failure("role menu not found");
     }
 
-    if (menu_append_hline(buffer, capacity, &used, TUI_TL, TUI_TR) < 0) {
+    if (menu_append_hline(buffer, capacity, &used, TUI_DTL, TUI_DTR) < 0) {
         return Result_make_failure("role menu buffer too small");
     }
     if (menu_append_title(buffer, capacity, &used,
                           MenuController_role_label(role)) < 0) {
         return Result_make_failure("role menu buffer too small");
     }
-    if (menu_append_hline(buffer, capacity, &used, TUI_LT, TUI_RT) < 0) {
+    if (menu_append_hline(buffer, capacity, &used, TUI_DLT, TUI_DRT) < 0) {
         return Result_make_failure("role menu buffer too small");
     }
 
@@ -409,7 +434,10 @@ Result MenuController_render_role_menu(
         }
     }
 
-    if (menu_append_hline(buffer, capacity, &used, TUI_BL, TUI_BR) < 0) {
+    if (menu_append_hline(buffer, capacity, &used, TUI_DBL, TUI_DBR) < 0) {
+        return Result_make_failure("role menu buffer too small");
+    }
+    if (menu_append_footer(buffer, capacity, &used) < 0) {
         return Result_make_failure("role menu buffer too small");
     }
 

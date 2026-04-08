@@ -158,6 +158,16 @@
 #define TUI_LOZENGE      "\xe2\x97\x88"  /* ◈ */
 
 /* ═══════════════════════════════════════════════════════════════
+ *  256色渐变色板 - 全局共享，用于高级渐变边框和装饰
+ * ═══════════════════════════════════════════════════════════════ */
+
+/** @brief 256色平滑渐变色板（暖色日落调色板） */
+extern const int TUI_GRADIENT_256[];
+
+/** @brief 渐变色板长度 */
+#define TUI_GRADIENT_256_COUNT 26
+
+/* ═══════════════════════════════════════════════════════════════
  *  角色主题系统 - 为不同角色分配独立配色方案
  * ═══════════════════════════════════════════════════════════════ */
 
@@ -235,6 +245,8 @@ void tui_print_section(FILE *out, const char *icon, const char *title);
 void tui_print_hline(FILE *out, int width);
 /** @brief 打印双线水平分隔线 */
 void tui_print_double_hline(FILE *out, int width);
+/** @brief 打印256色渐变粗线分隔线 */
+void tui_print_gradient_hline(FILE *out, int width);
 
 /* ═══════════════════════════════════════════════════════════════
  *  消息与反馈 - 操作结果展示
@@ -250,6 +262,8 @@ void tui_print_warning(FILE *out, const char *message);
 void tui_print_info(FILE *out, const char *message);
 /** @brief 打印输入提示符（箭头 + 文本） */
 void tui_print_prompt(FILE *out, const char *text);
+/** @brief 打印角色主题色输入提示符 */
+void tui_print_prompt_themed(FILE *out, const char *text, TuiRoleTheme theme);
 
 /** @brief 徽章颜色枚举 - 用于彩色内联标签 */
 typedef enum TuiBadgeColor {
@@ -400,5 +414,11 @@ void tui_animate_plasma(FILE *out, int width, int height, int frames);
 
 /** @brief 角色主题入场动画：组合等离子+汇聚+扩展效果 */
 void tui_animate_entrance(FILE *out, TuiRoleTheme theme);
+
+/** @brief 水平光带扫描动画：一道高光从左扫到右 */
+void tui_animate_scanline(FILE *out, int width, int height);
+
+/** @brief Logo呼吸脉冲动画：Logo在明暗间平滑过渡 */
+void tui_animate_logo_pulse(FILE *out, int cycles);
 
 #endif

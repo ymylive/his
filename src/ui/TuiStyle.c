@@ -188,15 +188,17 @@ static const char *GRADIENT_COLORS[] = {
 };
 #define GRADIENT_COUNT 6
 
-/* 256色平滑渐变色板（暖色日落调色板，用于高级效果） */
-static const int GRADIENT_256[] = {
+/* 256色平滑渐变色板（暖色日落调色板，全局共享） */
+const int TUI_GRADIENT_256[] = {
     196, 202, 208, 214, 220, 226,  /* red → orange → yellow */
     190, 154, 118, 82, 46,         /* yellow-green → green */
     47, 48, 49, 50, 51,            /* green → cyan */
     45, 39, 33, 27, 21,            /* cyan → blue */
     57, 93, 129, 165, 201          /* blue → magenta */
 };
-#define GRADIENT_256_COUNT 26
+/* 内部别名，保持已有代码兼容 */
+#define GRADIENT_256 TUI_GRADIENT_256
+#define GRADIENT_256_COUNT TUI_GRADIENT_256_COUNT
 
 static const char *LOGO_LINES[] = {
     "  \xe2\x96\x88\xe2\x96\x88\xe2\x95\x97  \xe2\x96\x88\xe2\x96\x88\xe2\x95\x97 \xe2\x96\x88\xe2\x96\x88\xe2\x95\x97 \xe2\x96\x88\xe2\x96\x88\xe2\x96\x88\xe2\x96\x88\xe2\x96\x88\xe2\x96\x88\xe2\x96\x88\xe2\x95\x97",
@@ -491,6 +493,21 @@ void tui_print_status_bar_themed(FILE *out, TuiRoleTheme theme, const char *user
     fprintf(out, " %s HIS ", TUI_MEDICAL);
     fputs(TUI_RESET, out);
 
+    /* Timestamp section */
+    {
+        time_t now = time(NULL);
+        struct tm *t = localtime(&now);
+        char time_str[16];
+        if (t != NULL) {
+            strftime(time_str, sizeof(time_str), "%H:%M:%S", t);
+        } else {
+            strcpy(time_str, "--:--:--");
+        }
+        fprintf(out, "\033[48;5;235m\033[38;5;240m");
+        fprintf(out, " %s %s ", TUI_GEAR, time_str);
+        fputs(TUI_RESET, out);
+    }
+
     /* Right fade: smooth block density transition */
     fputs(tui_role_color(theme), out);
     fputs(TUI_BLOCK_DARK TUI_BLOCK_MED TUI_BLOCK_LIGHT, out);
@@ -576,6 +593,18 @@ void tui_print_double_hline(FILE *out, int width) {
     fputc('\n', out);
 }
 
+void tui_print_gradient_hline(FILE *out, int width) {
+    int i = 0;
+    if (out == 0) return;
+    fputs("  ", out);
+    for (i = 0; i < width; i++) {
+        fprintf(out, "\033[38;5;%dm", GRADIENT_256[i % GRADIENT_256_COUNT]);
+        fputs(TUI_HH, out);
+    }
+    fputs(TUI_RESET, out);
+    fputc('\n', out);
+}
+
 /* ═══════════════════════════════════════════════════════════════
  *  消息与反馈 - 操作结果展示组件
  * ═══════════════════════════════════════════════════════════════ */
@@ -603,6 +632,12 @@ void tui_print_info(FILE *out, const char *message) {
 void tui_print_prompt(FILE *out, const char *text) {
     if (out == 0 || text == 0) return;
     fprintf(out, "\n  \033[38;5;214m%s\033[0m \033[1;37m%s\033[0m", TUI_ARROW, text);
+    fflush(out);
+}
+
+void tui_print_prompt_themed(FILE *out, const char *text, TuiRoleTheme theme) {
+    if (out == 0 || text == 0) return;
+    fprintf(out, "\n  %s%s\033[0m \033[1;37m%s\033[0m", tui_role_color(theme), TUI_ARROW, text);
     fflush(out);
 }
 
@@ -2630,4 +2665,124 @@ void tui_animate_entrance(FILE *out, TuiRoleTheme theme) {
     tui_move_cursor(out, 1, 1);
     fflush(out);
     tui_show_cursor(out);
+}
+
+/* ── Scanline Sweep ─────────────────────────────────────────── */
+
+void tui_animate_scanline(FILE *out, int width, int height) {
+    int sweep_col = 0;
+    int row = 0;
+    int c = 0;
+
+    if (out == 0 || !tui_is_interactive()) return;
+    if (width <= 0) width = 48;
+    if (height <= 0) height = 6;
+
+    tui_hide_cursor(out);
+
+    /* 预留空间 */
+    for (row = 0; row < height; row++) fputc('\n', out);
+    fprintf(out, "\033[%dA", height);
+    fflush(out);
+
+    /* 一道亮光带从左到右扫过暗色背景 */
+    for (sweep_col = -3; sweep_col < width + 4; sweep_col++) {
+        for (row = 0; row < height; row++) {
+            tui_move_cursor(out, row + 1, 3);
+            for (c = 0; c < width; c++) {
+                int dist = c - sweep_col;
+                if (dist < 0) dist = -dist;
+
+                if (dist == 0) {
+                    fprintf(out, "\033[48;5;255m\033[38;5;231m");
+                    fputs(TUI_BLOCK_FULL, out);
+                } else if (dist == 1) {
+                    fprintf(out, "\033[48;5;252m");
+                    fputc(' ', out);
+                } else if (dist == 2) {
+                    fprintf(out, "\033[48;5;246m");
+                    fputc(' ', out);
+                } else if (dist == 3) {
+                    fprintf(out, "\033[48;5;240m");
+                    fputc(' ', out);
+                } else if (dist == 4) {
+                    fprintf(out, "\033[48;5;236m");
+                    fputc(' ', out);
+                } else {
+                    fprintf(out, "\033[48;5;233m");
+                    fputc(' ', out);
+                }
+            }
+            fputs(TUI_RESET, out);
+        }
+        fflush(out);
+        tui_sleep_ms(16);
+    }
+
+    /* 清除扫描区域 */
+    for (row = 0; row < height; row++) {
+        tui_move_cursor(out, row + 1, 1);
+        fputs("\033[2K", out);
+    }
+    tui_move_cursor(out, 1, 1);
+    fflush(out);
+    tui_show_cursor(out);
+}
+
+/* ── Logo Breathing Pulse ───────────────────────────────────── */
+
+void tui_animate_logo_pulse(FILE *out, int cycles) {
+    int cycle = 0;
+    int step = 0;
+    int i = 0;
+    /* 亮度阶梯: 暗灰 → 全亮 → 暗灰 (灰阶 232-255) */
+    static const int BRIGHTNESS[] = {
+        236, 238, 240, 242, 244, 246, 248, 250, 252, 254, 255,
+        254, 252, 250, 248, 246, 244, 242, 240, 238, 236
+    };
+    #define PULSE_STEPS 21
+
+    if (out == 0 || !tui_is_interactive()) { tui_print_logo(out); return; }
+    if (cycles <= 0) cycles = 2;
+
+    tui_hide_cursor(out);
+    fputc('\n', out);
+
+    /* 预留 Logo 行空间 */
+    for (i = 0; i < LOGO_LINE_COUNT; i++) fputc('\n', out);
+    fprintf(out, "\033[%dA", LOGO_LINE_COUNT);
+    fflush(out);
+
+    for (cycle = 0; cycle < cycles; cycle++) {
+        for (step = 0; step < PULSE_STEPS; step++) {
+            int gray = BRIGHTNESS[step];
+            for (i = 0; i < LOGO_LINE_COUNT; i++) {
+                tui_move_cursor(out, i + 2, 1);
+                if (gray >= 250) {
+                    /* 峰值亮度：使用彩色渐变 */
+                    fputs(GRADIENT_COLORS[i % GRADIENT_COUNT], out);
+                } else {
+                    /* 呼吸态：使用灰阶 */
+                    fprintf(out, "\033[38;5;%dm", gray);
+                }
+                fputs(LOGO_LINES[i], out);
+                fputs(TUI_RESET, out);
+            }
+            fflush(out);
+            tui_sleep_ms(45);
+        }
+    }
+
+    /* 最终以彩色渐变定格 */
+    for (i = 0; i < LOGO_LINE_COUNT; i++) {
+        tui_move_cursor(out, i + 2, 1);
+        fputs(GRADIENT_COLORS[i % GRADIENT_COUNT], out);
+        fputs(LOGO_LINES[i], out);
+        fputs(TUI_RESET, out);
+    }
+    tui_move_cursor(out, LOGO_LINE_COUNT + 2, 1);
+    fflush(out);
+    tui_show_cursor(out);
+
+    #undef PULSE_STEPS
 }

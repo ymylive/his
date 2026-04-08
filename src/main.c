@@ -110,7 +110,7 @@ static TuiRoleTheme role_to_theme(MenuRole role) {
  * 5. 用户可通过 ESC 逐级返回，输入 0 或 EOF 退出系统
  */
 int main(void) {
-    char menu_text[2048];   /* 菜单渲染缓冲区 */
+    char menu_text[8192];   /* 菜单渲染缓冲区（双线渐变边框需要更多空间） */
     char input[128];        /* 用户输入缓冲区 */
     char password[128];     /* 密码输入缓冲区 */
     char prompt_buf[256];   /* 提示信息格式化缓冲区 */
@@ -145,10 +145,11 @@ int main(void) {
         return 1;
     }
 
-    /* 启动动画序列：矩阵雨 -> Logo -> Banner */
+    /* 启动动画序列：光带扫描 -> 矩阵雨 -> Logo呼吸脉冲 -> Banner */
     tui_clear_screen();
-    tui_animate_matrix_rain(stdout, 44, 8, 500);
-    tui_animate_logo(stdout);
+    tui_animate_scanline(stdout, 48, 5);
+    tui_animate_matrix_rain(stdout, 48, 8, 500);
+    tui_animate_logo_pulse(stdout, 1);
     tui_animate_banner(stdout, "轻量级医院信息系统 (HIS)");
 
     /* ── 启动时检查更新 ── */
@@ -181,6 +182,7 @@ int main(void) {
 
         tui_clear_screen();
         tui_animate_logo(stdout);
+        tui_print_gradient_hline(stdout, 46);
         tui_print_section(stdout, TUI_MEDICAL, "\xe8\xaf\xb7\xe9\x80\x89\xe6\x8b\xa9\xe6\x82\xa8\xe7\x9a\x84\xe8\xa7\x92\xe8\x89\xb2" /* 请选择您的角色 */);
         tui_animate_lines(stdout, menu_text, 30);
         tui_print_prompt(stdout, "请选择角色编号 (ESC返回): ");
@@ -307,8 +309,9 @@ int main(void) {
         strncpy(user_id, input, sizeof(user_id) - 1);
         user_id[sizeof(user_id) - 1] = '\0';
 
-        /* 登录成功：欢迎框 -> 心电图 */
+        /* 登录成功：光带扫描 -> 欢迎框 -> 心电图 */
         tui_clear_screen();
+        tui_animate_scanline(stdout, 48, 4);
         tui_animate_welcome(stdout, theme, user_id);
         tui_animate_heartbeat(stdout, 44, 1);
         tui_print_info(stdout, "按回车键进入系统 (ESC返回)...");
@@ -339,8 +342,9 @@ int main(void) {
 
             tui_clear_screen();
             tui_print_status_bar_themed(stdout, theme, user_id);
+            tui_print_gradient_hline(stdout, 46);
             tui_animate_lines(stdout, menu_text, 25);
-            tui_print_prompt(stdout, "请选择操作 (ESC返回): ");
+            tui_print_prompt_themed(stdout, "请选择操作 (ESC返回): ", theme);
             {
                 int read_result = InputHelper_read_line(stdin, input, sizeof(input));
                 if (read_result == 0) {
