@@ -385,11 +385,11 @@ int main(void) {
 
             tui_delay(300);
             printf("\n");
-            tui_print_info(stdout, "按回车键继续 (ESC返回上级)...");
+            tui_print_info(stdout, "按回车键继续...");
             {
                 int cont_result = InputHelper_read_line(stdin, input, sizeof(input));
                 if (cont_result == -2) {
-                    break;
+                    continue;  /* ESC 返回角色操作菜单，而非退出到主菜单 */
                 }
                 if (cont_result == 0) {
                     tui_clear_screen();
