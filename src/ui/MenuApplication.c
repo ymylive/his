@@ -26,6 +26,14 @@
 #include <stdio.h>
 #include <string.h>
 
+#ifdef _WIN32
+#include <io.h>
+#define MenuApp_isatty(fd) _isatty(fd)
+#else
+#include <unistd.h>
+#define MenuApp_isatty(fd) isatty(fd)
+#endif
+
 #include "common/IdGenerator.h"
 #include "common/InputHelper.h"
 #include "service/DepartmentService.h"
@@ -1974,13 +1982,13 @@ static int MenuApplication_find_exact_selection(
 }
 
 /**
- * @brief 交互式模糊搜索选择器
+ * @brief 非交互式模糊搜索选择器（用于文件/管道输入）
  *
  * 支持两种选择方式：
  * 1. 直接输入编号或完整标签精确匹配
  * 2. 输入关键字模糊过滤，从候选列表中选择序号
  */
-static Result MenuApplication_prompt_select_option(
+static Result MenuApplication_prompt_select_option_line(
     MenuApplicationPromptContext *context,
     const char *title,
     const MenuApplicationSelectionOption *options,
@@ -1995,10 +2003,6 @@ static Result MenuApplication_prompt_select_option(
     int selected_index = -1;
     int option_index = 0;
     Result result;
-
-    if (context == 0 || options == 0 || option_count <= 0 || out_id == 0 || out_id_capacity == 0) {
-        return Result_make_failure("selection arguments invalid");
-    }
 
     result = MenuApplication_prompt_line(
         context,
@@ -2051,6 +2055,203 @@ static Result MenuApplication_prompt_select_option(
     MenuApplication_copy_text(out_id, out_id_capacity, options[selected_index].id);
     fprintf(context->output, TUI_BOLD_GREEN " %s 已选择: " TUI_RESET "%s\n", TUI_CHECK, options[selected_index].label);
     return Result_make_success("selection chosen");
+}
+
+/** @brief 最大可见行数 */
+#define MENU_APP_SELECT_MAX_VISIBLE 8
+
+/**
+ * @brief 交互式实时过滤搜索选择器（终端模式）
+ *
+ * 使用 InputHelper_read_key 逐字符输入，实时过滤选项列表。
+ * 支持方向键选择、退格删除、回车确认、ESC 取消。
+ */
+static Result MenuApplication_prompt_select_option_interactive(
+    MenuApplicationPromptContext *context,
+    const char *title,
+    const MenuApplicationSelectionOption *options,
+    int option_count,
+    char *out_id,
+    size_t out_id_capacity
+) {
+    char query[128];
+    int query_len = 0;
+    int filtered_indices[MENU_APPLICATION_SELECT_OPTION_MAX];
+    int filtered_count = 0;
+    int selected = 0;
+    int prev_lines = 0;
+    int option_index = 0;
+    InputEvent ev;
+
+    query[0] = '\0';
+
+    /* Initial filter: show all */
+    for (option_index = 0; option_index < option_count; option_index++) {
+        filtered_indices[filtered_count++] = option_index;
+    }
+
+    for (;;) {
+        int visible = filtered_count < MENU_APP_SELECT_MAX_VISIBLE
+                    ? filtered_count : MENU_APP_SELECT_MAX_VISIBLE;
+        int total_lines = 0;
+        int i = 0;
+
+        /* Move cursor up to overwrite previous output */
+        if (prev_lines > 0) {
+            fprintf(context->output, "\033[%dA\r", prev_lines);
+        }
+
+        /* Line 1: title */
+        fprintf(context->output, TUI_OC_MUTED "%s" TUI_RESET "\033[K\n", title);
+        total_lines++;
+
+        /* Line 2: search input */
+        fprintf(context->output,
+                TUI_OC_ACCENT " > " TUI_RESET TUI_OC_TEXT "%s" TUI_RESET "\033[K\n",
+                query);
+        total_lines++;
+
+        /* Filtered results */
+        for (i = 0; i < visible; i++) {
+            int idx = filtered_indices[i];
+            if (i == selected) {
+                fprintf(context->output,
+                        TUI_OC_BG_SELECT TUI_OC_ACCENT " > %s" TUI_RESET "\033[K\n",
+                        options[idx].label);
+            } else {
+                fprintf(context->output,
+                        "   " TUI_OC_MUTED "%s" TUI_RESET "\033[K\n",
+                        options[idx].label);
+            }
+            total_lines++;
+        }
+
+        /* "... N more" indicator */
+        if (filtered_count > MENU_APP_SELECT_MAX_VISIBLE) {
+            fprintf(context->output,
+                    TUI_OC_DIM "   ... %d more" TUI_RESET "\033[K\n",
+                    filtered_count - MENU_APP_SELECT_MAX_VISIBLE);
+            total_lines++;
+        }
+
+        /* Clear any leftover lines from previous render */
+        if (prev_lines > total_lines) {
+            for (i = 0; i < prev_lines - total_lines; i++) {
+                fprintf(context->output, "\033[K\n");
+            }
+            /* Move back up for those extra cleared lines */
+            fprintf(context->output, "\033[%dA", prev_lines - total_lines);
+        }
+
+        prev_lines = total_lines;
+        fflush(context->output);
+
+        /* Read a key */
+        ev = InputHelper_read_key(context->input);
+
+        switch (ev.key) {
+            case INPUT_KEY_ESC:
+            case INPUT_KEY_CTRL_Q:
+            case INPUT_KEY_CTRL_C:
+                return Result_make_failure(INPUT_HELPER_ESC_MESSAGE);
+
+            case INPUT_KEY_ENTER:
+                if (filtered_count > 0 && selected < filtered_count) {
+                    int idx = filtered_indices[selected];
+                    MenuApplication_copy_text(out_id, out_id_capacity, options[idx].id);
+                    fprintf(context->output,
+                            TUI_BOLD_GREEN " %s 已选择: " TUI_RESET "%s\n",
+                            TUI_CHECK, options[idx].label);
+                    return Result_make_success("selection chosen");
+                }
+                break;
+
+            case INPUT_KEY_UP:
+                if (selected > 0) {
+                    selected--;
+                }
+                break;
+
+            case INPUT_KEY_DOWN:
+                if (selected < filtered_count - 1 &&
+                    selected < MENU_APP_SELECT_MAX_VISIBLE - 1) {
+                    selected++;
+                }
+                break;
+
+            case INPUT_KEY_BACKSPACE:
+                if (query_len > 0) {
+                    query_len--;
+                    query[query_len] = '\0';
+                    /* Re-filter */
+                    filtered_count = 0;
+                    selected = 0;
+                    for (option_index = 0; option_index < option_count; option_index++) {
+                        if (query_len == 0 ||
+                            MenuApplication_text_contains_ignore_case(options[option_index].label, query) ||
+                            MenuApplication_text_contains_ignore_case(options[option_index].id, query)) {
+                            filtered_indices[filtered_count++] = option_index;
+                        }
+                    }
+                }
+                break;
+
+            case INPUT_KEY_CHAR:
+                if (query_len < (int)sizeof(query) - 1) {
+                    query[query_len++] = ev.ch;
+                    query[query_len] = '\0';
+                    /* Re-filter */
+                    filtered_count = 0;
+                    selected = 0;
+                    for (option_index = 0; option_index < option_count; option_index++) {
+                        if (MenuApplication_text_contains_ignore_case(options[option_index].label, query) ||
+                            MenuApplication_text_contains_ignore_case(options[option_index].id, query)) {
+                            filtered_indices[filtered_count++] = option_index;
+                        }
+                    }
+                }
+                break;
+
+            case INPUT_KEY_NONE:
+                /* EOF on input stream */
+                return Result_make_failure("input ended");
+
+            default:
+                break;
+        }
+    }
+}
+
+/**
+ * @brief 交互式模糊搜索选择器
+ *
+ * 在终端模式下使用实时过滤（逐字符输入 + 方向键导航），
+ * 在非终端模式下（管道/文件）回退到行读取方式以保持测试兼容。
+ */
+static Result MenuApplication_prompt_select_option(
+    MenuApplicationPromptContext *context,
+    const char *title,
+    const MenuApplicationSelectionOption *options,
+    int option_count,
+    char *out_id,
+    size_t out_id_capacity
+) {
+    int input_fd = -1;
+
+    if (context == 0 || options == 0 || option_count <= 0 || out_id == 0 || out_id_capacity == 0) {
+        return Result_make_failure("selection arguments invalid");
+    }
+
+    /* Detect whether input is a terminal */
+    input_fd = fileno(context->input);
+    if (input_fd >= 0 && MenuApp_isatty(input_fd)) {
+        return MenuApplication_prompt_select_option_interactive(
+            context, title, options, option_count, out_id, out_id_capacity);
+    }
+
+    /* Fallback: line-based selection for pipes/files (tests) */
+    return MenuApplication_prompt_select_option_line(
+        context, title, options, option_count, out_id, out_id_capacity);
 }
 
 /** @brief 交互式选择患者（加载全部患者，通过模糊搜索选择） */

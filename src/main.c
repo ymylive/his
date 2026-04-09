@@ -21,6 +21,7 @@
 #include "ui/DemoData.h"
 #include "ui/MenuApplication.h"
 #include "ui/MenuController.h"
+#include "ui/TuiPanel.h"
 #include "ui/TuiStyle.h"
 
 #ifdef _WIN32
@@ -307,93 +308,78 @@ int main(void) {
         strncpy(user_id, input, sizeof(user_id) - 1);
         user_id[sizeof(user_id) - 1] = '\0';
 
-        /* 登录成功：欢迎信息 */
-        tui_clear_screen();
-        tui_print_welcome(stdout, theme, user_id);
-        tui_print_info(stdout, "按回车键进入系统 (ESC返回)...");
+        /* 登录成功：切换到分屏布局 */
         {
-            int enter_result = InputHelper_read_line(stdin, input, sizeof(input));
-            if (enter_result == -2) {
-                MenuApplication_logout(&application);
-                continue;
-            }
-            if (enter_result == 0) {
-                tui_clear_screen();
-                tui_animate_goodbye(stdout);
-                tui_show_cursor(stdout);
-                return 0;
-            }
-        }
-
-        /* ── 角色菜单循环：显示操作列表，执行用户选择的操作 ── */
-        for (;;) {
-            MenuAction action = MENU_ACTION_INVALID;
-
-            /* 渲染当前角色的操作菜单 */
-            result = MenuController_render_role_menu(role, menu_text, sizeof(menu_text));
-            if (result.success == 0) {
-                fputs("角色菜单渲染失败。\n", stderr);
-                return 1;
-            }
+            TuiLayout layout;
+            char sidebar_title[256];
 
             tui_clear_screen();
-            tui_print_status_bar_themed(stdout, theme, user_id);
-            tui_print_gradient_hline(stdout, 46);
-            tui_animate_lines(stdout, menu_text, 25);
-            tui_print_prompt_themed(stdout, "请选择操作 (ESC返回): ", theme);
+            tui_hide_cursor(stdout);
+            TuiLayout_compute(&layout);
+
+            /* 绘制侧边栏左边框 */
+            TuiPanel_draw_left_border(stdout, &layout.sidebar, TUI_OC_BORDER);
+
+            /* 侧边栏：显示角色标题 */
+            snprintf(sidebar_title, sizeof(sidebar_title),
+                     "%s %s",
+                     tui_role_icon(theme),
+                     MenuController_role_label(role));
+            TuiPanel_write_at(stdout, &layout.sidebar, 1, 2, sidebar_title);
+
+            /* 底部状态栏：角色 + 用户编号 */
             {
-                int read_result = InputHelper_read_line(stdin, input, sizeof(input));
-                if (read_result == 0) {
-                    tui_clear_screen();
-                    tui_animate_goodbye(stdout);
-                    tui_show_cursor(stdout);
-                    return 0;
+                char status_text[256];
+                int col = 0;
+                snprintf(status_text, sizeof(status_text),
+                         " %s %s | %s",
+                         tui_role_icon(theme),
+                         MenuController_role_label(role),
+                         user_id);
+                TuiPanel_move_to(stdout, &layout.footer, 0, 0);
+                fprintf(stdout, TUI_OC_BG_PANEL TUI_OC_TEXT);
+                for (col = 0; col < layout.term_width; col++) {
+                    fputc(' ', stdout);
                 }
-                if (read_result == -2) {
+                TuiPanel_move_to(stdout, &layout.footer, 0, 0);
+                fprintf(stdout, TUI_OC_BG_PANEL TUI_OC_TEXT "%s" TUI_RESET, status_text);
+            }
+            fflush(stdout);
+
+            /* ── 角色菜单循环：交互式选择操作 ── */
+            for (;;) {
+                MenuAction action = MENU_ACTION_INVALID;
+
+                /* 使用交互式菜单选择（方向键导航 + 数字直选） */
+                result = MenuController_interactive_select(role, &layout.sidebar, stdin, &action);
+                if (result.success == 0) {
                     break;
                 }
-                if (read_result < 0) {
-                    tui_print_warning(stdout, "输入过长，请重新输入。");
-                    tui_delay(800);
-                    continue;
+
+                if (MenuController_is_back_action(action)) {
+                    break;
                 }
-            }
 
-            result = MenuController_parse_role_selection(role, input, &action);
-            if (result.success == 0) {
-                tui_print_warning(stdout, "输入无效，请重新输入菜单编号。");
-                tui_delay(800);
-                continue;
-            }
+                /* 清空主面板区域 */
+                TuiPanel_clear(stdout, &layout.main);
+                TuiPanel_move_to(stdout, &layout.main, 0, 0);
+                tui_show_cursor(stdout);
+                fflush(stdout);
 
-            if (MenuController_is_back_action(action)) {
-                break;
-            }
-
-            /* 执行选中的操作（包括交互式输入和业务逻辑处理） */
-            result = MenuApplication_execute_action(&application, action, stdin, stdout);
-            /* 仅在真正的错误时显示错误消息（跳过"未实现"和"ESC取消"） */
-            if (result.success == 0 &&
-                strcmp(result.message, "action not implemented yet") != 0 &&
-                !InputHelper_is_esc_cancel(result.message)) {
-                tui_print_error(stdout, result.message);
-            }
-
-            tui_delay(300);
-            printf("\n");
-            tui_print_info(stdout, "按回车键继续...");
-            {
-                int cont_result = InputHelper_read_line(stdin, input, sizeof(input));
-                if (cont_result == -2) {
-                    continue;  /* ESC 返回角色操作菜单，而非退出到主菜单 */
+                /* 执行选中的操作 */
+                result = MenuApplication_execute_action(&application, action, stdin, stdout);
+                /* 仅在真正的错误时显示错误消息 */
+                if (result.success == 0 &&
+                    strcmp(result.message, "action not implemented yet") != 0 &&
+                    !InputHelper_is_esc_cancel(result.message)) {
+                    tui_print_error(stdout, result.message);
                 }
-                if (cont_result == 0) {
-                    tui_clear_screen();
-                    tui_animate_goodbye(stdout);
-                    tui_show_cursor(stdout);
-                    return 0;
-                }
+
+                tui_hide_cursor(stdout);
+                fflush(stdout);
             }
+
+            tui_show_cursor(stdout);
         }
 
         /* 退出角色菜单循环后，执行登出操作 */
