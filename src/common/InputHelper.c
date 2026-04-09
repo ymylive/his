@@ -298,62 +298,147 @@ int InputHelper_read_line(FILE *input, char *buffer, size_t capacity) {
         _ungetch(ch); /* 非 ESC 键，放回输入缓冲区 */
     }
 #else
-    /* POSIX 平台（macOS / Linux）：使用 termios raw 模式预读 */
+    /* POSIX 平台（macOS / Linux）：全 raw 模式逐字符读取
+     *
+     * 旧实现仅在 raw 模式下预读首字符，然后切回 canonical 模式用 fgets 读剩余。
+     * 这导致三个问题：
+     * 1. 首字符之后无法用 ESC 取消
+     * 2. 无法删除首字符（backspace 跨不过 raw/canonical 边界）
+     * 3. 中文等多字节 UTF-8 字符被首字节读取拆断导致乱码
+     *
+     * 新实现：全程在 raw 模式下逐字节读取，手动处理回显、退格、ESC 和回车。
+     * 正确处理 UTF-8 多字节序列（根据首字节判断字符长度，整字符回删）。
+     */
     {
         int input_fd = fileno(input);
         if (input_fd >= 0 && isatty(input_fd)) {
             struct termios old_settings;
-            struct termios new_settings;
+            struct termios raw_settings;
             int ch = 0;
 
-            /* 刷新内核输入缓冲区，丢弃残留字节 */
             tcflush(input_fd, TCIFLUSH);
-            /* 保存终端设置并切换到 raw 模式（关闭规范模式和回显） */
             tcgetattr(input_fd, &old_settings);
-            new_settings = old_settings;
-            new_settings.c_lflag &= ~((tcflag_t)ICANON | (tcflag_t)ECHO);
-            new_settings.c_cc[VMIN] = 1;  /* 至少读取 1 个字符 */
-            new_settings.c_cc[VTIME] = 0; /* 无超时 */
-            tcsetattr(input_fd, TCSANOW, &new_settings);
+            raw_settings = old_settings;
+            raw_settings.c_lflag &= ~((tcflag_t)ICANON | (tcflag_t)ECHO);
+            raw_settings.c_cc[VMIN] = 1;
+            raw_settings.c_cc[VTIME] = 0;
+            tcsetattr(input_fd, TCSANOW, &raw_settings);
 
-            /* 在 raw 模式下读取首个字符 */
-            ch = fgetc(input);
+            length = 0;
+            buffer[0] = '\0';
 
-            if (ch == INPUT_ESC_CHAR) { /* 检测到 ESC 键 */
-                /* 用 fgetc 排空后续转义序列字节（如方向键 [A） */
-                struct termios drain_settings = new_settings;
-                drain_settings.c_cc[VMIN] = 0;
-                drain_settings.c_cc[VTIME] = 1; /* 100ms 超时 */
-                tcsetattr(input_fd, TCSANOW, &drain_settings);
-                while (fgetc(input) != EOF) { /* drain via stdio */ }
-                clearerr(input);
-                tcsetattr(input_fd, TCSANOW, &old_settings);
-                buffer[0] = '\0';
-                return -2;
-            }
+            for (;;) {
+                ch = fgetc(input);
 
-            /* 恢复终端设置 */
-            tcsetattr(input_fd, TCSANOW, &old_settings);
+                if (ch == EOF) {
+                    tcsetattr(input_fd, TCSANOW, &old_settings);
+                    buffer[0] = '\0';
+                    return 0;
+                }
 
-            if (ch == EOF) {
-                buffer[0] = '\0';
-                return 0;
-            }
-            /* 将 raw 模式下读取的首字符存入 buffer 开头 */
-            fputc(ch, stdout);
-            fflush(stdout);
-            buffer[0] = (char)ch;
-            buffer[1] = '\0';
-            /* fgets 追加剩余输入到 buffer+1 */
-            if (capacity > 2) {
-                if (fgets(buffer + 1, (int)(capacity - 1), input) == 0) {
-                    /* 只有首字符，没有换行 */
-                    length = 1;
-                    goto process_buffer;
+                if (ch == INPUT_ESC_CHAR) {
+                    /* ESC: 排空转义序列尾部字节，然后返回取消 */
+                    struct termios drain = raw_settings;
+                    drain.c_cc[VMIN] = 0;
+                    drain.c_cc[VTIME] = 1; /* 100ms */
+                    tcsetattr(input_fd, TCSANOW, &drain);
+                    while (fgetc(input) != EOF) { /* drain */ }
+                    clearerr(input);
+                    tcsetattr(input_fd, TCSANOW, &old_settings);
+                    /* 清除已输入的内容显示 */
+                    while (length > 0) {
+                        fputs("\b \b", stdout);
+                        length--;
+                    }
+                    fflush(stdout);
+                    buffer[0] = '\0';
+                    return -2;
+                }
+
+                if (ch == '\n' || ch == '\r') {
+                    /* 回车：完成输入 */
+                    fputc('\n', stdout);
+                    fflush(stdout);
+                    buffer[length] = '\0';
+                    tcsetattr(input_fd, TCSANOW, &old_settings);
+                    return 1;
+                }
+
+                if (ch == INPUT_BACKSPACE_DEL || ch == INPUT_BACKSPACE_BS) {
+                    /* 退格：删除最后一个完整 UTF-8 字符 */
+                    if (length > 0) {
+                        /* 找到最后一个 UTF-8 字符的起始位置 */
+                        size_t erase_count = 0;
+                        size_t char_start = length;
+                        /* 往回跳过 UTF-8 连续字节 (10xxxxxx) */
+                        while (char_start > 0 && ((unsigned char)buffer[char_start - 1] & 0xC0) == 0x80) {
+                            char_start--;
+                        }
+                        /* 再跳过 UTF-8 首字节 */
+                        if (char_start > 0) {
+                            char_start--;
+                        }
+                        erase_count = length - char_start;
+                        length = char_start;
+                        buffer[length] = '\0';
+                        /* 终端回显擦除：ASCII 1列，中文等宽字符 2列 */
+                        if (erase_count == 1) {
+                            /* ASCII 字符占 1 列 */
+                            fputs("\b \b", stdout);
+                        } else {
+                            /* 多字节 UTF-8 字符通常占 2 列（CJK） */
+                            fputs("\b\b  \b\b", stdout);
+                        }
+                        fflush(stdout);
+                    }
+                    continue;
+                }
+
+                /* 普通字符（含 UTF-8 多字节）：读取完整 UTF-8 序列 */
+                {
+                    unsigned char first = (unsigned char)ch;
+                    int utf8_len = 1;
+                    int byte_i = 0;
+
+                    /* 根据 UTF-8 首字节判断总字节数 */
+                    if ((first & 0x80) == 0) {
+                        utf8_len = 1;       /* 0xxxxxxx: ASCII */
+                    } else if ((first & 0xE0) == 0xC0) {
+                        utf8_len = 2;       /* 110xxxxx: 2字节 */
+                    } else if ((first & 0xF0) == 0xE0) {
+                        utf8_len = 3;       /* 1110xxxx: 3字节（中文） */
+                    } else if ((first & 0xF8) == 0xF0) {
+                        utf8_len = 4;       /* 11110xxx: 4字节（emoji） */
+                    }
+
+                    /* 检查缓冲区空间 */
+                    if (length + (size_t)utf8_len >= capacity - 1) {
+                        /* 输入过长 */
+                        tcsetattr(input_fd, TCSANOW, &old_settings);
+                        buffer[0] = '\0';
+                        return -1;
+                    }
+
+                    /* 存入首字节 */
+                    buffer[length++] = (char)ch;
+
+                    /* 读取剩余 UTF-8 连续字节 */
+                    for (byte_i = 1; byte_i < utf8_len; byte_i++) {
+                        int next = fgetc(input);
+                        if (next == EOF) {
+                            tcsetattr(input_fd, TCSANOW, &old_settings);
+                            buffer[0] = '\0';
+                            return 0;
+                        }
+                        buffer[length++] = (char)next;
+                    }
+                    buffer[length] = '\0';
+
+                    /* 回显完整 UTF-8 字符 */
+                    fwrite(buffer + length - utf8_len, 1, (size_t)utf8_len, stdout);
+                    fflush(stdout);
                 }
             }
-            length = strlen(buffer);
-            goto process_buffer;
         }
     }
 #endif
