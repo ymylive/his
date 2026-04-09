@@ -564,8 +564,8 @@ void TuiTable_init(TuiTable *table, int column_count) {
     memset(table, 0, sizeof(*table));
     if (column_count > TUI_TABLE_MAX_COLUMNS) column_count = TUI_TABLE_MAX_COLUMNS;
     table->column_count = column_count;
-    table->border_color = TUI_BOLD_CYAN;
-    table->header_color = TUI_BOLD_WHITE;
+    table->border_color = TUI_OC_BORDER;
+    table->header_color = TUI_OC_TEXT TUI_BOLD;
 }
 
 void TuiTable_set_header(TuiTable *table, int col, const char *header, int width) {

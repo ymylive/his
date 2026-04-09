@@ -10,7 +10,9 @@
  */
 
 #include "ui/MenuController.h"
+#include "ui/TuiPanel.h"
 #include "ui/TuiStyle.h"
+#include "common/InputHelper.h"
 #include "common/UpdateChecker.h"
 
 #include <ctype.h>
@@ -585,4 +587,86 @@ int MenuController_is_exit_role(MenuRole role) {
 
 int MenuController_is_back_action(MenuAction action) {
     return action == MENU_ACTION_BACK ? 1 : 0;
+}
+
+Result MenuController_interactive_select(
+    MenuRole role,
+    void *panel,
+    FILE *input,
+    MenuAction *out_action
+) {
+    const TuiPanel *p = (const TuiPanel *)panel;
+    const MenuOption *options = 0;
+    size_t option_count = 0;
+    size_t selected = 0;
+    int redraw = 1;
+    size_t i = 0;
+    InputEvent ev;
+
+    if (out_action == 0 || panel == 0 || input == 0) {
+        return Result_make_failure("interactive select: invalid arguments");
+    }
+
+    options = MenuController_options_for_role(role, &option_count);
+    if (options == 0 || option_count == 0) {
+        return Result_make_failure("interactive select: role menu not found");
+    }
+
+    for (;;) {
+        if (redraw) {
+            for (i = 0; i < option_count; i++) {
+                TuiPanel_move_to(stdout, p, (int)(3 + i), 2);
+                if (i == selected) {
+                    fprintf(stdout,
+                            TUI_OC_BG_SELECT TUI_OC_ACCENT
+                            " > %d. %s" TUI_RESET "\033[K",
+                            options[i].selection, options[i].label);
+                } else {
+                    fprintf(stdout,
+                            "   " TUI_OC_AMBER "%d." TUI_RESET
+                            " " TUI_OC_MUTED "%s" TUI_RESET "\033[K",
+                            options[i].selection, options[i].label);
+                }
+            }
+            fflush(stdout);
+            redraw = 0;
+        }
+
+        ev = InputHelper_read_key(input);
+
+        switch (ev.key) {
+            case INPUT_KEY_UP:
+                if (selected > 0) {
+                    selected--;
+                    redraw = 1;
+                }
+                break;
+            case INPUT_KEY_DOWN:
+                if (selected < option_count - 1) {
+                    selected++;
+                    redraw = 1;
+                }
+                break;
+            case INPUT_KEY_ENTER:
+                *out_action = options[selected].action;
+                return Result_make_success("interactive select: confirmed");
+            case INPUT_KEY_ESC:
+            case INPUT_KEY_CTRL_Q:
+                *out_action = MENU_ACTION_BACK;
+                return Result_make_success("interactive select: cancelled");
+            case INPUT_KEY_CHAR:
+                if (ev.ch >= '0' && ev.ch <= '9') {
+                    int num = ev.ch - '0';
+                    for (i = 0; i < option_count; i++) {
+                        if (options[i].selection == num) {
+                            *out_action = options[i].action;
+                            return Result_make_success("interactive select: direct");
+                        }
+                    }
+                }
+                break;
+            default:
+                break;
+        }
+    }
 }

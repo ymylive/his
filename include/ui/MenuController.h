@@ -11,6 +11,7 @@
 #define HIS_UI_MENU_CONTROLLER_H
 
 #include <stddef.h>
+#include <stdio.h>
 
 #include "common/Result.h"
 
@@ -167,5 +168,15 @@ int MenuController_is_exit_role(MenuRole role);
  * @return 1 表示是返回操作，0 表示不是
  */
 int MenuController_is_back_action(MenuAction action);
+
+/**
+ * @brief 交互式菜单选择（支持方向键导航）
+ */
+Result MenuController_interactive_select(
+    MenuRole role,
+    void *panel,
+    FILE *input,
+    MenuAction *out_action
+);
 
 #endif
