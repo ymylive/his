@@ -15,6 +15,10 @@
 #include <string.h>
 #include <time.h>
 
+#ifdef _WIN32
+#include <windows.h>
+#endif
+
 #include "common/StringUtils.h"
 #include "repository/RepositoryUtils.h"
 
