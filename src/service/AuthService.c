@@ -15,29 +15,36 @@
 #include <string.h>
 #include <time.h>
 
+#include "common/StringUtils.h"
 #include "repository/RepositoryUtils.h"
 
 /**
- * @brief 判断文本是否为空白（NULL、空串或全为空白字符）
+ * @brief 密码哈希迭代次数
  *
- * @param text  待检查的字符串
- * @return int  1=空白，0=非空白
+ * 较高的值能增强抗暴力破解能力，但会增加哈希计算时间。
+ * NIST SP 800-63B 建议至少 10000 次迭代；此处使用 100000 次
+ * 以提供更强的安全边际。调整此值后需重新生成所有已存储的密码哈希。
  */
-static int AuthService_is_blank_text(const char *text) {
-    if (text == 0) {
-        return 1;
+#define AUTH_HASH_ITERATIONS 100000
+
+/**
+ * @brief 常量时间字符串比较，防止时序攻击
+ *
+ * 无论输入内容如何，始终比较完整的 len 字节，
+ * 确保攻击者无法通过测量响应时间推断匹配程度。
+ *
+ * @param a    第一个字符串
+ * @param b    第二个字符串
+ * @param len  要比较的字节数
+ * @return int 1=相等，0=不相等
+ */
+static int constant_time_compare(const char *a, const char *b, size_t len) {
+    volatile unsigned char result = 0;
+    size_t i;
+    for (i = 0; i < len; i++) {
+        result |= (unsigned char)a[i] ^ (unsigned char)b[i];
     }
-
-    /* 逐字符检查是否全为空白 */
-    while (*text != '\0') {
-        if (!isspace((unsigned char)*text)) {
-            return 0;
-        }
-
-        text++;
-    }
-
-    return 1;
+    return result == 0 ? 1 : 0;
 }
 
 /**
@@ -66,7 +73,7 @@ static int AuthService_is_valid_role(UserRole role) {
 static Result AuthService_validate_text(const char *text, const char *field_name) {
     char message[RESULT_MESSAGE_CAPACITY];
 
-    if (AuthService_is_blank_text(text)) {
+    if (StringUtils_is_blank(text)) {
         snprintf(message, sizeof(message), "%s missing", field_name);
         return Result_make_failure(message);
     }
@@ -89,14 +96,62 @@ static Result AuthService_validate_text(const char *text, const char *field_name
  * @param capacity  缓冲区容量（未使用，仅作安全标记）
  */
 static void AuthService_generate_salt(char *salt_hex, size_t capacity) {
-    unsigned int seed = (unsigned int)(time(NULL) ^ clock());
+    unsigned char raw_bytes[16];
     int i = 0;
+    int use_fallback = 0;
 
     (void)capacity;  /* 显式忽略未使用的参数 */
-    srand(seed);
-    /* 逐字节生成随机值并转为两位十六进制字符 */
+    memset(raw_bytes, 0, sizeof(raw_bytes));
+
+#ifdef _WIN32
+    /* Windows: 使用 BCryptGenRandom 生成密码学安全随机数 */
+    {
+        typedef long NTSTATUS;
+        typedef NTSTATUS (*BCryptGenRandomFunc)(void*, unsigned char*, unsigned long, unsigned long);
+        HMODULE bcrypt_lib = LoadLibraryA("bcrypt.dll");
+        if (bcrypt_lib) {
+            BCryptGenRandomFunc gen_random = (BCryptGenRandomFunc)GetProcAddress(bcrypt_lib, "BCryptGenRandom");
+            if (gen_random && gen_random(NULL, raw_bytes, sizeof(raw_bytes), 0x00000002) == 0) {
+                use_fallback = 0;
+            } else {
+                use_fallback = 1;
+            }
+            FreeLibrary(bcrypt_lib);
+        } else {
+            use_fallback = 1;
+        }
+    }
+#else
+    /* POSIX: 使用 /dev/urandom 生成密码学安全随机数 */
+    {
+        FILE *urand = fopen("/dev/urandom", "rb");
+        if (urand) {
+            size_t read_count = fread(raw_bytes, 1, sizeof(raw_bytes), urand);
+            fclose(urand);
+            if (read_count == sizeof(raw_bytes)) {
+                use_fallback = 0;
+            } else {
+                use_fallback = 1;
+            }
+        } else {
+            use_fallback = 1;
+        }
+    }
+#endif
+
+    if (use_fallback) {
+        /* 回退方案：使用 srand/rand（不安全，仅在 CSPRNG 不可用时使用） */
+        /* WARNING: 此回退方案生成的盐值可预测，仅应在系统不支持安全随机源时使用 */
+        unsigned int seed = (unsigned int)(time(NULL) ^ clock());
+        srand(seed);
+        for (i = 0; i < 16; i++) {
+            raw_bytes[i] = (unsigned char)(rand() % 256);
+        }
+    }
+
+    /* 将原始字节转换为十六进制字符串 */
     for (i = 0; i < 16; i++) {
-        snprintf(salt_hex + i * 2, 3, "%02x", rand() % 256);
+        snprintf(salt_hex + i * 2, 3, "%02x", raw_bytes[i]);
     }
 }
 
@@ -154,8 +209,8 @@ static Result AuthService_hash_password(
         h2 *= UINT64_C(1469598103934665603);
     }
 
-    /* 对密码执行 1000 次迭代混合，增强抗暴力破解能力 */
-    for (iteration = 0; iteration < 1000; iteration++) {
+    /* 对密码执行多次迭代混合，增强抗暴力破解能力 */
+    for (iteration = 0; iteration < AUTH_HASH_ITERATIONS; iteration++) {
         index = 0;
         while (password[index] != '\0') {
             unsigned char value = (unsigned char)password[index];
@@ -517,9 +572,14 @@ Result AuthService_authenticate(
         return Result_make_failure("invalid credentials");
     }
 
-    /* 比对密码哈希 */
-    if (strcmp(loaded_user.password_hash, password_hash) != 0) {
-        return Result_make_failure("invalid credentials");
+    /* 比对密码哈希（使用常量时间比较，防止时序攻击） */
+    {
+        size_t stored_len = strlen(loaded_user.password_hash);
+        size_t computed_len = strlen(password_hash);
+        if (stored_len != computed_len ||
+            !constant_time_compare(loaded_user.password_hash, password_hash, stored_len)) {
+            return Result_make_failure("invalid credentials");
+        }
     }
 
     /* 可选的角色匹配验证 */

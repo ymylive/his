@@ -12,6 +12,13 @@
 #include <ctype.h>
 #include <string.h>
 
+/* ── Named constants for ASCII key codes ─────────────────────── */
+#define INPUT_ESC_CHAR      0x1B   /* ESC key ASCII code */
+#define INPUT_BACKSPACE_DEL 127    /* DEL key (backspace on most terminals) */
+#define INPUT_BACKSPACE_BS  8      /* BS key (backspace on some terminals) */
+#define INPUT_CTRL_Q        17     /* Ctrl+Q ASCII code */
+#define INPUT_CTRL_C        3      /* Ctrl+C ASCII code */
+
 #ifdef _WIN32
 #include <conio.h>
 #include <io.h>
@@ -284,7 +291,7 @@ int InputHelper_read_line(FILE *input, char *buffer, size_t capacity) {
     /* Windows 平台：使用 _getch 在非回显模式下预读首个按键 */
     if (_isatty(_fileno(input))) {
         int ch = _getch();
-        if (ch == 27) { /* 检测到 ESC 键 (ASCII 27 = 0x1B) */
+        if (ch == INPUT_ESC_CHAR) { /* 检测到 ESC 键 */
             buffer[0] = '\0';
             return -2;
         }
@@ -312,7 +319,7 @@ int InputHelper_read_line(FILE *input, char *buffer, size_t capacity) {
             /* 在 raw 模式下读取首个字符 */
             ch = fgetc(input);
 
-            if (ch == 27) { /* 检测到 ESC 键 */
+            if (ch == INPUT_ESC_CHAR) { /* 检测到 ESC 键 */
                 /* 用 fgetc 排空后续转义序列字节（如方向键 [A） */
                 struct termios drain_settings = new_settings;
                 drain_settings.c_cc[VMIN] = 0;
@@ -381,10 +388,10 @@ process_buffer:
     if (length > 0) {
         const char *p = buffer;
         int all_esc = 1;
-        /* 检查是否全部由 ESC 字符(0x1B)和转义序列尾部字节([A-Z~)组成 */
+        /* 检查是否全部由 ESC 字符和转义序列尾部字节([A-Z~)组成 */
         while (*p != '\0') {
             unsigned char ch = (unsigned char)*p;
-            if (ch != 0x1B && ch != '[' && !(ch >= 'A' && ch <= 'Z') && ch != '~') {
+            if (ch != INPUT_ESC_CHAR && ch != '[' && !(ch >= 'A' && ch <= 'Z') && ch != '~') {
                 /* 也检查 "^[" 文本表示 */
                 if (ch == '^' && *(p + 1) == '[') {
                     p += 2;
@@ -459,15 +466,15 @@ InputEvent InputHelper_read_key(FILE *input) {
 
         if (ch == '\r' || ch == '\n') {
             event.key = INPUT_KEY_ENTER;
-        } else if (ch == 27) {
+        } else if (ch == INPUT_ESC_CHAR) {
             event.key = INPUT_KEY_ESC;
-        } else if (ch == 8 || ch == 127) {
+        } else if (ch == INPUT_BACKSPACE_BS || ch == INPUT_BACKSPACE_DEL) {
             event.key = INPUT_KEY_BACKSPACE;
         } else if (ch == '\t') {
             event.key = INPUT_KEY_TAB;
-        } else if (ch == 17) {
+        } else if (ch == INPUT_CTRL_Q) {
             event.key = INPUT_KEY_CTRL_Q;
-        } else if (ch == 3) {
+        } else if (ch == INPUT_CTRL_C) {
             event.key = INPUT_KEY_CTRL_C;
         } else if (ch >= 32 && ch <= 126) {
             event.key = INPUT_KEY_CHAR;
@@ -499,7 +506,7 @@ InputEvent InputHelper_read_key(FILE *input) {
 
         ch = fgetc(input);
 
-        if (ch == 0x1B) {
+        if (ch == INPUT_ESC_CHAR) {
             /* ESC 或转义序列 */
             int next = 0;
             /* 切换为非阻塞以检测是否有后续字节 */
@@ -524,15 +531,17 @@ InputEvent InputHelper_read_key(FILE *input) {
                     ungetc(next, input);
                 }
             }
+            /* 超时读取可能设置了 EOF 标志，必须清除，否则后续 fgetc 永远返回 EOF */
+            clearerr(input);
         } else if (ch == '\n' || ch == '\r') {
             event.key = INPUT_KEY_ENTER;
-        } else if (ch == 127 || ch == 8) {
+        } else if (ch == INPUT_BACKSPACE_DEL || ch == INPUT_BACKSPACE_BS) {
             event.key = INPUT_KEY_BACKSPACE;
         } else if (ch == '\t') {
             event.key = INPUT_KEY_TAB;
-        } else if (ch == 17) {
+        } else if (ch == INPUT_CTRL_Q) {
             event.key = INPUT_KEY_CTRL_Q;
-        } else if (ch == 3) {
+        } else if (ch == INPUT_CTRL_C) {
             event.key = INPUT_KEY_CTRL_C;
         } else if (ch >= 32 && ch <= 126) {
             event.key = INPUT_KEY_CHAR;

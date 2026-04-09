@@ -11,30 +11,8 @@
 #include <ctype.h>
 #include <string.h>
 
-/**
- * @brief 判断文本是否非空（至少包含一个非空白字符）
- *
- * @param text  待检查的字符串
- * @return int  1=非空，0=空白或NULL
- */
-static int DoctorService_has_non_empty_text(const char *text) {
-    const unsigned char *current = (const unsigned char *)text;
+#include "common/StringUtils.h"
 
-    if (current == 0) {
-        return 0;
-    }
-
-    /* 逐字符检查，找到任意非空白字符即返回1 */
-    while (*current != '\0') {
-        if (isspace(*current) == 0) {
-            return 1;
-        }
-
-        current++;
-    }
-
-    return 0;
-}
 
 /**
  * @brief 校验医生信息的完整性
@@ -50,23 +28,23 @@ static Result DoctorService_validate(const Doctor *doctor) {
         return Result_make_failure("doctor missing");
     }
 
-    if (!DoctorService_has_non_empty_text(doctor->doctor_id)) {
+    if (!StringUtils_has_text(doctor->doctor_id)) {
         return Result_make_failure("doctor id missing");
     }
 
-    if (!DoctorService_has_non_empty_text(doctor->name)) {
+    if (!StringUtils_has_text(doctor->name)) {
         return Result_make_failure("doctor name missing");
     }
 
-    if (!DoctorService_has_non_empty_text(doctor->title)) {
+    if (!StringUtils_has_text(doctor->title)) {
         return Result_make_failure("doctor title missing");
     }
 
-    if (!DoctorService_has_non_empty_text(doctor->department_id)) {
+    if (!StringUtils_has_text(doctor->department_id)) {
         return Result_make_failure("doctor department missing");
     }
 
-    if (!DoctorService_has_non_empty_text(doctor->schedule)) {
+    if (!StringUtils_has_text(doctor->schedule)) {
         return Result_make_failure("doctor schedule missing");
     }
 
@@ -129,7 +107,7 @@ static Result DoctorService_ensure_department_exists(
         return Result_make_failure("doctor service missing");
     }
 
-    if (!DoctorService_has_non_empty_text(department_id)) {
+    if (!StringUtils_has_text(department_id)) {
         return Result_make_failure("doctor department missing");
     }
 
@@ -244,7 +222,7 @@ Result DoctorService_get_by_id(
         return Result_make_failure("doctor service missing");
     }
 
-    if (!DoctorService_has_non_empty_text(doctor_id) || out_doctor == 0) {
+    if (!StringUtils_has_text(doctor_id) || out_doctor == 0) {
         return Result_make_failure("doctor query arguments missing");
     }
 

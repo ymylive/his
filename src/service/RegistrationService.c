@@ -14,6 +14,7 @@
 #include <string.h>
 
 #include "common/IdGenerator.h"
+#include "common/StringUtils.h"
 #include "repository/RepositoryUtils.h"
 
 /** @brief 挂号记录数据行的字段数量 */
@@ -44,32 +45,6 @@ static int RegistrationService_has_text(const char *text) {
     return text != 0 && text[0] != '\0';
 }
 
-/**
- * @brief 安全复制文本字符串
- *
- * 将源字符串安全复制到目标缓冲区，确保以 '\0' 结尾。
- *
- * @param destination  目标缓冲区
- * @param capacity     目标缓冲区容量
- * @param source       源字符串（可为 NULL）
- */
-static void RegistrationService_copy_text(
-    char *destination,
-    size_t capacity,
-    const char *source
-) {
-    if (destination == 0 || capacity == 0) {
-        return;
-    }
-
-    if (source == 0) {
-        destination[0] = '\0';
-        return;
-    }
-
-    strncpy(destination, source, capacity - 1);
-    destination[capacity - 1] = '\0';
-}
 
 /**
  * @brief 解析挂号状态字符串为枚举值
@@ -155,27 +130,27 @@ static Result RegistrationService_parse_registration_line(
 
     /* 将各字段复制到结构体对应成员 */
     memset(out_registration, 0, sizeof(*out_registration));
-    RegistrationService_copy_text(
+    StringUtils_copy(
         out_registration->registration_id,
         sizeof(out_registration->registration_id),
         fields[0]
     );
-    RegistrationService_copy_text(
+    StringUtils_copy(
         out_registration->patient_id,
         sizeof(out_registration->patient_id),
         fields[1]
     );
-    RegistrationService_copy_text(
+    StringUtils_copy(
         out_registration->doctor_id,
         sizeof(out_registration->doctor_id),
         fields[2]
     );
-    RegistrationService_copy_text(
+    StringUtils_copy(
         out_registration->department_id,
         sizeof(out_registration->department_id),
         fields[3]
     );
-    RegistrationService_copy_text(
+    StringUtils_copy(
         out_registration->registered_at,
         sizeof(out_registration->registered_at),
         fields[4]
@@ -187,12 +162,12 @@ static Result RegistrationService_parse_registration_line(
         return result;
     }
 
-    RegistrationService_copy_text(
+    StringUtils_copy(
         out_registration->diagnosed_at,
         sizeof(out_registration->diagnosed_at),
         fields[6]
     );
-    RegistrationService_copy_text(
+    StringUtils_copy(
         out_registration->cancelled_at,
         sizeof(out_registration->cancelled_at),
         fields[7]
@@ -578,27 +553,27 @@ static Result RegistrationService_fill_new_registration(
     }
 
     memset(registration, 0, sizeof(*registration));
-    RegistrationService_copy_text(
+    StringUtils_copy(
         registration->registration_id,
         sizeof(registration->registration_id),
         registration_id
     );
-    RegistrationService_copy_text(
+    StringUtils_copy(
         registration->patient_id,
         sizeof(registration->patient_id),
         patient_id
     );
-    RegistrationService_copy_text(
+    StringUtils_copy(
         registration->doctor_id,
         sizeof(registration->doctor_id),
         doctor_id
     );
-    RegistrationService_copy_text(
+    StringUtils_copy(
         registration->department_id,
         sizeof(registration->department_id),
         department_id
     );
-    RegistrationService_copy_text(
+    StringUtils_copy(
         registration->registered_at,
         sizeof(registration->registered_at),
         registered_at

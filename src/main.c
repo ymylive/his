@@ -16,6 +16,19 @@
 #include <windows.h>
 #endif
 
+/**
+ * @brief 安全清零敏感缓冲区，防止编译器优化掉清除操作
+ *
+ * 在 POSIX 系统上使用 explicit_bzero（如果可用），否则使用
+ * volatile 指针逐字节清零，确保编译器不会将清零优化掉。
+ */
+#if defined(__GLIBC__) && defined(__GLIBC_MINOR__) && (__GLIBC__ > 2 || (__GLIBC__ == 2 && __GLIBC_MINOR__ >= 25))
+#include <string.h>
+#define secure_zero(ptr, len) explicit_bzero((ptr), (len))
+#else
+#define secure_zero(ptr, len) do { volatile char *_p = (volatile char*)(ptr); size_t _n = (len); while (_n--) *_p++ = 0; } while(0)
+#endif
+
 #include "common/InputHelper.h"
 #include "common/UpdateChecker.h"
 #include "ui/DemoData.h"
@@ -264,8 +277,9 @@ int main(void) {
 
                 /* 尝试登录验证 */
                 result = MenuApplication_login(&application, input, password, required_role);
-                /* 安全清除密码：使用 volatile 防止编译器优化掉清零操作 */
-                { volatile char *p = password; size_t n = sizeof(password); while (n--) *p++ = 0; }
+                /* 安全清除敏感缓冲区：密码和用户输入 */
+                secure_zero(password, sizeof(password));
+                secure_zero(input, sizeof(input));
                 if (result.success == 0) {
                     tui_animate_error(stdout, result.message);
                     tui_delay(500);

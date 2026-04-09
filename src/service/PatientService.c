@@ -13,6 +13,7 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "common/StringUtils.h"
 #include "repository/RepositoryUtils.h"
 
 /**
@@ -25,27 +26,6 @@ enum {
     PATIENT_SERVICE_MATCH_ID_CARD = 2   /* 按身份证号匹配 */
 };
 
-/**
- * @brief 判断文本是否为空白（NULL、空串或全为空白字符）
- *
- * @param text  待检查的字符串
- * @return int  1=空白，0=非空白
- */
-static int PatientService_is_blank_text(const char *text) {
-    if (text == 0) {
-        return 1;
-    }
-
-    while (*text != '\0') {
-        if (!isspace((unsigned char)*text)) {
-            return 0;
-        }
-
-        text++;
-    }
-
-    return 1;
-}
 
 /**
  * @brief 校验必填文本字段
@@ -59,7 +39,7 @@ static int PatientService_is_blank_text(const char *text) {
 static Result PatientService_validate_required_text(const char *text, const char *field_name) {
     char message[RESULT_MESSAGE_CAPACITY];
 
-    if (PatientService_is_blank_text(text)) {
+    if (StringUtils_is_blank(text)) {
         snprintf(message, sizeof(message), "%s missing", field_name);
         return Result_make_failure(message);
     }

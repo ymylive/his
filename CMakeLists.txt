@@ -48,6 +48,11 @@ add_library(his_common
     src/service/PharmacyService.c
     src/service/RegistrationService.c
     src/ui/DemoData.c
+    src/ui/MenuActionAdmin.c
+    src/ui/MenuActionDoctor.c
+    src/ui/MenuActionInpatient.c
+    src/ui/MenuActionPatient.c
+    src/ui/MenuActionPharmacy.c
     src/ui/MenuApplication.c
     src/ui/MenuController.c
     src/ui/TuiPanel.c

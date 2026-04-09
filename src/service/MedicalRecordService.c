@@ -16,6 +16,7 @@
 #include <string.h>
 
 #include "common/IdGenerator.h"
+#include "common/StringUtils.h"
 #include "repository/RepositoryUtils.h"
 
 /** @brief 就诊记录ID的前缀 */
@@ -29,53 +30,6 @@
 
 /** @brief 检查记录ID序号部分的位宽 */
 #define MEDICAL_RECORD_EXAM_ID_WIDTH 4
-
-/**
- * @brief 判断文本是否为空白（NULL、空串或全为空白字符）
- *
- * @param text  待检查的字符串
- * @return int  1=空白，0=非空白
- */
-static int MedicalRecordService_is_blank_text(const char *text) {
-    if (text == 0) {
-        return 1;
-    }
-
-    while (*text != '\0') {
-        if (!isspace((unsigned char)*text)) {
-            return 0;
-        }
-
-        text++;
-    }
-
-    return 1;
-}
-
-/**
- * @brief 安全复制文本字符串
- *
- * @param destination  目标缓冲区
- * @param capacity     目标缓冲区容量
- * @param source       源字符串（可为 NULL）
- */
-static void MedicalRecordService_copy_text(
-    char *destination,
-    size_t capacity,
-    const char *source
-) {
-    if (destination == 0 || capacity == 0) {
-        return;
-    }
-
-    if (source == 0) {
-        destination[0] = '\0';
-        return;
-    }
-
-    strncpy(destination, source, capacity - 1);
-    destination[capacity - 1] = '\0';
-}
 
 /**
  * @brief 校验文本字段
@@ -94,7 +48,7 @@ static Result MedicalRecordService_validate_text(
 ) {
     char message[RESULT_MESSAGE_CAPACITY];
 
-    if (!allow_empty && MedicalRecordService_is_blank_text(text)) {
+    if (!allow_empty && StringUtils_is_blank(text)) {
         snprintf(message, sizeof(message), "%s missing", field_name);
         return Result_make_failure(message);
     }
@@ -147,17 +101,17 @@ static int MedicalRecordService_is_in_time_range(
     const char *time_to
 ) {
     /* 空白时间值不在任何范围内 */
-    if (MedicalRecordService_is_blank_text(value)) {
+    if (StringUtils_is_blank(value)) {
         return 0;
     }
 
     /* 检查是否早于起始时间 */
-    if (!MedicalRecordService_is_blank_text(time_from) && strcmp(value, time_from) < 0) {
+    if (!StringUtils_is_blank(time_from) && strcmp(value, time_from) < 0) {
         return 0;
     }
 
     /* 检查是否晚于结束时间 */
-    if (!MedicalRecordService_is_blank_text(time_to) && strcmp(value, time_to) > 0) {
+    if (!StringUtils_is_blank(time_to) && strcmp(value, time_to) > 0) {
         return 0;
     }
 
@@ -894,30 +848,30 @@ static Result MedicalRecordService_build_visit_record(
 
     /* 填充就诊记录各字段 */
     memset(record, 0, sizeof(*record));
-    MedicalRecordService_copy_text(record->visit_id, sizeof(record->visit_id), visit_id);
-    MedicalRecordService_copy_text(
+    StringUtils_copy(record->visit_id, sizeof(record->visit_id), visit_id);
+    StringUtils_copy(
         record->registration_id,
         sizeof(record->registration_id),
         registration->registration_id
     );
-    MedicalRecordService_copy_text(record->patient_id, sizeof(record->patient_id), registration->patient_id);
-    MedicalRecordService_copy_text(record->doctor_id, sizeof(record->doctor_id), registration->doctor_id);
-    MedicalRecordService_copy_text(
+    StringUtils_copy(record->patient_id, sizeof(record->patient_id), registration->patient_id);
+    StringUtils_copy(record->doctor_id, sizeof(record->doctor_id), registration->doctor_id);
+    StringUtils_copy(
         record->department_id,
         sizeof(record->department_id),
         registration->department_id
     );
-    MedicalRecordService_copy_text(
+    StringUtils_copy(
         record->chief_complaint,
         sizeof(record->chief_complaint),
         chief_complaint
     );
-    MedicalRecordService_copy_text(record->diagnosis, sizeof(record->diagnosis), diagnosis);
-    MedicalRecordService_copy_text(record->advice, sizeof(record->advice), advice);
+    StringUtils_copy(record->diagnosis, sizeof(record->diagnosis), diagnosis);
+    StringUtils_copy(record->advice, sizeof(record->advice), advice);
     record->need_exam = need_exam;
     record->need_admission = need_admission;
     record->need_medicine = need_medicine;
-    MedicalRecordService_copy_text(record->visit_time, sizeof(record->visit_time), visit_time);
+    StringUtils_copy(record->visit_time, sizeof(record->visit_time), visit_time);
     return Result_make_success("visit record built");
 }
 
@@ -1411,14 +1365,14 @@ Result MedicalRecordService_create_examination_record(
     }
 
     /* 从就诊记录中提取患者ID和医生ID */
-    MedicalRecordService_copy_text(new_record.visit_id, sizeof(new_record.visit_id), visit_id);
-    MedicalRecordService_copy_text(new_record.patient_id, sizeof(new_record.patient_id), visit->patient_id);
-    MedicalRecordService_copy_text(new_record.doctor_id, sizeof(new_record.doctor_id), visit->doctor_id);
-    MedicalRecordService_copy_text(new_record.exam_item, sizeof(new_record.exam_item), exam_item);
-    MedicalRecordService_copy_text(new_record.exam_type, sizeof(new_record.exam_type), exam_type);
+    StringUtils_copy(new_record.visit_id, sizeof(new_record.visit_id), visit_id);
+    StringUtils_copy(new_record.patient_id, sizeof(new_record.patient_id), visit->patient_id);
+    StringUtils_copy(new_record.doctor_id, sizeof(new_record.doctor_id), visit->doctor_id);
+    StringUtils_copy(new_record.exam_item, sizeof(new_record.exam_item), exam_item);
+    StringUtils_copy(new_record.exam_type, sizeof(new_record.exam_type), exam_type);
     new_record.status = EXAM_STATUS_PENDING;  /* 初始状态为待检查 */
     new_record.result[0] = '\0';
-    MedicalRecordService_copy_text(
+    StringUtils_copy(
         new_record.requested_at,
         sizeof(new_record.requested_at),
         requested_at
@@ -1504,15 +1458,15 @@ Result MedicalRecordService_update_examination_record(
     }
 
     /* 状态和字段的一致性校验 */
-    if (status == EXAM_STATUS_PENDING && !MedicalRecordService_is_blank_text(completed_at)) {
+    if (status == EXAM_STATUS_PENDING && !StringUtils_is_blank(completed_at)) {
         return Result_make_failure("pending exam cannot have completed_at");
     }
 
-    if (status == EXAM_STATUS_COMPLETED && MedicalRecordService_is_blank_text(completed_at)) {
+    if (status == EXAM_STATUS_COMPLETED && StringUtils_is_blank(completed_at)) {
         return Result_make_failure("completed exam missing completed_at");
     }
 
-    if (status == EXAM_STATUS_COMPLETED && MedicalRecordService_is_blank_text(result_text)) {
+    if (status == EXAM_STATUS_COMPLETED && StringUtils_is_blank(result_text)) {
         return Result_make_failure("completed exam missing result");
     }
 
@@ -1531,8 +1485,8 @@ Result MedicalRecordService_update_examination_record(
 
     /* 更新检查记录的状态、结果和完成时间 */
     existing->status = status;
-    MedicalRecordService_copy_text(existing->result, sizeof(existing->result), result_text);
-    MedicalRecordService_copy_text(
+    StringUtils_copy(existing->result, sizeof(existing->result), result_text);
+    StringUtils_copy(
         existing->completed_at,
         sizeof(existing->completed_at),
         status == EXAM_STATUS_COMPLETED ? completed_at : ""
@@ -1771,8 +1725,8 @@ Result MedicalRecordService_find_records_by_time_range(
     }
 
     /* 校验时间范围的合法性（起始时间不能晚于结束时间） */
-    if (!MedicalRecordService_is_blank_text(time_from) &&
-        !MedicalRecordService_is_blank_text(time_to) &&
+    if (!StringUtils_is_blank(time_from) &&
+        !StringUtils_is_blank(time_to) &&
         strcmp(time_from, time_to) > 0) {
         return Result_make_failure("time range invalid");
     }

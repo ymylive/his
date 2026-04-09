@@ -11,33 +11,8 @@
 
 #include <string.h>
 
-/**
- * @brief 安全拷贝字符串（内部辅助函数）
- *
- * 将源字符串安全地拷贝到指定容量的目标缓冲区，确保不会发生缓冲区溢出。
- * 如果源字符串为空指针，则将目标缓冲区清空。
- *
- * @param destination 目标缓冲区指针
- * @param capacity    目标缓冲区容量（字节数）
- * @param source      源字符串指针
- */
-static void Bed_copy_text(char *destination, size_t capacity, const char *source) {
-    /* 目标缓冲区为空或容量为0，无法写入，直接返回 */
-    if (destination == 0 || capacity == 0) {
-        return;
-    }
+#include "common/StringUtils.h"
 
-    /* 源字符串为空，将目标缓冲区置为空字符串 */
-    if (source == 0) {
-        destination[0] = '\0';
-        return;
-    }
-
-    /* 使用 strncpy 安全拷贝，预留最后一个字节用于终止符 */
-    strncpy(destination, source, capacity - 1);
-    /* 确保字符串以 '\0' 结尾，防止溢出 */
-    destination[capacity - 1] = '\0';
-}
 
 /**
  * @brief 检查床位是否可分配给患者
@@ -78,9 +53,9 @@ int Bed_assign(Bed *bed, const char *admission_id, const char *occupied_at) {
     /* 将床位状态设为已占用 */
     bed->status = BED_STATUS_OCCUPIED;
     /* 记录当前关联的入院记录ID */
-    Bed_copy_text(bed->current_admission_id, sizeof(bed->current_admission_id), admission_id);
+    StringUtils_copy(bed->current_admission_id, sizeof(bed->current_admission_id), admission_id);
     /* 记录占用时间 */
-    Bed_copy_text(bed->occupied_at, sizeof(bed->occupied_at), occupied_at);
+    StringUtils_copy(bed->occupied_at, sizeof(bed->occupied_at), occupied_at);
     /* 清空释放时间（正在占用中，尚未释放） */
     bed->released_at[0] = '\0';
     return 1;
@@ -110,7 +85,7 @@ int Bed_release(Bed *bed, const char *released_at) {
     /* 清除占用时间 */
     bed->occupied_at[0] = '\0';
     /* 记录释放时间 */
-    Bed_copy_text(bed->released_at, sizeof(bed->released_at), released_at);
+    StringUtils_copy(bed->released_at, sizeof(bed->released_at), released_at);
     return 1;
 }
 

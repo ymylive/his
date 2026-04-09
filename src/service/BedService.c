@@ -14,27 +14,8 @@
 #include <stdlib.h>
 #include <string.h>
 
-/**
- * @brief 判断文本是否为空白（NULL、空串或全为空白字符）
- *
- * @param text  待检查的字符串
- * @return int  1=空白，0=非空白
- */
-static int BedService_is_blank_text(const char *text) {
-    if (text == 0) {
-        return 1;
-    }
+#include "common/StringUtils.h"
 
-    while (*text != '\0') {
-        if (!isspace((unsigned char)*text)) {
-            return 0;
-        }
-
-        text++;
-    }
-
-    return 1;
-}
 
 /**
  * @brief 校验必填文本字段
@@ -46,7 +27,7 @@ static int BedService_is_blank_text(const char *text) {
 static Result BedService_validate_required_text(const char *text, const char *field_name) {
     char message[RESULT_MESSAGE_CAPACITY];
 
-    if (BedService_is_blank_text(text)) {
+    if (StringUtils_is_blank(text)) {
         snprintf(message, sizeof(message), "%s missing", field_name);
         return Result_make_failure(message);
     }

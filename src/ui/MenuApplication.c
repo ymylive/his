@@ -17,6 +17,7 @@
  */
 
 #include "ui/MenuApplication.h"
+#include "ui/MenuActionHandlers.h"
 
 #include <ctype.h>
 #include "ui/TuiStyle.h"
@@ -43,7 +44,7 @@
  * @param text 待检查的字符串
  * @return 1 表示空白，0 表示非空白
  */
-static int MenuApplication_is_blank(const char *text) {
+int MenuApplication_is_blank(const char *text) {
     if (text == 0) {
         return 1;
     }
@@ -203,7 +204,7 @@ static Result MenuApplication_generate_medicine_id(
 }
 
 /** @brief 安全复制字符串到目标缓冲区 */
-static void MenuApplication_copy_text(
+void MenuApplication_copy_text(
     char *destination,
     size_t capacity,
     const char *source
@@ -242,7 +243,7 @@ static void MenuApplication_clear_authenticated_user_state(MenuApplication *appl
 }
 
 /** @brief 检查是否已绑定患者会话（患者角色操作的前置条件） */
-static Result MenuApplication_require_patient_session(MenuApplication *application) {
+Result MenuApplication_require_patient_session(MenuApplication *application) {
     if (application == 0) {
         return Result_make_failure("menu application missing");
     }
@@ -347,7 +348,7 @@ static Result MenuApplication_write_failure(
 }
 
 /** @brief 根据操作结果显示成功或错误动画 */
-static void MenuApplication_print_result(FILE *out, const char *text, int success) {
+void MenuApplication_print_result(FILE *out, const char *text, int success) {
     if (out == 0 || text == 0 || text[0] == '\0') {
         return;
     }
@@ -1768,7 +1769,7 @@ static Result MenuApplication_query_dispense_history_by_prescription_id(
     return Result_make_success("dispense history ready");
 }
 
-static Result MenuApplication_query_dispense_history_by_patient_id(
+Result MenuApplication_query_dispense_history_by_patient_id(
     MenuApplication *application,
     const char *patient_id,
     char *buffer,
@@ -1835,29 +1836,11 @@ static Result MenuApplication_query_dispense_history_by_patient_id(
 }
 
 /**
- * @brief 交互式输入上下文 - 持有输入输出流的引用
- */
-typedef struct MenuApplicationPromptContext {
-    FILE *input;   /**< 输入流（通常为 stdin） */
-    FILE *output;  /**< 输出流（通常为 stdout） */
-} MenuApplicationPromptContext;
-
-#define MENU_APPLICATION_SELECT_OPTION_MAX 256  /**< 选择器最大候选项数 */
-
-/**
- * @brief 选择器候选项 - 用于模糊搜索选择界面
- */
-typedef struct MenuApplicationSelectionOption {
-    char id[HIS_DOMAIN_ID_CAPACITY];
-    char label[256];
-} MenuApplicationSelectionOption;
-
-/**
  * @brief 交互式读取一行文本输入
  *
  * 显示提示文本，等待用户输入一行。支持 ESC 取消和 EOF 检测。
  */
-static Result MenuApplication_prompt_line(
+Result MenuApplication_prompt_line(
     MenuApplicationPromptContext *context,
     const char *prompt,
     char *buffer,
@@ -1892,7 +1875,7 @@ static Result MenuApplication_prompt_line(
 }
 
 /** @brief 交互式读取一个整数值 */
-static Result MenuApplication_prompt_int(
+Result MenuApplication_prompt_int(
     MenuApplicationPromptContext *context,
     const char *prompt,
     int *out_value
@@ -2255,7 +2238,7 @@ static Result MenuApplication_prompt_select_option(
 }
 
 /** @brief 交互式选择患者（加载全部患者，通过模糊搜索选择） */
-static Result MenuApplication_prompt_select_patient(
+Result MenuApplication_prompt_select_patient(
     MenuApplication *application,
     MenuApplicationPromptContext *context,
     const char *prompt,
@@ -2304,7 +2287,7 @@ static Result MenuApplication_prompt_select_patient(
 }
 
 /** @brief 交互式选择科室 */
-static Result MenuApplication_prompt_select_department(
+Result MenuApplication_prompt_select_department(
     MenuApplication *application,
     MenuApplicationPromptContext *context,
     const char *prompt,
@@ -2352,7 +2335,7 @@ static Result MenuApplication_prompt_select_department(
 }
 
 /** @brief 交互式选择医生（可按科室过滤） */
-static Result MenuApplication_prompt_select_doctor(
+Result MenuApplication_prompt_select_doctor(
     MenuApplication *application,
     MenuApplicationPromptContext *context,
     const char *prompt,
@@ -2410,7 +2393,7 @@ static Result MenuApplication_prompt_select_doctor(
 }
 
 /** @brief 交互式选择挂号记录（可按患者、医生、状态过滤） */
-static Result MenuApplication_prompt_select_registration(
+Result MenuApplication_prompt_select_registration(
     MenuApplication *application,
     MenuApplicationPromptContext *context,
     const char *prompt,
@@ -2484,7 +2467,7 @@ static Result MenuApplication_prompt_select_registration(
 }
 
 /** @brief 交互式选择就诊记录（可按患者、医生过滤） */
-static Result MenuApplication_prompt_select_visit(
+Result MenuApplication_prompt_select_visit(
     MenuApplication *application,
     MenuApplicationPromptContext *context,
     const char *prompt,
@@ -2550,7 +2533,7 @@ static Result MenuApplication_prompt_select_visit(
 }
 
 /** @brief 交互式选择检查记录（可按医生过滤、仅显示待完成） */
-static Result MenuApplication_prompt_select_examination(
+Result MenuApplication_prompt_select_examination(
     MenuApplication *application,
     MenuApplicationPromptContext *context,
     const char *prompt,
@@ -2619,7 +2602,7 @@ static Result MenuApplication_prompt_select_examination(
 }
 
 /** @brief 交互式选择病房 */
-static Result MenuApplication_prompt_select_ward(
+Result MenuApplication_prompt_select_ward(
     MenuApplication *application,
     MenuApplicationPromptContext *context,
     const char *prompt,
@@ -2669,7 +2652,7 @@ static Result MenuApplication_prompt_select_ward(
 }
 
 /** @brief 交互式选择床位（可按病房过滤、仅空闲/仅占用） */
-static Result MenuApplication_prompt_select_bed(
+Result MenuApplication_prompt_select_bed(
     MenuApplication *application,
     MenuApplicationPromptContext *context,
     const char *prompt,
@@ -2736,7 +2719,7 @@ static Result MenuApplication_prompt_select_bed(
 }
 
 /** @brief 交互式选择住院记录（可按患者过滤、仅在院） */
-static Result MenuApplication_prompt_select_admission(
+Result MenuApplication_prompt_select_admission(
     MenuApplication *application,
     MenuApplicationPromptContext *context,
     const char *prompt,
@@ -2802,7 +2785,7 @@ static Result MenuApplication_prompt_select_admission(
 }
 
 /** @brief 交互式选择药品（可按科室过滤） */
-static Result MenuApplication_prompt_select_medicine(
+Result MenuApplication_prompt_select_medicine(
     MenuApplication *application,
     MenuApplicationPromptContext *context,
     const char *prompt,
@@ -2858,7 +2841,7 @@ static Result MenuApplication_prompt_select_medicine(
 }
 
 /** @brief 交互式采集患者信息表单（姓名、性别、年龄、联系方式等） */
-static Result MenuApplication_prompt_patient_form(
+Result MenuApplication_prompt_patient_form(
     MenuApplicationPromptContext *context,
     Patient *out_patient,
     int require_patient_id
@@ -2953,7 +2936,7 @@ static Result MenuApplication_prompt_patient_form(
 }
 
 /** @brief 交互式采集药品信息表单（名称、单价、库存、阈值等） */
-static Result MenuApplication_prompt_medicine_form(
+Result MenuApplication_prompt_medicine_form(
     MenuApplicationPromptContext *context,
     Medicine *out_medicine,
     int require_medicine_id
@@ -3027,7 +3010,7 @@ static Result MenuApplication_prompt_medicine_form(
 }
 
 /** @brief 交互式采集科室信息表单（名称、位置、描述） */
-static Result MenuApplication_prompt_department_form(
+Result MenuApplication_prompt_department_form(
     MenuApplicationPromptContext *context,
     Department *out_department,
     int require_department_id
@@ -3072,7 +3055,7 @@ static Result MenuApplication_prompt_department_form(
 }
 
 /** @brief 交互式采集医生信息表单（姓名、职称、科室、排班等） */
-static Result MenuApplication_prompt_doctor_form(
+Result MenuApplication_prompt_doctor_form(
     MenuApplicationPromptContext *context,
     Doctor *out_doctor,
     int require_doctor_id
@@ -3517,7 +3500,7 @@ Result MenuApplication_discharge_check(
 }
 
 /** @brief 以表格形式打印病房列表 */
-static void MenuApplication_print_ward_table(MenuApplication *application, FILE *out) {
+void MenuApplication_print_ward_table(MenuApplication *application, FILE *out) {
     LinkedList wards;
     const LinkedListNode *current = 0;
     TuiTable table;
@@ -3561,7 +3544,7 @@ static void MenuApplication_print_ward_table(MenuApplication *application, FILE 
 }
 
 /** @brief 以表格形式打印指定病房的床位列表 */
-static void MenuApplication_print_bed_table(MenuApplication *application, FILE *out, const char *ward_id) {
+void MenuApplication_print_bed_table(MenuApplication *application, FILE *out, const char *ward_id) {
     LinkedList beds;
     const LinkedListNode *current = 0;
     TuiTable table;
@@ -3606,7 +3589,7 @@ static void MenuApplication_print_bed_table(MenuApplication *application, FILE *
     BedService_clear_beds(&beds);
 }
 
-static void MenuApplication_print_low_stock_table(MenuApplication *application, FILE *out) {
+void MenuApplication_print_low_stock_table(MenuApplication *application, FILE *out) {
     LinkedList medicines;
     const LinkedListNode *current = 0;
     TuiTable table;
@@ -3647,7 +3630,7 @@ static void MenuApplication_print_low_stock_table(MenuApplication *application, 
     PharmacyService_clear_medicine_results(&medicines);
 }
 
-static void MenuApplication_print_patient_card(MenuApplication *application, FILE *out, const char *patient_id) {
+void MenuApplication_print_patient_card(MenuApplication *application, FILE *out, const char *patient_id) {
     Patient patient;
     char age_s[16];
 
@@ -3673,7 +3656,7 @@ static void MenuApplication_print_patient_card(MenuApplication *application, FIL
         patient.is_inpatient ? TUI_BOLD_RED : TUI_BOLD_GREEN);
 }
 
-static void MenuApplication_print_pending_table(MenuApplication *application, FILE *out, const char *doctor_id) {
+void MenuApplication_print_pending_table(MenuApplication *application, FILE *out, const char *doctor_id) {
     RegistrationRepositoryFilter filter;
     LinkedList registrations;
     const LinkedListNode *current = 0;
@@ -3724,966 +3707,50 @@ Result MenuApplication_execute_action(
     FILE *input,
     FILE *output
 ) {
-    MenuApplicationPromptContext context;
-    char output_buffer[2048];
-    char first_id[HIS_DOMAIN_ID_CAPACITY];
-    char second_id[HIS_DOMAIN_ID_CAPACITY];
-    char third_id[HIS_DOMAIN_TEXT_CAPACITY];
-    char text_value[HIS_DOMAIN_TEXT_CAPACITY];
-    char time_value[HIS_DOMAIN_TIME_CAPACITY];
-    char long_text[HIS_DOMAIN_LARGE_TEXT_CAPACITY];
-    Patient patient;
-    Doctor doctor;
-    Department department;
-    Medicine medicine;
-    int flag_one = 0;
-    int flag_two = 0;
-    int flag_three = 0;
-    Result result;
-
     if (application == 0 || input == 0 || output == 0) {
         return Result_make_failure("menu action arguments missing");
     }
 
-    context.input = input;
-    context.output = output;
-    memset(output_buffer, 0, sizeof(output_buffer));
-    memset(first_id, 0, sizeof(first_id));
-    memset(second_id, 0, sizeof(second_id));
-    memset(third_id, 0, sizeof(third_id));
-    memset(text_value, 0, sizeof(text_value));
-    memset(time_value, 0, sizeof(time_value));
-    memset(long_text, 0, sizeof(long_text));
-
     switch (action) {
         case MENU_ACTION_ADMIN_PATIENT_MANAGEMENT:
-            result = MenuApplication_prompt_line(
-                &context,
-                TUI_BOLD_YELLOW "1" TUI_RESET ".添加  " TUI_BOLD_YELLOW "2" TUI_RESET ".修改  " TUI_BOLD_YELLOW "3" TUI_RESET ".删除  " TUI_BOLD_YELLOW "4" TUI_RESET ".查询\n请选择: ",
-                first_id,
-                sizeof(first_id)
-            );
-            if (result.success == 0) {
-                return result;
-            }
-            if (strcmp(first_id, "1") == 0) {
-                result = MenuApplication_prompt_patient_form(&context, &patient, 0);
-                if (result.success == 0) {
-                    return result;
-                }
-                result = MenuApplication_add_patient(
-                    application,
-                    &patient,
-                    output_buffer,
-                    sizeof(output_buffer)
-                );
-            } else if (strcmp(first_id, "2") == 0) {
-                result = MenuApplication_prompt_patient_form(&context, &patient, 1);
-                if (result.success == 0) {
-                    return result;
-                }
-                result = MenuApplication_update_patient(
-                    application,
-                    &patient,
-                    output_buffer,
-                    sizeof(output_buffer)
-                );
-            } else if (strcmp(first_id, "3") == 0) {
-                result = MenuApplication_prompt_select_patient(
-                    application,
-                    &context,
-                    "患者搜索关键字/编号(回车列出全部): ",
-                    second_id,
-                    sizeof(second_id)
-                );
-                if (result.success == 0) {
-                    return result;
-                }
-                result = MenuApplication_delete_patient(
-                    application,
-                    second_id,
-                    output_buffer,
-                    sizeof(output_buffer)
-                );
-            } else if (strcmp(first_id, "4") == 0) {
-                result = MenuApplication_prompt_select_patient(
-                    application,
-                    &context,
-                    "患者搜索关键字/编号(回车列出全部): ",
-                    second_id,
-                    sizeof(second_id)
-                );
-                if (result.success == 0) {
-                    return result;
-                }
-                result = MenuApplication_query_patient(
-                    application,
-                    second_id,
-                    output_buffer,
-                    sizeof(output_buffer)
-                );
-            } else {
-                return Result_make_failure("invalid admin patient action");
-            }
-            MenuApplication_print_result(output, output_buffer, result.success);
-            return result;
-
         case MENU_ACTION_ADMIN_DOCTOR_DEPARTMENT:
-            result = MenuApplication_prompt_line(
-                &context,
-                TUI_BOLD_YELLOW "1" TUI_RESET ".新增科室  " TUI_BOLD_YELLOW "2" TUI_RESET ".修改科室  " TUI_BOLD_YELLOW "3" TUI_RESET ".添加医生  " TUI_BOLD_YELLOW "4" TUI_RESET ".查询医生  " TUI_BOLD_YELLOW "5" TUI_RESET ".按科室查看医生\n请选择: ",
-                first_id,
-                sizeof(first_id)
-            );
-            if (result.success == 0) {
-                return result;
-            }
-            if (strcmp(first_id, "1") == 0 || strcmp(first_id, "2") == 0) {
-                result = MenuApplication_prompt_department_form(&context, &department, strcmp(first_id, "2") == 0 ? 1 : 0);
-                if (result.success == 0) {
-                    return result;
-                }
-                result = strcmp(first_id, "1") == 0
-                    ? MenuApplication_add_department(
-                        application,
-                        &department,
-                        output_buffer,
-                        sizeof(output_buffer)
-                    )
-                    : MenuApplication_update_department(
-                        application,
-                        &department,
-                        output_buffer,
-                        sizeof(output_buffer)
-                    );
-            } else if (strcmp(first_id, "3") == 0) {
-                result = MenuApplication_prompt_doctor_form(&context, &doctor, 0);
-                if (result.success == 0) {
-                    return result;
-                }
-                result = MenuApplication_add_doctor(
-                    application,
-                    &doctor,
-                    output_buffer,
-                    sizeof(output_buffer)
-                );
-            } else if (strcmp(first_id, "4") == 0) {
-                result = MenuApplication_prompt_select_doctor(
-                    application,
-                    &context,
-                    "医生搜索关键字/工号(回车列出全部): ",
-                    "",
-                    second_id,
-                    sizeof(second_id)
-                );
-                if (result.success == 0) {
-                    return result;
-                }
-                result = MenuApplication_query_doctor(
-                    application,
-                    second_id,
-                    output_buffer,
-                    sizeof(output_buffer)
-                );
-            } else if (strcmp(first_id, "5") == 0) {
-                result = MenuApplication_prompt_select_department(
-                    application,
-                    &context,
-                    "科室搜索关键字/编号(回车列出全部): ",
-                    second_id,
-                    sizeof(second_id)
-                );
-                if (result.success == 0) {
-                    return result;
-                }
-                result = MenuApplication_list_doctors_by_department(
-                    application,
-                    second_id,
-                    output_buffer,
-                    sizeof(output_buffer)
-                );
-            } else {
-                return Result_make_failure("invalid admin doctor department action");
-            }
-            MenuApplication_print_result(output, output_buffer, result.success);
-            return result;
-
         case MENU_ACTION_ADMIN_MEDICAL_RECORDS:
-            result = MenuApplication_prompt_line(
-                &context,
-                "起始时间: ",
-                time_value,
-                sizeof(time_value)
-            );
-            if (result.success == 0) {
-                return result;
-            }
-            result = MenuApplication_prompt_line(
-                &context,
-                "结束时间: ",
-                text_value,
-                sizeof(text_value)
-            );
-            if (result.success == 0) {
-                return result;
-            }
-            result = MenuApplication_query_records_by_time_range(
-                application,
-                time_value,
-                text_value,
-                output_buffer,
-                sizeof(output_buffer)
-            );
-            MenuApplication_print_result(output, output_buffer, result.success);
-            return result;
-
         case MENU_ACTION_ADMIN_WARD_BED_OVERVIEW:
-            tui_spinner_run(output, "正在加载病房数据...", 500);
-            MenuApplication_print_ward_table(application, output);
-            result = MenuApplication_prompt_select_ward(
-                application,
-                &context,
-                "\xe7\x97\x85\xe5\x8c\xba\xe6\x90\x9c\xe7\xb4\xa2\xe5\x85\xb3\xe9\x94\xae\xe5\xad\x97/\xe7\xbc\x96\xe5\x8f\xb7(\xe5\x9b\x9e\xe8\xbd\xa6\xe5\x88\x97\xe5\x87\xba\xe5\x85\xa8\xe9\x83\xa8): ",
-                first_id,
-                sizeof(first_id)
-            );
-            if (result.success == 0) {
-                return result;
-            }
-            tui_spinner_run(output, "正在加载床位数据...", 400);
-            MenuApplication_print_bed_table(application, output, first_id);
-            return Result_make_success("ward bed overview displayed");
-
         case MENU_ACTION_ADMIN_MEDICINE_OVERVIEW:
-            result = MenuApplication_prompt_line(
-                &context,
-                TUI_BOLD_YELLOW "1" TUI_RESET ".药品详情  " TUI_BOLD_YELLOW "2" TUI_RESET ".低库存提醒\n请选择: ",
-                first_id,
-                sizeof(first_id)
-            );
-            if (result.success == 0) {
-                return result;
-            }
-            if (strcmp(first_id, "1") == 0) {
-                result = MenuApplication_prompt_select_medicine(
-                    application,
-                    &context,
-                    "药品搜索关键字/编号(回车列出全部): ",
-                    "",
-                    second_id,
-                    sizeof(second_id)
-                );
-                if (result.success == 0) {
-                    return result;
-                }
-                result = MenuApplication_query_medicine_detail(
-                    application,
-                    second_id,
-                    output_buffer,
-                    sizeof(output_buffer),
-                    0
-                );
-            } else if (strcmp(first_id, "2") == 0) {
-                tui_spinner_run(output, "正在检查库存...", 500);
-                MenuApplication_print_low_stock_table(application, output);
-                return Result_make_success("low stock medicines displayed");
-            } else {
-                return Result_make_failure("invalid admin medicine action");
-            }
-            MenuApplication_print_result(output, output_buffer, result.success);
-            return result;
-
-        case MENU_ACTION_PATIENT_BASIC_INFO:
-            result = MenuApplication_require_patient_session(application);
-            if (result.success == 0) {
-                return result;
-            }
-            tui_spinner_run(output, "正在查询患者信息...", 400);
-            MenuApplication_print_patient_card(application, output, application->bound_patient_id);
-            return Result_make_success("patient info displayed");
-
-        case MENU_ACTION_PATIENT_QUERY_REGISTRATION:
-            result = MenuApplication_require_patient_session(application);
-            if (result.success == 0) {
-                return result;
-            }
-            result = MenuApplication_query_registrations_by_patient(
-                application,
-                application->bound_patient_id,
-                output_buffer,
-                sizeof(output_buffer)
-            );
-            MenuApplication_print_result(output, output_buffer, result.success);
-            return result;
+            return MenuAction_handle_admin(application, action, input, output);
 
         case MENU_ACTION_DOCTOR_PENDING_LIST:
-            if (application->has_authenticated_user != 0 && application->authenticated_user.role == USER_ROLE_DOCTOR) {
-                MenuApplication_copy_text(first_id, sizeof(first_id), application->authenticated_user.user_id);
-            } else {
-                result = MenuApplication_prompt_select_doctor(
-                    application,
-                    &context,
-                    "\xe5\x8c\xbb\xe7\x94\x9f\xe6\x90\x9c\xe7\xb4\xa2\xe5\x85\xb3\xe9\x94\xae\xe5\xad\x97/\xe5\xb7\xa5\xe5\x8f\xb7(\xe5\x9b\x9e\xe8\xbd\xa6\xe5\x88\x97\xe5\x87\xba\xe5\x85\xa8\xe9\x83\xa8): ",
-                    "",
-                    first_id,
-                    sizeof(first_id)
-                );
-                if (result.success == 0) {
-                    return result;
-                }
-            }
-            tui_spinner_run(output, "正在加载待诊列表...", 500);
-            MenuApplication_print_pending_table(application, output, first_id);
-            return Result_make_success("pending list displayed");
-
         case MENU_ACTION_DOCTOR_QUERY_PATIENT_HISTORY:
-            result = MenuApplication_prompt_select_patient(
-                application,
-                &context,
-                "患者搜索关键字/编号(回车列出全部): ",
-                first_id,
-                sizeof(first_id)
-            );
-            if (result.success == 0) {
-                return result;
-            }
-            result = MenuApplication_query_patient_history(
-                application,
-                first_id,
-                output_buffer,
-                sizeof(output_buffer)
-            );
-            MenuApplication_print_result(output, output_buffer, result.success);
-            return result;
+        case MENU_ACTION_DOCTOR_VISIT_RECORD:
+        case MENU_ACTION_DOCTOR_PRESCRIPTION_STOCK:
+        case MENU_ACTION_DOCTOR_EXAM_RECORD:
+            return MenuAction_handle_doctor(application, action, input, output);
 
+        case MENU_ACTION_PATIENT_BASIC_INFO:
+        case MENU_ACTION_PATIENT_QUERY_REGISTRATION:
         case MENU_ACTION_PATIENT_QUERY_VISITS:
         case MENU_ACTION_PATIENT_QUERY_EXAMS:
         case MENU_ACTION_PATIENT_QUERY_ADMISSIONS:
-            result = MenuApplication_require_patient_session(application);
-            if (result.success == 0) {
-                return result;
-            }
-            result = MenuApplication_query_patient_history(
-                application,
-                application->bound_patient_id,
-                output_buffer,
-                sizeof(output_buffer)
-            );
-            MenuApplication_print_result(output, output_buffer, result.success);
-            return result;
-
         case MENU_ACTION_PATIENT_QUERY_DISPENSE:
-            result = MenuApplication_require_patient_session(application);
-            if (result.success == 0) {
-                return result;
-            }
-            result = MenuApplication_query_dispense_history_by_patient_id(
-                application,
-                application->bound_patient_id,
-                output_buffer,
-                sizeof(output_buffer)
-            );
-            MenuApplication_print_result(output, output_buffer, result.success);
-            return result;
-
         case MENU_ACTION_PATIENT_QUERY_MEDICINE_USAGE:
-            result = MenuApplication_require_patient_session(application);
-            if (result.success == 0) {
-                return result;
-            }
-            result = MenuApplication_prompt_select_medicine(
-                application,
-                &context,
-                "药品搜索关键字/编号(回车列出全部): ",
-                "",
-                first_id,
-                sizeof(first_id)
-            );
-            if (result.success == 0) {
-                return result;
-            }
-            result = MenuApplication_query_medicine_detail(
-                application,
-                first_id,
-                output_buffer,
-                sizeof(output_buffer),
-                1
-            );
-            MenuApplication_print_result(output, output_buffer, result.success);
-            return result;
-
-        case MENU_ACTION_DOCTOR_VISIT_RECORD:
-            result = MenuApplication_prompt_select_registration(
-                application,
-                &context,
-                "待接诊挂号搜索关键字/编号(回车列出全部): ",
-                "",
-                application->has_authenticated_user != 0 ? application->authenticated_user.user_id : "",
-                REG_STATUS_PENDING,
-                1,
-                first_id,
-                sizeof(first_id)
-            );
-            if (result.success == 0) {
-                return result;
-            }
-            result = MenuApplication_prompt_line(
-                &context,
-                "主诉: ",
-                text_value,
-                sizeof(text_value)
-            );
-            if (result.success == 0) {
-                return result;
-            }
-            result = MenuApplication_prompt_line(
-                &context,
-                "诊断结果: ",
-                third_id,
-                sizeof(third_id)
-            );
-            if (result.success == 0) {
-                return result;
-            }
-            result = MenuApplication_prompt_line(
-                &context,
-                "医生建议: ",
-                long_text,
-                sizeof(long_text)
-            );
-            if (result.success == 0) {
-                return result;
-            }
-            result = MenuApplication_prompt_int(&context, "是否需要检查(0/1): ", &flag_one);
-            if (result.success == 0) {
-                return result;
-            }
-            result = MenuApplication_prompt_int(&context, "是否需要住院(0/1): ", &flag_two);
-            if (result.success == 0) {
-                return result;
-            }
-            result = MenuApplication_prompt_int(&context, "是否需要用药(0/1): ", &flag_three);
-            if (result.success == 0) {
-                return result;
-            }
-            result = MenuApplication_prompt_line(
-                &context,
-                "就诊时间: ",
-                time_value,
-                sizeof(time_value)
-            );
-            if (result.success == 0) {
-                return result;
-            }
-            tui_spinner_run(output, "正在保存诊疗记录...", 500);
-            result = MenuApplication_create_visit_record(
-                application,
-                first_id,
-                text_value,
-                third_id,
-                long_text,
-                flag_one,
-                flag_two,
-                flag_three,
-                time_value,
-                output_buffer,
-                sizeof(output_buffer)
-            );
-            MenuApplication_print_result(output, output_buffer, result.success);
-            return result;
-
-        case MENU_ACTION_DOCTOR_EXAM_RECORD:
-            result = MenuApplication_prompt_line(
-                &context,
-                TUI_BOLD_YELLOW "1" TUI_RESET ". 新增检查  " TUI_BOLD_YELLOW "2" TUI_RESET ". 回写结果\n请选择: ",
-                first_id,
-                sizeof(first_id)
-            );
-            if (result.success == 0) {
-                return result;
-            }
-            if (strcmp(first_id, "1") == 0) {
-                result = MenuApplication_prompt_select_visit(
-                    application,
-                    &context,
-                    "就诊搜索关键字/编号(回车列出全部): ",
-                    "",
-                    application->has_authenticated_user != 0 ? application->authenticated_user.user_id : "",
-                    second_id,
-                    sizeof(second_id)
-                );
-                if (result.success == 0) {
-                    return result;
-                }
-                result = MenuApplication_prompt_line(
-                    &context,
-                    "检查项目: ",
-                    text_value,
-                    sizeof(text_value)
-                );
-                if (result.success == 0) {
-                    return result;
-                }
-                result = MenuApplication_prompt_line(
-                    &context,
-                    "检查类型: ",
-                    third_id,
-                    sizeof(third_id)
-                );
-                if (result.success == 0) {
-                    return result;
-                }
-                result = MenuApplication_prompt_line(
-                    &context,
-                    "申请时间: ",
-                    time_value,
-                    sizeof(time_value)
-                );
-                if (result.success == 0) {
-                    return result;
-                }
-                result = MenuApplication_create_examination_record(
-                    application,
-                    second_id,
-                    text_value,
-                    third_id,
-                    time_value,
-                    output_buffer,
-                    sizeof(output_buffer)
-                );
-            } else if (strcmp(first_id, "2") == 0) {
-                result = MenuApplication_prompt_select_examination(
-                    application,
-                    &context,
-                    "待回写检查搜索关键字/编号(回车列出全部): ",
-                    application->has_authenticated_user != 0 ? application->authenticated_user.user_id : "",
-                    1,
-                    second_id,
-                    sizeof(second_id)
-                );
-                if (result.success == 0) {
-                    return result;
-                }
-                result = MenuApplication_prompt_line(
-                    &context,
-                    "检查结果: ",
-                    long_text,
-                    sizeof(long_text)
-                );
-                if (result.success == 0) {
-                    return result;
-                }
-                result = MenuApplication_prompt_line(
-                    &context,
-                    "完成时间: ",
-                    time_value,
-                    sizeof(time_value)
-                );
-                if (result.success == 0) {
-                    return result;
-                }
-                result = MenuApplication_complete_examination_record(
-                    application,
-                    second_id,
-                    long_text,
-                    time_value,
-                    output_buffer,
-                    sizeof(output_buffer)
-                );
-            } else {
-                return Result_make_failure("invalid exam action");
-            }
-            MenuApplication_print_result(output, output_buffer, result.success);
-            return result;
+            return MenuAction_handle_patient(application, action, input, output);
 
         case MENU_ACTION_INPATIENT_QUERY_BED:
-            result = MenuApplication_list_wards(
-                application,
-                output_buffer,
-                sizeof(output_buffer)
-            );
-            MenuApplication_print_result(output, output_buffer, result.success);
-            memset(output_buffer, 0, sizeof(output_buffer));
-            result = MenuApplication_prompt_select_ward(
-                application,
-                &context,
-                "病区搜索关键字/编号(回车列出全部): ",
-                first_id,
-                sizeof(first_id)
-            );
-            if (result.success == 0) {
-                return result;
-            }
-            result = MenuApplication_list_beds_by_ward(
-                application,
-                first_id,
-                output_buffer,
-                sizeof(output_buffer)
-            );
-            MenuApplication_print_result(output, output_buffer, result.success);
-            return result;
-
         case MENU_ACTION_INPATIENT_LIST_WARDS:
-            tui_spinner_run(output, "正在加载病房数据...", 500);
-            MenuApplication_print_ward_table(application, output);
-            return Result_make_success("ward list displayed");
-
         case MENU_ACTION_INPATIENT_LIST_BEDS:
-            result = MenuApplication_prompt_select_ward(
-                application,
-                &context,
-                "\xe7\x97\x85\xe5\x8c\xba\xe6\x90\x9c\xe7\xb4\xa2\xe5\x85\xb3\xe9\x94\xae\xe5\xad\x97/\xe7\xbc\x96\xe5\x8f\xb7(\xe5\x9b\x9e\xe8\xbd\xa6\xe5\x88\x97\xe5\x87\xba\xe5\x85\xa8\xe9\x83\xa8): ",
-                first_id,
-                sizeof(first_id)
-            );
-            if (result.success == 0) {
-                return result;
-            }
-            tui_spinner_run(output, "正在加载床位数据...", 400);
-            MenuApplication_print_bed_table(application, output, first_id);
-            return Result_make_success("bed list displayed");
-
         case MENU_ACTION_INPATIENT_ADMIT:
-            result = MenuApplication_prompt_select_patient(
-                application,
-                &context,
-                "患者搜索关键字/编号(回车列出全部): ",
-                first_id,
-                sizeof(first_id)
-            );
-            if (result.success == 0) {
-                return result;
-            }
-            result = MenuApplication_prompt_select_ward(
-                application,
-                &context,
-                "病区搜索关键字/编号(回车列出全部): ",
-                second_id,
-                sizeof(second_id)
-            );
-            if (result.success == 0) {
-                return result;
-            }
-            result = MenuApplication_prompt_select_bed(
-                application,
-                &context,
-                "床位搜索关键字/编号(回车列出全部): ",
-                second_id,
-                1,
-                0,
-                third_id,
-                sizeof(third_id)
-            );
-            if (result.success == 0) {
-                return result;
-            }
-            result = MenuApplication_prompt_line(
-                &context,
-                "入院时间: ",
-                time_value,
-                sizeof(time_value)
-            );
-            if (result.success == 0) {
-                return result;
-            }
-            result = MenuApplication_prompt_line(
-                &context,
-                "住院摘要: ",
-                long_text,
-                sizeof(long_text)
-            );
-            if (result.success == 0) {
-                return result;
-            }
-            tui_spinner_run(output, "正在办理入院手续...", 600);
-            result = MenuApplication_admit_patient(
-                application,
-                first_id,
-                second_id,
-                third_id,
-                time_value,
-                long_text,
-                output_buffer,
-                sizeof(output_buffer)
-            );
-            MenuApplication_print_result(output, output_buffer, result.success);
-            return result;
-
         case MENU_ACTION_INPATIENT_DISCHARGE:
-            result = MenuApplication_prompt_select_admission(
-                application,
-                &context,
-                "住院记录搜索关键字/编号(回车列出全部): ",
-                "",
-                1,
-                first_id,
-                sizeof(first_id)
-            );
-            if (result.success == 0) {
-                return result;
-            }
-            result = MenuApplication_prompt_line(
-                &context,
-                "出院时间: ",
-                time_value,
-                sizeof(time_value)
-            );
-            if (result.success == 0) {
-                return result;
-            }
-            result = MenuApplication_prompt_line(
-                &context,
-                "出院小结: ",
-                long_text,
-                sizeof(long_text)
-            );
-            if (result.success == 0) {
-                return result;
-            }
-            tui_spinner_run(output, "正在办理出院手续...", 600);
-            result = MenuApplication_discharge_patient(
-                application,
-                first_id,
-                time_value,
-                long_text,
-                output_buffer,
-                sizeof(output_buffer)
-            );
-            MenuApplication_print_result(output, output_buffer, result.success);
-            return result;
-
         case MENU_ACTION_INPATIENT_QUERY_RECORD:
-            result = MenuApplication_prompt_select_patient(
-                application,
-                &context,
-                "患者搜索关键字/编号(回车列出全部): ",
-                first_id,
-                sizeof(first_id)
-            );
-            if (result.success == 0) {
-                return result;
-            }
-            result = MenuApplication_query_active_admission_by_patient(
-                application,
-                first_id,
-                output_buffer,
-                sizeof(output_buffer)
-            );
-            MenuApplication_print_result(output, output_buffer, result.success);
-            return result;
-
         case MENU_ACTION_INPATIENT_TRANSFER_BED:
-            result = MenuApplication_prompt_select_admission(
-                application,
-                &context,
-                "在院住院记录搜索关键字/编号(回车列出全部): ",
-                "",
-                1,
-                first_id,
-                sizeof(first_id)
-            );
-            if (result.success == 0) {
-                return result;
-            }
-            result = MenuApplication_prompt_select_bed(
-                application,
-                &context,
-                "目标床位搜索关键字/编号(回车列出全部): ",
-                "",
-                1,
-                0,
-                second_id,
-                sizeof(second_id)
-            );
-            if (result.success == 0) {
-                return result;
-            }
-            result = MenuApplication_prompt_line(
-                &context,
-                "转床时间: ",
-                time_value,
-                sizeof(time_value)
-            );
-            if (result.success == 0) {
-                return result;
-            }
-            result = MenuApplication_transfer_bed(
-                application,
-                first_id,
-                second_id,
-                time_value,
-                output_buffer,
-                sizeof(output_buffer)
-            );
-            MenuApplication_print_result(output, output_buffer, result.success);
-            return result;
-
         case MENU_ACTION_INPATIENT_DISCHARGE_CHECK:
-            result = MenuApplication_prompt_select_admission(
-                application,
-                &context,
-                "在院住院记录搜索关键字/编号(回车列出全部): ",
-                "",
-                1,
-                first_id,
-                sizeof(first_id)
-            );
-            if (result.success == 0) {
-                return result;
-            }
-            result = MenuApplication_discharge_check(
-                application,
-                first_id,
-                output_buffer,
-                sizeof(output_buffer)
-            );
-            MenuApplication_print_result(output, output_buffer, result.success);
-            return result;
+            return MenuAction_handle_inpatient(application, action, input, output);
 
         case MENU_ACTION_PHARMACY_ADD_MEDICINE:
-            result = MenuApplication_prompt_medicine_form(&context, &medicine, 0);
-            if (result.success == 0) {
-                return result;
-            }
-            result = MenuApplication_add_medicine(
-                application,
-                &medicine,
-                output_buffer,
-                sizeof(output_buffer)
-            );
-            MenuApplication_print_result(output, output_buffer, result.success);
-            return result;
-
         case MENU_ACTION_PHARMACY_RESTOCK:
-            result = MenuApplication_prompt_select_medicine(
-                application,
-                &context,
-                "药品搜索关键字/编号(回车列出全部): ",
-                "",
-                first_id,
-                sizeof(first_id)
-            );
-            if (result.success == 0) {
-                return result;
-            }
-            result = MenuApplication_prompt_int(&context, "入库数量: ", &flag_one);
-            if (result.success == 0) {
-                return result;
-            }
-            result = MenuApplication_restock_medicine(
-                application,
-                first_id,
-                flag_one,
-                output_buffer,
-                sizeof(output_buffer)
-            );
-            MenuApplication_print_result(output, output_buffer, result.success);
-            if (result.success) {
-                tui_animate_progress(output, "入库进度", 20, 25);
-            }
-            return result;
-
         case MENU_ACTION_PHARMACY_DISPENSE:
-            result = MenuApplication_prompt_select_patient(
-                application,
-                &context,
-                "患者搜索关键字/编号(回车列出全部): ",
-                text_value,
-                sizeof(text_value)
-            );
-            if (result.success == 0) {
-                return result;
-            }
-            result = MenuApplication_prompt_select_visit(
-                application,
-                &context,
-                "处方/就诊搜索关键字/编号(回车列出全部): ",
-                text_value,
-                "",
-                first_id,
-                sizeof(first_id)
-            );
-            if (result.success == 0) {
-                return result;
-            }
-            result = MenuApplication_prompt_select_medicine(
-                application,
-                &context,
-                "药品搜索关键字/编号(回车列出全部): ",
-                "",
-                second_id,
-                sizeof(second_id)
-            );
-            if (result.success == 0) {
-                return result;
-            }
-            result = MenuApplication_prompt_int(&context, "发药数量: ", &flag_one);
-            if (result.success == 0) {
-                return result;
-            }
-            if (application->has_authenticated_user != 0 && application->authenticated_user.role == USER_ROLE_PHARMACY) {
-                MenuApplication_copy_text(third_id, sizeof(third_id), application->authenticated_user.user_id);
-            } else {
-                result = MenuApplication_prompt_line(
-                    &context,
-                    "药师工号: ",
-                    third_id,
-                    sizeof(third_id)
-                );
-                if (result.success == 0) {
-                    return result;
-                }
-            }
-            result = MenuApplication_prompt_line(
-                &context,
-                "发药时间: ",
-                time_value,
-                sizeof(time_value)
-            );
-            if (result.success == 0) {
-                return result;
-            }
-            tui_spinner_run(output, "正在处理发药...", 500);
-            result = MenuApplication_dispense_medicine(
-                application,
-                text_value,
-                first_id,
-                second_id,
-                flag_one,
-                third_id,
-                time_value,
-                output_buffer,
-                sizeof(output_buffer)
-            );
-            MenuApplication_print_result(output, output_buffer, result.success);
-            return result;
-
         case MENU_ACTION_PHARMACY_QUERY_STOCK:
-        case MENU_ACTION_DOCTOR_PRESCRIPTION_STOCK:
-            result = MenuApplication_prompt_select_medicine(
-                application,
-                &context,
-                "药品搜索关键字/编号(回车列出全部): ",
-                "",
-                first_id,
-                sizeof(first_id)
-            );
-            if (result.success == 0) {
-                return result;
-            }
-            result = MenuApplication_query_medicine_stock(
-                application,
-                first_id,
-                output_buffer,
-                sizeof(output_buffer)
-            );
-            MenuApplication_print_result(output, output_buffer, result.success);
-            return result;
-
         case MENU_ACTION_PHARMACY_LOW_STOCK:
-            tui_spinner_run(output, "正在检查库存...", 500);
-            MenuApplication_print_low_stock_table(application, output);
-            return Result_make_success("low stock medicines displayed");
+            return MenuAction_handle_pharmacy(application, action, input, output);
 
         default:
             fprintf(output, "当前动作尚未落地: %s\n", MenuController_action_label(action));

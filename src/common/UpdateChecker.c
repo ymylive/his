@@ -37,6 +37,138 @@
 #define GITHUB_REPO    "ymylive/his"
 /** API 响应缓冲区最大大小（字节） */
 #define MAX_RESPONSE   16384
+/** URL 最大允许长度 */
+#define MAX_URL_LENGTH 2048
+/** 文件路径最大允许长度 */
+#define MAX_PATH_LENGTH 512
+
+/* ── 安全验证函数 ───────────────────────────────────────── */
+
+/**
+ * @brief 检查字符串是否包含 shell 元字符
+ *
+ * 拒绝可被用于命令注入的危险字符，包括：
+ * ; | & $ ` ( ) { } < > ! # ' \n \r \\ (反斜杠)
+ *
+ * @param str    要检查的字符串
+ * @param errbuf 错误信息输出缓冲区（可为 NULL）
+ * @param errsz  错误缓冲区大小
+ * @return 安全返回 1，包含危险字符返回 0
+ */
+static int check_no_shell_metachar(const char *str, char *errbuf, size_t errsz) {
+    /* 禁止的 shell 元字符集合 */
+    static const char forbidden[] = ";|&$`(){}[]<>!#'\"\n\r\\";
+    size_t i;
+
+    if (str == NULL) {
+        if (errbuf) snprintf(errbuf, errsz, "输入字符串为空指针");
+        return 0;
+    }
+
+    for (i = 0; str[i] != '\0'; i++) {
+        if (strchr(forbidden, str[i]) != NULL) {
+            if (errbuf) {
+                snprintf(errbuf, errsz,
+                    "检测到危险字符 0x%02X 在位置 %zu",
+                    (unsigned char)str[i], i);
+            }
+            return 0;
+        }
+    }
+    return 1;
+}
+
+/**
+ * @brief 验证 URL 是否安全可用于 shell 命令
+ *
+ * 执行以下安全检查：
+ * 1. 非空且长度不超过 MAX_URL_LENGTH
+ * 2. 必须以 "https://" 开头（禁止 http、file、ftp 等协议）
+ * 3. 不得包含任何 shell 元字符（防止命令注入）
+ *
+ * @param url    要验证的 URL 字符串
+ * @param errbuf 错误信息输出缓冲区（可为 NULL）
+ * @param errsz  错误缓冲区大小
+ * @return URL 安全返回 1，不安全返回 0
+ */
+static int validate_url_for_shell(const char *url, char *errbuf, size_t errsz) {
+    size_t len;
+
+    if (url == NULL || url[0] == '\0') {
+        if (errbuf) snprintf(errbuf, errsz, "URL 为空");
+        return 0;
+    }
+
+    len = strlen(url);
+    if (len > MAX_URL_LENGTH) {
+        if (errbuf) snprintf(errbuf, errsz, "URL 过长（%zu > %d）", len, MAX_URL_LENGTH);
+        return 0;
+    }
+
+    /* 强制要求 HTTPS 协议 */
+    if (strncmp(url, "https://", 8) != 0) {
+        if (errbuf) snprintf(errbuf, errsz, "URL 必须以 https:// 开头");
+        return 0;
+    }
+
+    /* 检查 URL 中不含 shell 元字符。
+     * 注意：合法的 HTTPS URL 仅由字母、数字和 /:.-_~?=&%+@ 组成，
+     * 这里采用黑名单方式拒绝已知的危险字符。 */
+    if (!check_no_shell_metachar(url, errbuf, errsz)) {
+        return 0;
+    }
+
+    return 1;
+}
+
+/**
+ * @brief 验证文件路径是否安全可用于 shell 命令
+ *
+ * 执行以下安全检查：
+ * 1. 非空且长度不超过 MAX_PATH_LENGTH
+ * 2. 不得包含 shell 元字符（防止命令注入）
+ * 3. 仅允许字母、数字、/ \ . _ - 和空格（白名单方式）
+ *
+ * @param path   要验证的路径字符串
+ * @param errbuf 错误信息输出缓冲区（可为 NULL）
+ * @param errsz  错误缓冲区大小
+ * @return 路径安全返回 1，不安全返回 0
+ */
+static int validate_path_for_shell(const char *path, char *errbuf, size_t errsz) {
+    size_t len;
+    size_t i;
+
+    if (path == NULL || path[0] == '\0') {
+        if (errbuf) snprintf(errbuf, errsz, "路径为空");
+        return 0;
+    }
+
+    len = strlen(path);
+    if (len > MAX_PATH_LENGTH) {
+        if (errbuf) snprintf(errbuf, errsz, "路径过长（%zu > %d）", len, MAX_PATH_LENGTH);
+        return 0;
+    }
+
+    /* 路径白名单：仅允许安全字符 */
+    for (i = 0; i < len; i++) {
+        char c = path[i];
+        int safe = 0;
+        if (c >= 'a' && c <= 'z') safe = 1;
+        else if (c >= 'A' && c <= 'Z') safe = 1;
+        else if (c >= '0' && c <= '9') safe = 1;
+        else if (c == '/' || c == '\\' || c == '.' || c == '_' || c == '-' || c == ' ' || c == ':') safe = 1;
+        if (!safe) {
+            if (errbuf) {
+                snprintf(errbuf, errsz,
+                    "路径包含不允许的字符 0x%02X 在位置 %zu",
+                    (unsigned char)c, i);
+            }
+            return 0;
+        }
+    }
+
+    return 1;
+}
 
 /* ── JSON 辅助解析函数 ───────────────────────────────────── */
 
@@ -328,6 +460,16 @@ static int do_download_and_install(FILE *out, const UpdateInfo *info) {
     const char *tmp_zip = "%TEMP%\\his_update.zip";
     const char *tmp_dir = "%TEMP%\\his_update";
 
+    /* 安全验证：在执行任何 shell 命令前，验证所有外部输入 */
+    {
+        char security_err[256];
+        if (!validate_url_for_shell(info->asset_url, security_err, sizeof(security_err))) {
+            tui_print_error(out, "下载链接安全验证失败：");
+            tui_print_error(out, security_err);
+            return 0;
+        }
+    }
+
     fprintf(out, "\n");
     tui_print_info(out, "正在下载更新包...");
     fflush(out);
@@ -423,6 +565,14 @@ static int do_download_and_install(FILE *out, const UpdateInfo *info) {
         fflush(out);
 
         /* 以最小化窗口方式启动更新脚本 */
+        {
+            char security_err[256];
+            if (!validate_path_for_shell(bat_path, security_err, sizeof(security_err))) {
+                tui_print_error(out, "更新脚本路径安全验证失败：");
+                tui_print_error(out, security_err);
+                return 0;
+            }
+        }
         snprintf(cmd, sizeof(cmd), "start \"HIS Updater\" /MIN cmd /c \"%s\"", bat_path);
         system(cmd);
     }
@@ -462,6 +612,21 @@ static int do_download_and_install(FILE *out, const UpdateInfo *info) {
     /* 从完整路径中截取目录部分 */
     last_slash = strrchr(exe_dir, '/');
     if (last_slash) *(last_slash + 1) = '\0';
+
+    /* 安全验证：在执行任何 shell 命令前，验证所有外部输入 */
+    {
+        char security_err[256];
+        if (!validate_url_for_shell(info->asset_url, security_err, sizeof(security_err))) {
+            tui_print_error(out, "下载链接安全验证失败：");
+            tui_print_error(out, security_err);
+            return 0;
+        }
+        if (!validate_path_for_shell(exe_dir, security_err, sizeof(security_err))) {
+            tui_print_error(out, "程序路径安全验证失败：");
+            tui_print_error(out, security_err);
+            return 0;
+        }
+    }
 
     fprintf(out, "\n");
     tui_print_info(out, "正在下载更新包...");
@@ -657,6 +822,15 @@ int UpdateChecker_prompt(FILE *out, FILE *in, const UpdateInfo *info) {
     /* 处理用户选择：在浏览器中打开下载页面 */
     if ((has_direct_download && answer[0] == '2') ||
         (!has_direct_download && answer[0] == '1')) {
+        /* 安全验证：验证 download_url 为合法 HTTPS 链接，防止打开恶意 URI */
+        {
+            char security_err[256];
+            if (!validate_url_for_shell(info->download_url, security_err, sizeof(security_err))) {
+                tui_print_error(out, "下载页面链接安全验证失败：");
+                tui_print_error(out, security_err);
+                return 0;
+            }
+        }
         /* 使用平台原生方式打开浏览器，避免通过 system() 造成命令注入风险 */
 #ifdef __APPLE__
         {

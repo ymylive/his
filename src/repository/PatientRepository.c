@@ -517,7 +517,13 @@ static Result PatientRepository_validate_patient_list(const LinkedList *patients
         return Result_make_failure("patient list missing");
     }
 
-    /* 双层循环：外层校验数据合法性，内层检查ID唯一性 */
+    /*
+     * 双层循环：外层校验数据合法性，内层检查ID唯一性。
+     * 时间复杂度 O(n²)。对于医院信息系统的患者规模（通常 < 几千条），
+     * 这种简单实现足够高效。如果患者数量超过 PATIENT_LIST_N2_THRESHOLD，
+     * 应考虑改用排序+相邻比较（O(n log n)）或哈希集合（O(n)）。
+     */
+#define PATIENT_LIST_N2_THRESHOLD 5000
     outer = patients->head;
     while (outer != 0) {
         const LinkedListNode *inner = outer->next;
