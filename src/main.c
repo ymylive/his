@@ -371,10 +371,10 @@ int main(void) {
                     tui_print_error(stdout, result.message);
                 }
 
-                /* 操作完成后等待用户按键再回到菜单 */
-                tui_print_info(stdout, "\xe6\x8c\x89\xe4\xbb\xbb\xe6\x84\x8f\xe9\x94\xae\xe8\xbf\x94\xe5\x9b\x9e\xe8\x8f\x9c\xe5\x8d\x95..." /* 按任意键返回菜单... */);
+                /* 操作完成后等待回车或ESC返回菜单 */
+                tui_print_info(stdout, "\xe6\x8c\x89\xe5\x9b\x9e\xe8\xbd\xa6\xe8\xbf\x94\xe5\x9b\x9e\xe8\x8f\x9c\xe5\x8d\x95..." /* 按回车返回菜单... */);
                 fflush(stdout);
-                InputHelper_read_key(stdin);
+                InputHelper_read_line(stdin, input, sizeof(input));
             }
 
             tui_show_cursor(stdout);

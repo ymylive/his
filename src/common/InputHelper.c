@@ -299,6 +299,8 @@ int InputHelper_read_line(FILE *input, char *buffer, size_t capacity) {
             struct termios new_settings;
             int ch = 0;
 
+            /* 刷新内核输入缓冲区，丢弃残留字节 */
+            tcflush(input_fd, TCIFLUSH);
             /* 保存终端设置并切换到 raw 模式（关闭规范模式和回显） */
             tcgetattr(input_fd, &old_settings);
             new_settings = old_settings;
@@ -309,33 +311,54 @@ int InputHelper_read_line(FILE *input, char *buffer, size_t capacity) {
 
             /* 在 raw 模式下读取首个字符 */
             ch = fgetc(input);
-            /* 立即恢复终端设置 */
-            tcsetattr(input_fd, TCSANOW, &old_settings);
 
             if (ch == 27) { /* 检测到 ESC 键 */
-                InputHelper_drain_escape_sequence(); /* 排空转义序列尾部字节 */
+                /* 用 fgetc 排空后续转义序列字节（如方向键 [A） */
+                struct termios drain_settings = new_settings;
+                drain_settings.c_cc[VMIN] = 0;
+                drain_settings.c_cc[VTIME] = 1; /* 100ms 超时 */
+                tcsetattr(input_fd, TCSANOW, &drain_settings);
+                while (fgetc(input) != EOF) { /* drain via stdio */ }
+                clearerr(input);
+                tcsetattr(input_fd, TCSANOW, &old_settings);
                 buffer[0] = '\0';
                 return -2;
             }
+
+            /* 恢复终端设置 */
+            tcsetattr(input_fd, TCSANOW, &old_settings);
+
             if (ch == EOF) {
                 buffer[0] = '\0';
                 return 0;
             }
-            /* 将 raw 模式下读取的字符回显到终端并放回输入流 */
+            /* 将 raw 模式下读取的首字符存入 buffer 开头 */
             fputc(ch, stdout);
             fflush(stdout);
-            ungetc(ch, input);
+            buffer[0] = (char)ch;
+            buffer[1] = '\0';
+            /* fgets 追加剩余输入到 buffer+1 */
+            if (capacity > 2) {
+                if (fgets(buffer + 1, (int)(capacity - 1), input) == 0) {
+                    /* 只有首字符，没有换行 */
+                    length = 1;
+                    goto process_buffer;
+                }
+            }
+            length = strlen(buffer);
+            goto process_buffer;
         }
     }
 #endif
 
-    /* 使用 fgets 读取剩余输入（此时终端已恢复为规范模式） */
+    /* 使用 fgets 读取完整输入（此时终端已恢复为规范模式） */
     if (fgets(buffer, (int)capacity, input) == 0) {
         buffer[0] = '\0';
         return 0; /* EOF 或读取错误 */
     }
 
     length = strlen(buffer);
+process_buffer:
 
     /* 如果读取的内容末尾不是换行符且未到文件末尾，说明输入过长 */
     if (length > 0 && buffer[length - 1] != '\n' && !feof(input)) {
@@ -470,6 +493,8 @@ InputEvent InputHelper_read_key(FILE *input) {
         raw_settings.c_lflag &= ~((tcflag_t)ICANON | (tcflag_t)ECHO);
         raw_settings.c_cc[VMIN] = 1;
         raw_settings.c_cc[VTIME] = 0;
+        /* 刷新内核输入缓冲区，丢弃未读的残留字节 */
+        tcflush(input_fd, TCIFLUSH);
         tcsetattr(input_fd, TCSANOW, &raw_settings);
 
         ch = fgetc(input);
