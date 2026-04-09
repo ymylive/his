@@ -327,6 +327,26 @@ int main(void) {
             for (;;) {
                 MenuAction action = MENU_ACTION_INVALID;
 
+                /* 每次回到菜单前，完整重绘分屏界面 */
+                tui_clear_screen();
+                tui_hide_cursor(stdout);
+                TuiLayout_compute(&layout);
+                TuiPanel_draw_left_border(stdout, &layout.sidebar, TUI_OC_BORDER);
+                TuiPanel_write_at(stdout, &layout.sidebar, 1, 2, "");
+                fprintf(stdout, TUI_OC_ACCENT TUI_BOLD "%s %s" TUI_RESET,
+                        tui_role_icon(theme), MenuController_role_label(role));
+                /* 重绘底栏 */
+                {
+                    int col = 0;
+                    TuiPanel_move_to(stdout, &layout.footer, 0, 0);
+                    fprintf(stdout, TUI_OC_BG_PANEL TUI_OC_TEXT);
+                    for (col = 0; col < layout.term_width; col++) fputc(' ', stdout);
+                    TuiPanel_move_to(stdout, &layout.footer, 0, 0);
+                    fprintf(stdout, TUI_OC_BG_PANEL TUI_OC_TEXT " %s %s | %s" TUI_RESET,
+                            tui_role_icon(theme), MenuController_role_label(role), user_id);
+                }
+                fflush(stdout);
+
                 /* 使用交互式菜单选择（方向键导航 + 数字直选） */
                 result = MenuController_interactive_select(role, &layout.sidebar, stdin, &action);
                 if (result.success == 0) {
@@ -337,9 +357,8 @@ int main(void) {
                     break;
                 }
 
-                /* 清空主面板区域 */
-                TuiPanel_clear(stdout, &layout.main);
-                TuiPanel_move_to(stdout, &layout.main, 0, 0);
+                /* 全屏显示操作内容 */
+                tui_clear_screen();
                 tui_show_cursor(stdout);
                 fflush(stdout);
 
@@ -352,8 +371,10 @@ int main(void) {
                     tui_print_error(stdout, result.message);
                 }
 
-                tui_hide_cursor(stdout);
+                /* 操作完成后等待用户按键再回到菜单 */
+                tui_print_info(stdout, "\xe6\x8c\x89\xe4\xbb\xbb\xe6\x84\x8f\xe9\x94\xae\xe8\xbf\x94\xe5\x9b\x9e\xe8\x8f\x9c\xe5\x8d\x95..." /* 按任意键返回菜单... */);
                 fflush(stdout);
+                InputHelper_read_key(stdin);
             }
 
             tui_show_cursor(stdout);
