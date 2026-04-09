@@ -657,10 +657,24 @@ static int do_download_and_install(FILE *out, const UpdateInfo *info) {
     }
     tui_print_success(out, "解压完成");
 
-    /* 第三步：将解压的文件复制到程序安装目录 */
+    /* 第三步：先删除旧的可执行文件，再复制新文件到安装目录
+     *
+     * 关键：不能直接 cp 覆盖正在运行的二进制文件！
+     * 在 macOS/Linux 上，cp 会就地覆写文件内容，导致内核缓存的代码页失效，
+     * 进程被 SIGKILL (zsh: killed)。正确做法是先 rm 旧文件（Unix 会保留
+     * inode 直到进程退出），再 cp 新文件（创建新 inode），这样当前进程
+     * 继续使用旧 inode 运行，新版本等重启后生效。
+     */
     tui_print_info(out, "正在安装更新...");
     fflush(out);
 
+    /* 先删除旧的可执行文件（rm 对运行中的二进制是安全的） */
+    snprintf(cmd, sizeof(cmd),
+        "rm -f \"%shis\" \"%shis_desktop\" 2>/dev/null",
+        exe_dir, exe_dir);
+    system(cmd);
+
+    /* 复制新文件到安装目录 */
     snprintf(cmd, sizeof(cmd),
         "for d in \"%s\"/*/; do cp -Rf \"$d\"* \"%s\" 2>/dev/null; done",
         tmp_dir, exe_dir);
