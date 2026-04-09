@@ -179,4 +179,15 @@ Result MenuController_interactive_select(
     MenuAction *out_action
 );
 
+/**
+ * @brief 主菜单交互式选择（支持方向键导航）
+ * @param input      输入流
+ * @param out_role   输出选择的角色
+ * @return Result    成功或失败
+ */
+Result MenuController_interactive_main_select(
+    FILE *input,
+    MenuRole *out_role
+);
+
 #endif

@@ -171,40 +171,17 @@ int main(void) {
     for (;;) {
         MenuRole role = MENU_ROLE_INVALID;
         TuiRoleTheme theme = TUI_THEME_DEFAULT;
-        /* 渲染主菜单（角色选择菜单）到缓冲区 */
-        Result result = MenuController_render_main_menu(menu_text, sizeof(menu_text));
-
-        if (result.success == 0) {
-            fputs("主菜单渲染失败。\n", stderr);
-            return 1;
-        }
+        Result result = Result_make_success("ready");
 
         tui_clear_screen();
         tui_animate_logo(stdout);
         tui_print_gradient_hline(stdout, 46);
         tui_print_section(stdout, TUI_MEDICAL, "\xe8\xaf\xb7\xe9\x80\x89\xe6\x8b\xa9\xe6\x82\xa8\xe7\x9a\x84\xe8\xa7\x92\xe8\x89\xb2" /* 请选择您的角色 */);
-        tui_animate_lines(stdout, menu_text, 30);
-        tui_print_prompt(stdout, "请选择角色编号 (ESC返回): ");
-        result = Result_make_success("line ready");
-        {
-            int read_result = InputHelper_read_line(stdin, input, sizeof(input));
-            if (read_result == 0 || read_result == -2) {
-                tui_clear_screen();
-                tui_animate_goodbye(stdout);
-                tui_show_cursor(stdout);
-                return 0;
-            }
-            if (read_result < 0) {
-                tui_print_warning(stdout, "输入过长，请重新输入。");
-                tui_delay(1000);
-                continue;
-            }
-        }
+        fputc('\n', stdout);
 
-        result = MenuController_parse_main_selection(input, &role);
+        /* 交互式主菜单：方向键选择角色 */
+        result = MenuController_interactive_main_select(stdin, &role);
         if (result.success == 0) {
-            tui_print_warning(stdout, "输入无效，请重新输入菜单编号。");
-            tui_delay(1000);
             continue;
         }
 

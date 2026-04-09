@@ -670,3 +670,103 @@ Result MenuController_interactive_select(
         }
     }
 }
+
+/** 主菜单选项表 */
+typedef struct MainMenuOption {
+    int selection;
+    MenuRole role;
+    const char *label;
+    int is_dim;
+} MainMenuOption;
+
+static const MainMenuOption MAIN_MENU_OPTIONS[] = {
+    {1, MENU_ROLE_ADMIN,            "\xe7\xb3\xbb\xe7\xbb\x9f\xe7\xae\xa1\xe7\x90\x86\xe5\x91\x98", 0},  /* 系统管理员 */
+    {2, MENU_ROLE_DOCTOR,           "\xe5\x8c\xbb\xe7\x94\x9f", 0},                                        /* 医生 */
+    {3, MENU_ROLE_PATIENT,          "\xe6\x82\xa3\xe8\x80\x85", 0},                                        /* 患者 */
+    {4, MENU_ROLE_INPATIENT_MANAGER,"\xe4\xbd\x8f\xe9\x99\xa2\xe7\xae\xa1\xe7\x90\x86\xe5\x91\x98", 0},  /* 住院管理员 */
+    {5, MENU_ROLE_PHARMACY,         "\xe8\x8d\xaf\xe6\x88\xbf\xe4\xba\xba\xe5\x91\x98", 0},              /* 药房人员 */
+    {6, MENU_ROLE_RESET_DEMO,       "\xe9\x87\x8d\xe7\xbd\xae\xe6\xbc\x94\xe7\xa4\xba\xe6\x95\xb0\xe6\x8d\xae", 0},  /* 重置演示数据 */
+    {0, MENU_ROLE_EXIT,             "\xe9\x80\x80\xe5\x87\xba\xe7\xb3\xbb\xe7\xbb\x9f", 1}               /* 退出系统 */
+};
+#define MAIN_MENU_OPTION_COUNT 7
+
+Result MenuController_interactive_main_select(
+    FILE *input,
+    MenuRole *out_role
+) {
+    size_t selected = 0;
+    int redraw = 1;
+    size_t i = 0;
+    InputEvent ev;
+
+    if (out_role == 0 || input == 0) {
+        return Result_make_failure("main select: invalid arguments");
+    }
+
+    for (;;) {
+        if (redraw) {
+            for (i = 0; i < MAIN_MENU_OPTION_COUNT; i++) {
+                /* 用 tui_print_margin 居中，每行一个选项 */
+                fprintf(stdout, "\033[K");  /* 清除当前行 */
+                tui_print_margin(stdout, 46);
+                if (i == selected) {
+                    fprintf(stdout,
+                            TUI_OC_BG_SELECT TUI_OC_ACCENT
+                            " > %d. %s" TUI_RESET,
+                            MAIN_MENU_OPTIONS[i].selection,
+                            MAIN_MENU_OPTIONS[i].label);
+                } else {
+                    const char *num_c = MAIN_MENU_OPTIONS[i].is_dim ? TUI_OC_DIM : TUI_OC_AMBER;
+                    const char *lbl_c = MAIN_MENU_OPTIONS[i].is_dim ? TUI_OC_DIM : TUI_OC_MUTED;
+                    fprintf(stdout,
+                            "   %s%d." TUI_RESET " %s%s" TUI_RESET,
+                            num_c, MAIN_MENU_OPTIONS[i].selection,
+                            lbl_c, MAIN_MENU_OPTIONS[i].label);
+                }
+                fputc('\n', stdout);
+            }
+            /* 光标回到选项区顶部 */
+            fprintf(stdout, "\033[%dA", MAIN_MENU_OPTION_COUNT);
+            fflush(stdout);
+            redraw = 0;
+        }
+
+        ev = InputHelper_read_key(input);
+
+        switch (ev.key) {
+            case INPUT_KEY_UP:
+                if (selected > 0) { selected--; redraw = 1; }
+                break;
+            case INPUT_KEY_DOWN:
+                if (selected < MAIN_MENU_OPTION_COUNT - 1) { selected++; redraw = 1; }
+                break;
+            case INPUT_KEY_ENTER:
+                *out_role = MAIN_MENU_OPTIONS[selected].role;
+                /* 移动光标到选项区下方 */
+                fprintf(stdout, "\033[%dB", (int)MAIN_MENU_OPTION_COUNT);
+                fflush(stdout);
+                return Result_make_success("main select: confirmed");
+            case INPUT_KEY_ESC:
+            case INPUT_KEY_CTRL_Q:
+                *out_role = MENU_ROLE_EXIT;
+                fprintf(stdout, "\033[%dB", (int)MAIN_MENU_OPTION_COUNT);
+                fflush(stdout);
+                return Result_make_success("main select: exit");
+            case INPUT_KEY_CHAR:
+                if (ev.ch >= '0' && ev.ch <= '9') {
+                    int num = ev.ch - '0';
+                    for (i = 0; i < MAIN_MENU_OPTION_COUNT; i++) {
+                        if (MAIN_MENU_OPTIONS[i].selection == num) {
+                            *out_role = MAIN_MENU_OPTIONS[i].role;
+                            fprintf(stdout, "\033[%dB", (int)MAIN_MENU_OPTION_COUNT);
+                            fflush(stdout);
+                            return Result_make_success("main select: direct");
+                        }
+                    }
+                }
+                break;
+            default:
+                break;
+        }
+    }
+}
