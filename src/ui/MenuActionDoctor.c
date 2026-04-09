@@ -53,9 +53,20 @@ Result MenuAction_handle_doctor(MenuApplication *app, MenuAction action, FILE *i
                     return result;
                 }
             }
-            tui_spinner_run(output, "正在加载待诊列表...", 500);
-            MenuApplication_print_pending_table(app, output, first_id);
-            return Result_make_success("pending list displayed");
+            {
+                char selected_registration_id[HIS_DOMAIN_ID_CAPACITY] = {0};
+                result = MenuApplication_browse_pending_table(app, &context, first_id, selected_registration_id, sizeof(selected_registration_id));
+                if (result.success && selected_registration_id[0] != '\0') {
+                    result = MenuApplication_query_registration(
+                        app,
+                        selected_registration_id,
+                        output_buffer,
+                        sizeof(output_buffer)
+                    );
+                    MenuApplication_print_result(output, output_buffer, result.success);
+                }
+                return Result_make_success("browse complete");
+            }
 
         case MENU_ACTION_DOCTOR_QUERY_PATIENT_HISTORY:
             result = MenuApplication_prompt_select_patient(

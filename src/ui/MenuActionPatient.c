@@ -39,14 +39,8 @@ Result MenuAction_handle_patient(MenuApplication *app, MenuAction action, FILE *
             if (result.success == 0) {
                 return result;
             }
-            result = MenuApplication_query_registrations_by_patient(
-                app,
-                app->bound_patient_id,
-                output_buffer,
-                sizeof(output_buffer)
-            );
-            MenuApplication_print_result(output, output_buffer, result.success);
-            return result;
+            MenuApplication_browse_patient_history(app, &context, app->bound_patient_id);
+            return Result_make_success("browse complete");
 
         case MENU_ACTION_PATIENT_QUERY_VISITS:
         case MENU_ACTION_PATIENT_QUERY_EXAMS:
@@ -55,28 +49,16 @@ Result MenuAction_handle_patient(MenuApplication *app, MenuAction action, FILE *
             if (result.success == 0) {
                 return result;
             }
-            result = MenuApplication_query_patient_history(
-                app,
-                app->bound_patient_id,
-                output_buffer,
-                sizeof(output_buffer)
-            );
-            MenuApplication_print_result(output, output_buffer, result.success);
-            return result;
+            MenuApplication_browse_patient_history(app, &context, app->bound_patient_id);
+            return Result_make_success("browse complete");
 
         case MENU_ACTION_PATIENT_QUERY_DISPENSE:
             result = MenuApplication_require_patient_session(app);
             if (result.success == 0) {
                 return result;
             }
-            result = MenuApplication_query_dispense_history_by_patient_id(
-                app,
-                app->bound_patient_id,
-                output_buffer,
-                sizeof(output_buffer)
-            );
-            MenuApplication_print_result(output, output_buffer, result.success);
-            return result;
+            MenuApplication_browse_patient_history(app, &context, app->bound_patient_id);
+            return Result_make_success("browse complete");
 
         case MENU_ACTION_PATIENT_QUERY_MEDICINE_USAGE:
             result = MenuApplication_require_patient_session(app);

@@ -34,51 +34,35 @@ Result MenuAction_handle_inpatient(MenuApplication *app, MenuAction action, FILE
 
     switch (action) {
         case MENU_ACTION_INPATIENT_QUERY_BED:
-            result = MenuApplication_list_wards(
-                app,
-                output_buffer,
-                sizeof(output_buffer)
-            );
-            MenuApplication_print_result(output, output_buffer, result.success);
-            memset(output_buffer, 0, sizeof(output_buffer));
-            result = MenuApplication_prompt_select_ward(
-                app,
-                &context,
-                "病区搜索关键字/编号(回车列出全部): ",
-                first_id,
-                sizeof(first_id)
-            );
-            if (result.success == 0) {
-                return result;
+        {
+            char selected_ward_id[HIS_DOMAIN_ID_CAPACITY] = {0};
+            result = MenuApplication_browse_ward_table(app, &context, selected_ward_id, sizeof(selected_ward_id));
+            if (result.success && selected_ward_id[0] != '\0') {
+                /* Browse beds in view-only mode (NULL out_id) so non-TTY tests still see bed data */
+                MenuApplication_browse_bed_table(app, &context, selected_ward_id, 0, 0);
             }
-            result = MenuApplication_list_beds_by_ward(
-                app,
-                first_id,
-                output_buffer,
-                sizeof(output_buffer)
-            );
-            MenuApplication_print_result(output, output_buffer, result.success);
-            return result;
+            return Result_make_success("browse complete");
+        }
 
         case MENU_ACTION_INPATIENT_LIST_WARDS:
-            tui_spinner_run(output, "正在加载病房数据...", 500);
-            MenuApplication_print_ward_table(app, output);
-            return Result_make_success("ward list displayed");
+        {
+            char selected_ward_id[HIS_DOMAIN_ID_CAPACITY] = {0};
+            result = MenuApplication_browse_ward_table(app, &context, selected_ward_id, sizeof(selected_ward_id));
+            if (result.success && selected_ward_id[0] != '\0') {
+                MenuApplication_browse_bed_table(app, &context, selected_ward_id, 0, 0);
+            }
+            return Result_make_success("browse complete");
+        }
 
         case MENU_ACTION_INPATIENT_LIST_BEDS:
-            result = MenuApplication_prompt_select_ward(
-                app,
-                &context,
-                "\xe7\x97\x85\xe5\x8c\xba\xe6\x90\x9c\xe7\xb4\xa2\xe5\x85\xb3\xe9\x94\xae\xe5\xad\x97/\xe7\xbc\x96\xe5\x8f\xb7(\xe5\x9b\x9e\xe8\xbd\xa6\xe5\x88\x97\xe5\x87\xba\xe5\x85\xa8\xe9\x83\xa8): ",
-                first_id,
-                sizeof(first_id)
-            );
-            if (result.success == 0) {
-                return result;
+        {
+            char selected_ward_id[HIS_DOMAIN_ID_CAPACITY] = {0};
+            result = MenuApplication_browse_ward_table(app, &context, selected_ward_id, sizeof(selected_ward_id));
+            if (result.success && selected_ward_id[0] != '\0') {
+                MenuApplication_browse_bed_table(app, &context, selected_ward_id, 0, 0);
             }
-            tui_spinner_run(output, "正在加载床位数据...", 400);
-            MenuApplication_print_bed_table(app, output, first_id);
-            return Result_make_success("bed list displayed");
+            return Result_make_success("browse complete");
+        }
 
         case MENU_ACTION_INPATIENT_ADMIT:
             result = MenuApplication_prompt_select_patient(

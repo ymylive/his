@@ -207,6 +207,53 @@ void MenuApplication_print_low_stock_table(MenuApplication *application, FILE *o
 void MenuApplication_print_patient_card(MenuApplication *application, FILE *out, const char *patient_id);
 void MenuApplication_print_pending_table(MenuApplication *application, FILE *out, const char *doctor_id);
 
+/* ─── Interactive browse helpers ──────────────────────────────────── */
+
+Result MenuApplication_interactive_browse(
+    MenuApplicationPromptContext *context,
+    const char *title,
+    const MenuApplicationSelectionOption *options,
+    int option_count,
+    char *out_id,
+    size_t out_id_capacity
+);
+
+Result MenuApplication_browse_ward_table(
+    MenuApplication *application,
+    MenuApplicationPromptContext *context,
+    char *out_ward_id,
+    size_t out_id_capacity
+);
+
+Result MenuApplication_browse_bed_table(
+    MenuApplication *application,
+    MenuApplicationPromptContext *context,
+    const char *ward_id,
+    char *out_bed_id,
+    size_t out_id_capacity
+);
+
+Result MenuApplication_browse_low_stock_table(
+    MenuApplication *application,
+    MenuApplicationPromptContext *context,
+    char *out_medicine_id,
+    size_t out_id_capacity
+);
+
+Result MenuApplication_browse_pending_table(
+    MenuApplication *application,
+    MenuApplicationPromptContext *context,
+    const char *doctor_id,
+    char *out_registration_id,
+    size_t out_id_capacity
+);
+
+Result MenuApplication_browse_patient_history(
+    MenuApplication *application,
+    MenuApplicationPromptContext *context,
+    const char *patient_id
+);
+
 /* ─── Domain dispatch functions ────────────────────────────────────── */
 
 /**

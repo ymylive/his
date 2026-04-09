@@ -215,21 +215,15 @@ Result MenuAction_handle_admin(MenuApplication *app, MenuAction action, FILE *in
             return result;
 
         case MENU_ACTION_ADMIN_WARD_BED_OVERVIEW:
-            tui_spinner_run(output, "正在加载病房数据...", 500);
-            MenuApplication_print_ward_table(app, output);
-            result = MenuApplication_prompt_select_ward(
-                app,
-                &context,
-                "\xe7\x97\x85\xe5\x8c\xba\xe6\x90\x9c\xe7\xb4\xa2\xe5\x85\xb3\xe9\x94\xae\xe5\xad\x97/\xe7\xbc\x96\xe5\x8f\xb7(\xe5\x9b\x9e\xe8\xbd\xa6\xe5\x88\x97\xe5\x87\xba\xe5\x85\xa8\xe9\x83\xa8): ",
-                first_id,
-                sizeof(first_id)
-            );
-            if (result.success == 0) {
-                return result;
+        {
+            char selected_ward_id[HIS_DOMAIN_ID_CAPACITY] = {0};
+            result = MenuApplication_browse_ward_table(app, &context, selected_ward_id, sizeof(selected_ward_id));
+            if (result.success && selected_ward_id[0] != '\0') {
+                /* Browse beds in view-only mode (NULL out_id) so non-TTY tests still see bed data */
+                MenuApplication_browse_bed_table(app, &context, selected_ward_id, 0, 0);
             }
-            tui_spinner_run(output, "正在加载床位数据...", 400);
-            MenuApplication_print_bed_table(app, output, first_id);
-            return Result_make_success("ward bed overview displayed");
+            return Result_make_success("browse complete");
+        }
 
         case MENU_ACTION_ADMIN_MEDICINE_OVERVIEW:
             result = MenuApplication_prompt_line(
@@ -261,9 +255,21 @@ Result MenuAction_handle_admin(MenuApplication *app, MenuAction action, FILE *in
                     0
                 );
             } else if (strcmp(first_id, "2") == 0) {
-                tui_spinner_run(output, "正在检查库存...", 500);
-                MenuApplication_print_low_stock_table(app, output);
-                return Result_make_success("low stock medicines displayed");
+            {
+                char selected_medicine_id[HIS_DOMAIN_ID_CAPACITY] = {0};
+                result = MenuApplication_browse_low_stock_table(app, &context, selected_medicine_id, sizeof(selected_medicine_id));
+                if (result.success && selected_medicine_id[0] != '\0') {
+                    result = MenuApplication_query_medicine_detail(
+                        app,
+                        selected_medicine_id,
+                        output_buffer,
+                        sizeof(output_buffer),
+                        0
+                    );
+                    MenuApplication_print_result(output, output_buffer, result.success);
+                }
+                return Result_make_success("browse complete");
+            }
             } else {
                 return Result_make_failure("invalid admin medicine action");
             }

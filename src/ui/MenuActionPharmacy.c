@@ -174,9 +174,21 @@ Result MenuAction_handle_pharmacy(MenuApplication *app, MenuAction action, FILE 
             return result;
 
         case MENU_ACTION_PHARMACY_LOW_STOCK:
-            tui_spinner_run(output, "正在检查库存...", 500);
-            MenuApplication_print_low_stock_table(app, output);
-            return Result_make_success("low stock medicines displayed");
+        {
+            char selected_medicine_id[HIS_DOMAIN_ID_CAPACITY] = {0};
+            result = MenuApplication_browse_low_stock_table(app, &context, selected_medicine_id, sizeof(selected_medicine_id));
+            if (result.success && selected_medicine_id[0] != '\0') {
+                result = MenuApplication_query_medicine_detail(
+                    app,
+                    selected_medicine_id,
+                    output_buffer,
+                    sizeof(output_buffer),
+                    0
+                );
+                MenuApplication_print_result(output, output_buffer, result.success);
+            }
+            return Result_make_success("browse complete");
+        }
 
         default:
             return Result_make_failure("unknown pharmacy action");

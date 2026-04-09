@@ -2041,13 +2041,13 @@ static Result MenuApplication_prompt_select_option_line(
 }
 
 /** @brief 最大可见行数 */
-#define MENU_APP_SELECT_MAX_VISIBLE 8
+#define MENU_APP_SELECT_MAX_VISIBLE 15
 
 /**
  * @brief 交互式实时过滤搜索选择器（终端模式）
  *
  * 使用 InputHelper_read_key 逐字符输入，实时过滤选项列表。
- * 支持方向键选择、退格删除、回车确认、ESC 取消。
+ * 支持方向键选择、左右键翻页、退格删除、回车确认、ESC 取消。
  */
 static Result MenuApplication_prompt_select_option_interactive(
     MenuApplicationPromptContext *context,
@@ -2061,7 +2061,8 @@ static Result MenuApplication_prompt_select_option_interactive(
     int query_len = 0;
     int filtered_indices[MENU_APPLICATION_SELECT_OPTION_MAX];
     int filtered_count = 0;
-    int selected = 0;
+    int selected = 0;      /* cursor position relative to visible window */
+    int scroll_offset = 0; /* index of first visible item in filtered list */
     int prev_lines = 0;
     int option_index = 0;
     InputEvent ev;
@@ -2074,8 +2075,9 @@ static Result MenuApplication_prompt_select_option_interactive(
     }
 
     for (;;) {
-        int visible = filtered_count < MENU_APP_SELECT_MAX_VISIBLE
-                    ? filtered_count : MENU_APP_SELECT_MAX_VISIBLE;
+        int max_visible = MENU_APP_SELECT_MAX_VISIBLE;
+        int remaining = filtered_count - scroll_offset;
+        int visible = remaining < max_visible ? remaining : max_visible;
         int total_lines = 0;
         int i = 0;
 
@@ -2094,9 +2096,9 @@ static Result MenuApplication_prompt_select_option_interactive(
                 query);
         total_lines++;
 
-        /* Filtered results */
+        /* Filtered results with scroll window */
         for (i = 0; i < visible; i++) {
-            int idx = filtered_indices[i];
+            int idx = filtered_indices[scroll_offset + i];
             if (i == selected) {
                 fprintf(context->output,
                         TUI_OC_BG_SELECT TUI_OC_ACCENT " > %s" TUI_RESET "\033[K\n",
@@ -2109,20 +2111,25 @@ static Result MenuApplication_prompt_select_option_interactive(
             total_lines++;
         }
 
-        /* "... N more" indicator */
-        if (filtered_count > MENU_APP_SELECT_MAX_VISIBLE) {
+        /* Page indicator */
+        if (filtered_count > max_visible) {
+            int page_end = scroll_offset + visible;
             fprintf(context->output,
-                    TUI_OC_DIM "   ... %d more" TUI_RESET "\033[K\n",
-                    filtered_count - MENU_APP_SELECT_MAX_VISIBLE);
+                    TUI_OC_DIM "   [\xe7\xac\xac %d-%d \xe6\x9d\xa1 / \xe5\x85\xb1 %d \xe6\x9d\xa1]" TUI_RESET "\033[K\n",
+                    scroll_offset + 1, page_end, filtered_count);
             total_lines++;
         }
+
+        /* Hint line */
+        fprintf(context->output,
+                TUI_OC_DIM "   \xe2\x86\x91\xe2\x86\x93 \xe5\xaf\xbc\xe8\x88\xaa  \xe2\x86\x90\xe2\x86\x92 \xe7\xbf\xbb\xe9\xa1\xb5  Enter \xe9\x80\x89\xe6\x8b\xa9  ESC \xe8\xbf\x94\xe5\x9b\x9e" TUI_RESET "\033[K\n");
+        total_lines++;
 
         /* Clear any leftover lines from previous render */
         if (prev_lines > total_lines) {
             for (i = 0; i < prev_lines - total_lines; i++) {
                 fprintf(context->output, "\033[K\n");
             }
-            /* Move back up for those extra cleared lines */
             fprintf(context->output, "\033[%dA", prev_lines - total_lines);
         }
 
@@ -2139,11 +2146,11 @@ static Result MenuApplication_prompt_select_option_interactive(
                 return Result_make_failure(INPUT_HELPER_ESC_MESSAGE);
 
             case INPUT_KEY_ENTER:
-                if (filtered_count > 0 && selected < filtered_count) {
-                    int idx = filtered_indices[selected];
+                if (filtered_count > 0 && selected < visible) {
+                    int idx = filtered_indices[scroll_offset + selected];
                     MenuApplication_copy_text(out_id, out_id_capacity, options[idx].id);
                     fprintf(context->output,
-                            TUI_BOLD_GREEN " %s 已选择: " TUI_RESET "%s\n",
+                            TUI_BOLD_GREEN " %s \xe5\xb7\xb2\xe9\x80\x89\xe6\x8b\xa9: " TUI_RESET "%s\n",
                             TUI_CHECK, options[idx].label);
                     return Result_make_success("selection chosen");
                 }
@@ -2152,13 +2159,31 @@ static Result MenuApplication_prompt_select_option_interactive(
             case INPUT_KEY_UP:
                 if (selected > 0) {
                     selected--;
+                } else if (scroll_offset > 0) {
+                    scroll_offset--;
                 }
                 break;
 
             case INPUT_KEY_DOWN:
-                if (selected < filtered_count - 1 &&
-                    selected < MENU_APP_SELECT_MAX_VISIBLE - 1) {
+                if (selected < visible - 1) {
                     selected++;
+                } else if (scroll_offset + visible < filtered_count) {
+                    scroll_offset++;
+                }
+                break;
+
+            case INPUT_KEY_LEFT:
+                /* Page Up */
+                scroll_offset -= max_visible;
+                if (scroll_offset < 0) scroll_offset = 0;
+                selected = 0;
+                break;
+
+            case INPUT_KEY_RIGHT:
+                /* Page Down */
+                if (scroll_offset + max_visible < filtered_count) {
+                    scroll_offset += max_visible;
+                    selected = 0;
                 }
                 break;
 
@@ -2166,9 +2191,9 @@ static Result MenuApplication_prompt_select_option_interactive(
                 if (query_len > 0) {
                     query_len--;
                     query[query_len] = '\0';
-                    /* Re-filter */
                     filtered_count = 0;
                     selected = 0;
+                    scroll_offset = 0;
                     for (option_index = 0; option_index < option_count; option_index++) {
                         if (query_len == 0 ||
                             MenuApplication_text_contains_ignore_case(options[option_index].label, query) ||
@@ -2183,9 +2208,9 @@ static Result MenuApplication_prompt_select_option_interactive(
                 if (query_len < (int)sizeof(query) - 1) {
                     query[query_len++] = ev.ch;
                     query[query_len] = '\0';
-                    /* Re-filter */
                     filtered_count = 0;
                     selected = 0;
+                    scroll_offset = 0;
                     for (option_index = 0; option_index < option_count; option_index++) {
                         if (MenuApplication_text_contains_ignore_case(options[option_index].label, query) ||
                             MenuApplication_text_contains_ignore_case(options[option_index].id, query)) {
@@ -2196,13 +2221,273 @@ static Result MenuApplication_prompt_select_option_interactive(
                 break;
 
             case INPUT_KEY_NONE:
-                /* EOF on input stream */
                 return Result_make_failure("input ended");
 
             default:
                 break;
         }
     }
+}
+
+/** @brief 交互式浏览模式最大可见行数 */
+#define MENU_APP_BROWSE_MAX_VISIBLE 15
+
+/**
+ * @brief 交互式表格搜索浏览器（终端模式）
+ *
+ * 在表格上方显示搜索框，用户输入关键字实时过滤表格行。
+ * 支持方向键导航、左右键翻页、Enter 查看详情、ESC 返回。
+ */
+static Result MenuApplication_interactive_browse_tty(
+    MenuApplicationPromptContext *context,
+    const char *title,
+    const MenuApplicationSelectionOption *options,
+    int option_count,
+    char *out_id,
+    size_t out_id_capacity
+) {
+    char query[128];
+    int query_len = 0;
+    int filtered_indices[MENU_APPLICATION_SELECT_OPTION_MAX];
+    int filtered_count = 0;
+    int selected = 0;      /* cursor position relative to visible window */
+    int scroll_offset = 0; /* index of first visible item in filtered list */
+    int prev_lines = 0;
+    int option_index = 0;
+    InputEvent ev;
+
+    query[0] = '\0';
+
+    /* Initial filter: show all */
+    for (option_index = 0; option_index < option_count; option_index++) {
+        filtered_indices[filtered_count++] = option_index;
+    }
+
+    for (;;) {
+        int max_visible = MENU_APP_BROWSE_MAX_VISIBLE;
+        int remaining = filtered_count - scroll_offset;
+        int visible = remaining < max_visible ? remaining : max_visible;
+        int total_lines = 0;
+        int i = 0;
+
+        /* Move cursor up to overwrite previous output */
+        if (prev_lines > 0) {
+            fprintf(context->output, "\033[%dA\r", prev_lines);
+        }
+
+        /* Line 1: title */
+        fprintf(context->output, TUI_OC_MUTED "%s" TUI_RESET "\033[K\n", title);
+        total_lines++;
+
+        /* Line 2: search input */
+        fprintf(context->output,
+                TUI_OC_ACCENT " \xf0\x9f\x94\x8d \xe6\x90\x9c\xe7\xb4\xa2: " TUI_RESET TUI_OC_TEXT "%s" TUI_RESET "\033[K\n",
+                query);
+        total_lines++;
+
+        /* Line 3: result count / page indicator */
+        if (filtered_count > max_visible) {
+            int page_end = scroll_offset + visible;
+            if (query_len > 0) {
+                fprintf(context->output,
+                        TUI_OC_DIM "   [\xe7\xac\xac %d-%d \xe6\x9d\xa1 / \xe5\x85\xb1 %d \xe6\x9d\xa1\xe7\xbb\x93\xe6\x9e\x9c, \xe5\xb7\xb2\xe8\xbf\x87\xe6\xbb\xa4 %d \xe6\x9d\xa1]" TUI_RESET "\033[K\n",
+                        scroll_offset + 1, page_end, filtered_count, option_count - filtered_count);
+            } else {
+                fprintf(context->output,
+                        TUI_OC_DIM "   [\xe7\xac\xac %d-%d \xe6\x9d\xa1 / \xe5\x85\xb1 %d \xe6\x9d\xa1\xe8\xae\xb0\xe5\xbd\x95]" TUI_RESET "\033[K\n",
+                        scroll_offset + 1, page_end, filtered_count);
+            }
+        } else {
+            if (query_len > 0) {
+                fprintf(context->output,
+                        TUI_OC_DIM "   \xe5\x85\xb1 %d \xe6\x9d\xa1\xe7\xbb\x93\xe6\x9e\x9c (\xe5\xb7\xb2\xe8\xbf\x87\xe6\xbb\xa4 %d \xe6\x9d\xa1)" TUI_RESET "\033[K\n",
+                        filtered_count, option_count - filtered_count);
+            } else {
+                fprintf(context->output,
+                        TUI_OC_DIM "   \xe5\x85\xb1 %d \xe6\x9d\xa1\xe8\xae\xb0\xe5\xbd\x95" TUI_RESET "\033[K\n",
+                        option_count);
+            }
+        }
+        total_lines++;
+
+        /* Filtered results with scroll window */
+        for (i = 0; i < visible; i++) {
+            int idx = filtered_indices[scroll_offset + i];
+            if (i == selected) {
+                fprintf(context->output,
+                        TUI_OC_BG_SELECT TUI_OC_ACCENT " > %s" TUI_RESET "\033[K\n",
+                        options[idx].label);
+            } else {
+                fprintf(context->output,
+                        "   " TUI_OC_MUTED "%s" TUI_RESET "\033[K\n",
+                        options[idx].label);
+            }
+            total_lines++;
+        }
+
+        /* Hint line */
+        fprintf(context->output,
+                TUI_OC_DIM "   \xe2\x86\x91\xe2\x86\x93 \xe5\xaf\xbc\xe8\x88\xaa  \xe2\x86\x90\xe2\x86\x92 \xe7\xbf\xbb\xe9\xa1\xb5  Enter \xe6\x9f\xa5\xe7\x9c\x8b  ESC \xe8\xbf\x94\xe5\x9b\x9e" TUI_RESET "\033[K\n");
+        total_lines++;
+
+        /* Clear any leftover lines from previous render */
+        if (prev_lines > total_lines) {
+            for (i = 0; i < prev_lines - total_lines; i++) {
+                fprintf(context->output, "\033[K\n");
+            }
+            fprintf(context->output, "\033[%dA", prev_lines - total_lines);
+        }
+
+        prev_lines = total_lines;
+        fflush(context->output);
+
+        /* Read a key */
+        ev = InputHelper_read_key(context->input);
+
+        switch (ev.key) {
+            case INPUT_KEY_ESC:
+            case INPUT_KEY_CTRL_Q:
+            case INPUT_KEY_CTRL_C:
+                return Result_make_failure(INPUT_HELPER_ESC_MESSAGE);
+
+            case INPUT_KEY_ENTER:
+                if (filtered_count > 0 && selected < visible) {
+                    int idx = filtered_indices[scroll_offset + selected];
+                    if (out_id != 0 && out_id_capacity > 0) {
+                        MenuApplication_copy_text(out_id, out_id_capacity, options[idx].id);
+                    }
+                    fprintf(context->output,
+                            TUI_BOLD_GREEN " %s \xe5\xb7\xb2\xe9\x80\x89\xe6\x8b\xa9: " TUI_RESET "%s\n",
+                            TUI_CHECK, options[idx].label);
+                    return Result_make_success("browse selection chosen");
+                }
+                break;
+
+            case INPUT_KEY_UP:
+                if (selected > 0) {
+                    selected--;
+                } else if (scroll_offset > 0) {
+                    scroll_offset--;
+                }
+                break;
+
+            case INPUT_KEY_DOWN:
+                if (selected < visible - 1) {
+                    selected++;
+                } else if (scroll_offset + visible < filtered_count) {
+                    scroll_offset++;
+                }
+                break;
+
+            case INPUT_KEY_LEFT:
+                /* Page Up */
+                scroll_offset -= max_visible;
+                if (scroll_offset < 0) scroll_offset = 0;
+                selected = 0;
+                break;
+
+            case INPUT_KEY_RIGHT:
+                /* Page Down */
+                if (scroll_offset + max_visible < filtered_count) {
+                    scroll_offset += max_visible;
+                    selected = 0;
+                }
+                break;
+
+            case INPUT_KEY_BACKSPACE:
+                if (query_len > 0) {
+                    query_len--;
+                    query[query_len] = '\0';
+                    filtered_count = 0;
+                    selected = 0;
+                    scroll_offset = 0;
+                    for (option_index = 0; option_index < option_count; option_index++) {
+                        if (query_len == 0 ||
+                            MenuApplication_text_contains_ignore_case(options[option_index].label, query) ||
+                            MenuApplication_text_contains_ignore_case(options[option_index].id, query)) {
+                            filtered_indices[filtered_count++] = option_index;
+                        }
+                    }
+                }
+                break;
+
+            case INPUT_KEY_CHAR:
+                if (query_len < (int)sizeof(query) - 1) {
+                    query[query_len++] = ev.ch;
+                    query[query_len] = '\0';
+                    filtered_count = 0;
+                    selected = 0;
+                    scroll_offset = 0;
+                    for (option_index = 0; option_index < option_count; option_index++) {
+                        if (MenuApplication_text_contains_ignore_case(options[option_index].label, query) ||
+                            MenuApplication_text_contains_ignore_case(options[option_index].id, query)) {
+                            filtered_indices[filtered_count++] = option_index;
+                        }
+                    }
+                }
+                break;
+
+            case INPUT_KEY_NONE:
+                return Result_make_failure("input ended");
+
+            default:
+                break;
+        }
+    }
+}
+
+/**
+ * @brief 交互式表格搜索浏览器
+ *
+ * 在表格上方显示搜索框，用户输入关键字实时过滤表格行。
+ * 支持方向键导航、Enter 查看详情、ESC 返回。
+ *
+ * @param context     输入输出上下文
+ * @param title       表格标题
+ * @param options     选项数组（id + label 用于搜索匹配）
+ * @param option_count 选项数量
+ * @param out_id      选中项的 ID 输出缓冲区（可为 NULL 表示仅浏览模式）
+ * @param out_id_capacity 输出缓冲区容量
+ * @return Result     success = 选中了一项, failure = ESC取消或仅浏览
+ */
+Result MenuApplication_interactive_browse(
+    MenuApplicationPromptContext *context,
+    const char *title,
+    const MenuApplicationSelectionOption *options,
+    int option_count,
+    char *out_id,
+    size_t out_id_capacity
+) {
+    int input_fd = -1;
+
+    if (context == 0 || options == 0 || option_count <= 0) {
+        return Result_make_failure("browse arguments invalid");
+    }
+
+    /* Detect whether input is a terminal */
+    input_fd = fileno(context->input);
+    if (input_fd >= 0 && MenuApp_isatty(input_fd)) {
+        return MenuApplication_interactive_browse_tty(
+            context, title, options, option_count, out_id, out_id_capacity);
+    }
+
+    /* Non-TTY fallback: always print all options first (for test visibility) */
+    {
+        int i = 0;
+        fprintf(context->output, "%s\n", title);
+        for (i = 0; i < option_count; i++) {
+            fprintf(context->output, "  %s\n", options[i].label);
+        }
+    }
+
+    /* If caller wants a selection, attempt line-based selection */
+    if (out_id != 0 && out_id_capacity > 0) {
+        return MenuApplication_prompt_select_option_line(
+            context, title, options, option_count, out_id, out_id_capacity);
+    }
+
+    /* Browse-only mode: just printed everything above */
+    return Result_make_failure("browse mode non-interactive");
 }
 
 /**
@@ -3699,6 +3984,377 @@ void MenuApplication_print_pending_table(MenuApplication *application, FILE *out
         LinkedList_count(&registrations));
     tui_print_info(out, count_msg);
     RegistrationRepository_clear_list(&registrations);
+}
+
+/* ─── Interactive browse functions ─────────────────────────────────── */
+
+/** @brief 交互式病房浏览（搜索/过滤/选择） */
+Result MenuApplication_browse_ward_table(
+    MenuApplication *application,
+    MenuApplicationPromptContext *context,
+    char *out_ward_id,
+    size_t out_id_capacity
+) {
+    LinkedList wards;
+    const LinkedListNode *current = 0;
+    MenuApplicationSelectionOption options[MENU_APPLICATION_SELECT_OPTION_MAX];
+    int option_count = 0;
+    Result result;
+
+    LinkedList_init(&wards);
+    result = BedService_list_wards(&application->bed_service, &wards);
+    if (result.success == 0) {
+        return result;
+    }
+
+    current = wards.head;
+    while (current != 0 && option_count < MENU_APPLICATION_SELECT_OPTION_MAX) {
+        const Ward *ward = (const Ward *)current->data;
+        MenuApplication_copy_text(options[option_count].id, sizeof(options[option_count].id), ward->ward_id);
+        snprintf(
+            options[option_count].label,
+            sizeof(options[option_count].label),
+            "%s | %s | %s | %d/%d | %s",
+            ward->ward_id,
+            ward->name,
+            ward->location,
+            ward->occupied_beds,
+            ward->capacity,
+            ward->status == WARD_STATUS_ACTIVE ? "\xe2\x9c\x93 \xe5\x90\xaf\xe7\x94\xa8" : "\xe2\x9c\x97 \xe5\x81\x9c\xe7\x94\xa8"
+        );
+        option_count++;
+        current = current->next;
+    }
+
+    result = MenuApplication_interactive_browse(
+        context,
+        "\xe7\x97\x85\xe6\x88\xbf\xe5\x88\x97\xe8\xa1\xa8 - \xe8\xbe\x93\xe5\x85\xa5\xe5\x85\xb3\xe9\x94\xae\xe5\xad\x97\xe6\x90\x9c\xe7\xb4\xa2",
+        options,
+        option_count,
+        out_ward_id,
+        out_id_capacity
+    );
+    BedService_clear_wards(&wards);
+    return result;
+}
+
+/** @brief 交互式床位浏览（搜索/过滤/选择） */
+Result MenuApplication_browse_bed_table(
+    MenuApplication *application,
+    MenuApplicationPromptContext *context,
+    const char *ward_id,
+    char *out_bed_id,
+    size_t out_id_capacity
+) {
+    LinkedList beds;
+    const LinkedListNode *current = 0;
+    MenuApplicationSelectionOption options[MENU_APPLICATION_SELECT_OPTION_MAX];
+    int option_count = 0;
+    Result result;
+
+    LinkedList_init(&beds);
+    result = BedService_list_beds_by_ward(&application->bed_service, ward_id, &beds);
+    if (result.success == 0) {
+        return result;
+    }
+
+    current = beds.head;
+    while (current != 0 && option_count < MENU_APPLICATION_SELECT_OPTION_MAX) {
+        const Bed *bed = (const Bed *)current->data;
+        const char *status_label = "";
+        if (bed->status == BED_STATUS_AVAILABLE) {
+            status_label = "\xe2\x97\x8b \xe7\xa9\xba\xe9\x97\xb2";
+        } else if (bed->status == BED_STATUS_OCCUPIED) {
+            status_label = "\xe2\x97\x89 \xe5\x8d\xa0\xe7\x94\xa8";
+        } else {
+            status_label = "\xe2\x9a\x99 \xe7\xbb\xb4\xe6\x8a\xa4";
+        }
+        MenuApplication_copy_text(options[option_count].id, sizeof(options[option_count].id), bed->bed_id);
+        snprintf(
+            options[option_count].label,
+            sizeof(options[option_count].label),
+            "%s | \xe6\x88\xbf%s | \xe5\xba\x8a%s | %s",
+            bed->bed_id,
+            bed->room_no,
+            bed->bed_no,
+            status_label
+        );
+        option_count++;
+        current = current->next;
+    }
+
+    result = MenuApplication_interactive_browse(
+        context,
+        "\xe5\xba\x8a\xe4\xbd\x8d\xe5\x88\x97\xe8\xa1\xa8 - \xe8\xbe\x93\xe5\x85\xa5\xe5\x85\xb3\xe9\x94\xae\xe5\xad\x97\xe6\x90\x9c\xe7\xb4\xa2",
+        options,
+        option_count,
+        out_bed_id,
+        out_id_capacity
+    );
+    BedService_clear_beds(&beds);
+    return result;
+}
+
+/** @brief 交互式低库存药品浏览（搜索/过滤/选择） */
+Result MenuApplication_browse_low_stock_table(
+    MenuApplication *application,
+    MenuApplicationPromptContext *context,
+    char *out_medicine_id,
+    size_t out_id_capacity
+) {
+    LinkedList medicines;
+    const LinkedListNode *current = 0;
+    MenuApplicationSelectionOption options[MENU_APPLICATION_SELECT_OPTION_MAX];
+    int option_count = 0;
+    Result result;
+
+    LinkedList_init(&medicines);
+    result = PharmacyService_find_low_stock_medicines(&application->pharmacy_service, &medicines);
+    if (result.success == 0) {
+        return result;
+    }
+
+    current = medicines.head;
+    while (current != 0 && option_count < MENU_APPLICATION_SELECT_OPTION_MAX) {
+        const Medicine *m = (const Medicine *)current->data;
+        MenuApplication_copy_text(options[option_count].id, sizeof(options[option_count].id), m->medicine_id);
+        snprintf(
+            options[option_count].label,
+            sizeof(options[option_count].label),
+            "%s | %s | \xe5\xba\x93\xe5\xad\x98=%d | \xe9\x98\x88\xe5\x80\xbc=%d",
+            m->medicine_id,
+            m->name,
+            m->stock,
+            m->low_stock_threshold
+        );
+        option_count++;
+        current = current->next;
+    }
+
+    result = MenuApplication_interactive_browse(
+        context,
+        "\xe5\xba\x93\xe5\xad\x98\xe4\xb8\x8d\xe8\xb6\xb3\xe8\x8d\xaf\xe5\x93\x81 - \xe8\xbe\x93\xe5\x85\xa5\xe5\x85\xb3\xe9\x94\xae\xe5\xad\x97\xe6\x90\x9c\xe7\xb4\xa2",
+        options,
+        option_count,
+        out_medicine_id,
+        out_id_capacity
+    );
+    PharmacyService_clear_medicine_results(&medicines);
+    return result;
+}
+
+/** @brief 交互式待诊列表浏览（搜索/过滤/选择） */
+Result MenuApplication_browse_pending_table(
+    MenuApplication *application,
+    MenuApplicationPromptContext *context,
+    const char *doctor_id,
+    char *out_registration_id,
+    size_t out_id_capacity
+) {
+    RegistrationRepositoryFilter filter;
+    LinkedList registrations;
+    const LinkedListNode *current = 0;
+    MenuApplicationSelectionOption options[MENU_APPLICATION_SELECT_OPTION_MAX];
+    int option_count = 0;
+    Result result;
+
+    LinkedList_init(&registrations);
+    RegistrationRepositoryFilter_init(&filter);
+    filter.use_status = 1;
+    filter.status = REG_STATUS_PENDING;
+
+    result = RegistrationService_find_by_doctor_id(
+        &application->registration_service, doctor_id, &filter, &registrations);
+    if (result.success == 0) {
+        return result;
+    }
+
+    current = registrations.head;
+    while (current != 0 && option_count < MENU_APPLICATION_SELECT_OPTION_MAX) {
+        const Registration *r = (const Registration *)current->data;
+        MenuApplication_copy_text(options[option_count].id, sizeof(options[option_count].id), r->registration_id);
+        snprintf(
+            options[option_count].label,
+            sizeof(options[option_count].label),
+            "%s | \xe6\x82\xa3\xe8\x80\x85=%s | \xe7\xa7\x91\xe5\xae\xa4=%s | %s",
+            r->registration_id,
+            r->patient_id,
+            r->department_id,
+            r->registered_at
+        );
+        option_count++;
+        current = current->next;
+    }
+
+    result = MenuApplication_interactive_browse(
+        context,
+        "\xe5\xbe\x85\xe8\xaf\x8a\xe5\x88\x97\xe8\xa1\xa8 - \xe8\xbe\x93\xe5\x85\xa5\xe5\x85\xb3\xe9\x94\xae\xe5\xad\x97\xe6\x90\x9c\xe7\xb4\xa2",
+        options,
+        option_count,
+        out_registration_id,
+        out_id_capacity
+    );
+    RegistrationRepository_clear_list(&registrations);
+    return result;
+}
+
+/** @brief 交互式患者历史记录浏览 */
+Result MenuApplication_browse_patient_history(
+    MenuApplication *application,
+    MenuApplicationPromptContext *context,
+    const char *patient_id
+) {
+    MedicalRecordHistory history;
+    LinkedList dispense_records;
+    const LinkedListNode *current = 0;
+    MenuApplicationSelectionOption options[MENU_APPLICATION_SELECT_OPTION_MAX];
+    int option_count = 0;
+    Result result;
+    char selected_id[HIS_DOMAIN_ID_CAPACITY];
+    char detail_buf[4096];
+
+    if (application == 0 || context == 0 || patient_id == 0) {
+        return Result_make_failure("browse patient history arguments missing");
+    }
+
+    /* Load medical record history */
+    result = MedicalRecordService_find_patient_history(
+        &application->medical_record_service,
+        patient_id,
+        &history
+    );
+    if (result.success == 0) {
+        return result;
+    }
+
+    /* Load dispense records */
+    LinkedList_init(&dispense_records);
+    PharmacyService_find_dispense_records_by_patient_id(
+        &application->pharmacy_service,
+        patient_id,
+        &dispense_records
+    );
+
+    /* Build options from registrations */
+    current = history.registrations.head;
+    while (current != 0 && option_count < MENU_APPLICATION_SELECT_OPTION_MAX) {
+        const Registration *r = (const Registration *)current->data;
+        MenuApplication_copy_text(options[option_count].id, sizeof(options[option_count].id), r->registration_id);
+        snprintf(
+            options[option_count].label,
+            sizeof(options[option_count].label),
+            "[\xe6\x8c\x82\xe5\x8f\xb7] %s | \xe5\x8c\xbb\xe7\x94\x9f=%s | \xe7\xa7\x91\xe5\xae\xa4=%s | %s | %s",
+            r->registration_id,
+            r->doctor_id,
+            r->department_id,
+            MenuApplication_registration_status_label(r->status),
+            r->registered_at
+        );
+        option_count++;
+        current = current->next;
+    }
+
+    /* Build options from visits */
+    current = history.visits.head;
+    while (current != 0 && option_count < MENU_APPLICATION_SELECT_OPTION_MAX) {
+        const VisitRecord *v = (const VisitRecord *)current->data;
+        MenuApplication_copy_text(options[option_count].id, sizeof(options[option_count].id), v->visit_id);
+        snprintf(
+            options[option_count].label,
+            sizeof(options[option_count].label),
+            "[\xe5\xb0\xb1\xe8\xaf\x8a] %s | \xe8\xaf\x8a\xe6\x96\xad=%s | %s",
+            v->visit_id,
+            v->diagnosis,
+            v->visit_time
+        );
+        option_count++;
+        current = current->next;
+    }
+
+    /* Build options from examinations */
+    current = history.examinations.head;
+    while (current != 0 && option_count < MENU_APPLICATION_SELECT_OPTION_MAX) {
+        const ExaminationRecord *e = (const ExaminationRecord *)current->data;
+        MenuApplication_copy_text(options[option_count].id, sizeof(options[option_count].id), e->examination_id);
+        snprintf(
+            options[option_count].label,
+            sizeof(options[option_count].label),
+            "[\xe6\xa3\x80\xe6\x9f\xa5] %s | %s | %s | %s",
+            e->examination_id,
+            e->exam_item,
+            e->status == EXAM_STATUS_COMPLETED ? "\xe5\xb7\xb2\xe5\xae\x8c\xe6\x88\x90" : "\xe5\xbe\x85\xe6\xa3\x80\xe6\x9f\xa5",
+            e->requested_at
+        );
+        option_count++;
+        current = current->next;
+    }
+
+    /* Build options from admissions */
+    current = history.admissions.head;
+    while (current != 0 && option_count < MENU_APPLICATION_SELECT_OPTION_MAX) {
+        const Admission *a = (const Admission *)current->data;
+        MenuApplication_copy_text(options[option_count].id, sizeof(options[option_count].id), a->admission_id);
+        snprintf(
+            options[option_count].label,
+            sizeof(options[option_count].label),
+            "[\xe4\xbd\x8f\xe9\x99\xa2] %s | \xe7\x97\x85\xe6\x88\xbf=%s | \xe5\xba\x8a\xe4\xbd\x8d=%s | %s | %s",
+            a->admission_id,
+            a->ward_id,
+            a->bed_id,
+            a->status == ADMISSION_STATUS_ACTIVE ? "\xe4\xbd\x8f\xe9\x99\xa2\xe4\xb8\xad" : "\xe5\xb7\xb2\xe5\x87\xba\xe9\x99\xa2",
+            a->admitted_at
+        );
+        option_count++;
+        current = current->next;
+    }
+
+    /* Build options from dispense records */
+    current = dispense_records.head;
+    while (current != 0 && option_count < MENU_APPLICATION_SELECT_OPTION_MAX) {
+        const DispenseRecord *d = (const DispenseRecord *)current->data;
+        MenuApplication_copy_text(options[option_count].id, sizeof(options[option_count].id), d->dispense_id);
+        snprintf(
+            options[option_count].label,
+            sizeof(options[option_count].label),
+            "[\xe5\x8f\x91\xe8\x8d\xaf] %s | \xe5\xa4\x84\xe6\x96\xb9=%s | \xe8\x8d\xaf\xe5\x93\x81=%s | \xe6\x95\xb0\xe9\x87\x8f=%d | %s",
+            d->dispense_id,
+            d->prescription_id,
+            d->medicine_id,
+            d->quantity,
+            d->dispensed_at
+        );
+        option_count++;
+        current = current->next;
+    }
+
+    if (option_count == 0) {
+        MedicalRecordHistory_clear(&history);
+        PharmacyService_clear_dispense_record_results(&dispense_records);
+        return Result_make_failure("\xe8\xaf\xa5\xe6\x82\xa3\xe8\x80\x85\xe6\x9a\x82\xe6\x97\xa0\xe5\x8e\x86\xe5\x8f\xb2\xe8\xae\xb0\xe5\xbd\x95");
+    }
+
+    /* Show browse UI */
+    snprintf(detail_buf, sizeof(detail_buf),
+        "\xe6\x82\xa3\xe8\x80\x85\xe5\x8e\x86\xe5\x8f\xb2: %s (\xe6\x8c\x82\xe5\x8f\xb7=%zu \xe5\xb0\xb1\xe8\xaf\x8a=%zu \xe6\xa3\x80\xe6\x9f\xa5=%zu \xe4\xbd\x8f\xe9\x99\xa2=%zu \xe5\x8f\x91\xe8\x8d\xaf=%zu)",
+        patient_id,
+        LinkedList_count(&history.registrations),
+        LinkedList_count(&history.visits),
+        LinkedList_count(&history.examinations),
+        LinkedList_count(&history.admissions),
+        LinkedList_count(&dispense_records));
+
+    result = MenuApplication_interactive_browse(
+        context,
+        detail_buf,
+        options,
+        option_count,
+        selected_id,
+        sizeof(selected_id)
+    );
+
+    MedicalRecordHistory_clear(&history);
+    PharmacyService_clear_dispense_record_results(&dispense_records);
+    return result;
 }
 
 Result MenuApplication_execute_action(
