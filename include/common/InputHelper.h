@@ -70,4 +70,27 @@ int InputHelper_read_line(FILE *input, char *buffer, size_t capacity);
  */
 int InputHelper_is_esc_cancel(const char *message);
 
+/** 按键类型枚举 */
+typedef enum InputKey {
+    INPUT_KEY_NONE = 0,
+    INPUT_KEY_CHAR,
+    INPUT_KEY_ENTER,
+    INPUT_KEY_ESC,
+    INPUT_KEY_UP,
+    INPUT_KEY_DOWN,
+    INPUT_KEY_LEFT,
+    INPUT_KEY_RIGHT,
+    INPUT_KEY_BACKSPACE,
+    INPUT_KEY_TAB,
+    INPUT_KEY_CTRL_Q,
+    INPUT_KEY_CTRL_C
+} InputKey;
+
+typedef struct InputEvent {
+    InputKey key;
+    char ch;
+} InputEvent;
+
+InputEvent InputHelper_read_key(FILE *input);
+
 #endif

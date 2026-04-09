@@ -145,12 +145,10 @@ int main(void) {
         return 1;
     }
 
-    /* 启动动画序列：光带扫描 -> 矩阵雨 -> Logo呼吸脉冲 -> Banner */
+    /* 启动画面：Logo + Banner */
     tui_clear_screen();
-    tui_animate_scanline(stdout, 48, 5);
-    tui_animate_matrix_rain(stdout, 48, 8, 500);
-    tui_animate_logo_pulse(stdout, 1);
-    tui_animate_banner(stdout, "轻量级医院信息系统 (HIS)");
+    tui_print_logo(stdout);
+    tui_print_banner(stdout, "\xe8\xbd\xbb\xe9\x87\x8f\xe7\xba\xa7\xe5\x8c\xbb\xe9\x99\xa2\xe4\xbf\xa1\xe6\x81\xaf\xe7\xb3\xbb\xe7\xbb\x9f" /* 轻量级医院信息系统 */);
 
     /* ── 启动时检查更新 ── */
     {
@@ -309,11 +307,9 @@ int main(void) {
         strncpy(user_id, input, sizeof(user_id) - 1);
         user_id[sizeof(user_id) - 1] = '\0';
 
-        /* 登录成功：光带扫描 -> 欢迎框 -> 心电图 */
+        /* 登录成功：欢迎信息 */
         tui_clear_screen();
-        tui_animate_scanline(stdout, 48, 4);
-        tui_animate_welcome(stdout, theme, user_id);
-        tui_animate_heartbeat(stdout, 44, 1);
+        tui_print_welcome(stdout, theme, user_id);
         tui_print_info(stdout, "按回车键进入系统 (ESC返回)...");
         {
             int enter_result = InputHelper_read_line(stdin, input, sizeof(input));

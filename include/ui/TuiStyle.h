@@ -380,6 +380,7 @@ int tui_is_interactive(void);
 
 /** @brief 获取终端宽度（列数），无法获取时返回 80 */
 int tui_get_terminal_width(void);
+int tui_get_terminal_height(void);
 /** @brief 打印居中左边距，width 为内容的显示宽度 */
 void tui_print_margin(FILE *out, int width);
 

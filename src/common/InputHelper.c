@@ -396,3 +396,130 @@ int InputHelper_is_esc_cancel(const char *message) {
     /* 与预定义的 ESC 取消标识消息进行比较 */
     return strcmp(message, INPUT_HELPER_ESC_MESSAGE) == 0 ? 1 : 0;
 }
+
+/* ── InputHelper_read_key 实现 ─────────────────────────────── */
+
+/**
+ * @brief 读取单个按键事件（支持方向键等特殊按键）
+ *
+ * 在 POSIX 平台使用 termios raw 模式读取，在 Windows 平台使用 _getch()。
+ * 能识别方向键、回车、ESC、退格、Tab 以及 Ctrl+Q / Ctrl+C。
+ *
+ * @param input 输入流（通常为 stdin）
+ * @return InputEvent 结构，包含按键类型和字符值
+ */
+InputEvent InputHelper_read_key(FILE *input) {
+    InputEvent event;
+    event.key = INPUT_KEY_NONE;
+    event.ch = '\0';
+
+    if (input == 0) {
+        return event;
+    }
+
+#ifdef _WIN32
+    {
+        int ch = _getch();
+
+        if (ch == 0 || ch == 0xE0) {
+            /* 扩展按键 */
+            int ext = _getch();
+            switch (ext) {
+                case 72: event.key = INPUT_KEY_UP;    break;
+                case 80: event.key = INPUT_KEY_DOWN;  break;
+                case 75: event.key = INPUT_KEY_LEFT;  break;
+                case 77: event.key = INPUT_KEY_RIGHT; break;
+                default: event.key = INPUT_KEY_NONE;  break;
+            }
+            return event;
+        }
+
+        if (ch == '\r' || ch == '\n') {
+            event.key = INPUT_KEY_ENTER;
+        } else if (ch == 27) {
+            event.key = INPUT_KEY_ESC;
+        } else if (ch == 8 || ch == 127) {
+            event.key = INPUT_KEY_BACKSPACE;
+        } else if (ch == '\t') {
+            event.key = INPUT_KEY_TAB;
+        } else if (ch == 17) {
+            event.key = INPUT_KEY_CTRL_Q;
+        } else if (ch == 3) {
+            event.key = INPUT_KEY_CTRL_C;
+        } else if (ch >= 32 && ch <= 126) {
+            event.key = INPUT_KEY_CHAR;
+            event.ch = (char)ch;
+        }
+
+        return event;
+    }
+#else
+    {
+        int input_fd = fileno(input);
+        struct termios old_settings;
+        struct termios raw_settings;
+        int ch = 0;
+
+        if (input_fd < 0) {
+            return event;
+        }
+
+        /* 保存终端设置并切换到 raw 模式 */
+        tcgetattr(input_fd, &old_settings);
+        raw_settings = old_settings;
+        raw_settings.c_lflag &= ~((tcflag_t)ICANON | (tcflag_t)ECHO);
+        raw_settings.c_cc[VMIN] = 1;
+        raw_settings.c_cc[VTIME] = 0;
+        tcsetattr(input_fd, TCSANOW, &raw_settings);
+
+        ch = fgetc(input);
+
+        if (ch == 0x1B) {
+            /* ESC 或转义序列 */
+            int next = 0;
+            /* 切换为非阻塞以检测是否有后续字节 */
+            raw_settings.c_cc[VMIN] = 0;
+            raw_settings.c_cc[VTIME] = 1; /* 100ms 超时 */
+            tcsetattr(input_fd, TCSANOW, &raw_settings);
+
+            next = fgetc(input);
+            if (next == '[') {
+                int code = fgetc(input);
+                switch (code) {
+                    case 'A': event.key = INPUT_KEY_UP;    break;
+                    case 'B': event.key = INPUT_KEY_DOWN;  break;
+                    case 'C': event.key = INPUT_KEY_RIGHT; break;
+                    case 'D': event.key = INPUT_KEY_LEFT;  break;
+                    default:  event.key = INPUT_KEY_ESC;   break;
+                }
+            } else {
+                event.key = INPUT_KEY_ESC;
+                /* 如果读到了一个非 '[' 的字符，放回去 */
+                if (next != EOF) {
+                    ungetc(next, input);
+                }
+            }
+        } else if (ch == '\n' || ch == '\r') {
+            event.key = INPUT_KEY_ENTER;
+        } else if (ch == 127 || ch == 8) {
+            event.key = INPUT_KEY_BACKSPACE;
+        } else if (ch == '\t') {
+            event.key = INPUT_KEY_TAB;
+        } else if (ch == 17) {
+            event.key = INPUT_KEY_CTRL_Q;
+        } else if (ch == 3) {
+            event.key = INPUT_KEY_CTRL_C;
+        } else if (ch >= 32 && ch <= 126) {
+            event.key = INPUT_KEY_CHAR;
+            event.ch = (char)ch;
+        } else if (ch == EOF) {
+            event.key = INPUT_KEY_NONE;
+        }
+
+        /* 恢复终端设置 */
+        tcsetattr(input_fd, TCSANOW, &old_settings);
+
+        return event;
+    }
+#endif
+}

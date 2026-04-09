@@ -50,6 +50,7 @@ add_library(his_common
     src/ui/DemoData.c
     src/ui/MenuApplication.c
     src/ui/MenuController.c
+    src/ui/TuiPanel.c
     src/ui/TuiStyle.c
 )
 

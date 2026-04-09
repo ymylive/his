@@ -48,20 +48,17 @@ static int menu_append_hline(
 ) {
     int w = 0;
     int i = 0;
-    /* 左角使用青色（纯 ASCII，确保跨平台宽度一致） */
-    w = snprintf(buf + *used, cap - *used, "\033[38;5;51m%s", left);
+    (void)left;
+    (void)right;
+    w = snprintf(buf + *used, cap - *used, TUI_OC_DIM);
     if (w < 0 || (size_t)w >= cap - *used) return -1;
     *used += (size_t)w;
-    /* 中间每个 - 使用256色渐变（纯 ASCII 避免 Unicode 宽度歧义） */
-    for (i = 0; i < MENU_INNER; i++) {
-        w = snprintf(buf + *used, cap - *used,
-                     "\033[38;5;%dm-",
-                     TUI_GRADIENT_256[i % TUI_GRADIENT_256_COUNT]);
+    for (i = 0; i < MENU_INNER + 2; i++) {
+        w = snprintf(buf + *used, cap - *used, "\xe2\x94\x80");
         if (w < 0 || (size_t)w >= cap - *used) return -1;
         *used += (size_t)w;
     }
-    /* 右角使用青色 */
-    w = snprintf(buf + *used, cap - *used, "\033[38;5;51m%s" TUI_RESET "\n", right);
+    w = snprintf(buf + *used, cap - *used, TUI_RESET "\n");
     if (w < 0 || (size_t)w >= cap - *used) return -1;
     *used += (size_t)w;
     return 0;
@@ -80,34 +77,10 @@ static int menu_append_title(
     const char *title
 ) {
     int w = 0;
-    int dw = tui_display_width(title);  /* 计算标题的终端显示宽度 */
-    int pad_left = 0;
-    int pad_right = 0;
-    int i = 0;
-
-    /* 计算左右填充以实现居中对齐 */
-    pad_left = (MENU_INNER - dw) / 2;
-    pad_right = MENU_INNER - dw - pad_left;
-    if (pad_left < 0) pad_left = 0;
-    if (pad_right < 0) pad_right = 0;
-
-    w = snprintf(buf + *used, cap - *used, "\033[38;5;51m|" TUI_BOLD_WHITE);
-    if (w < 0 || (size_t)w >= cap - *used) return -1;
-    *used += (size_t)w;
-    for (i = 0; i < pad_left; i++) {
-        w = snprintf(buf + *used, cap - *used, " ");
-        if (w < 0 || (size_t)w >= cap - *used) return -1;
-        *used += (size_t)w;
-    }
-    w = snprintf(buf + *used, cap - *used, "%s", title);
-    if (w < 0 || (size_t)w >= cap - *used) return -1;
-    *used += (size_t)w;
-    for (i = 0; i < pad_right; i++) {
-        w = snprintf(buf + *used, cap - *used, " ");
-        if (w < 0 || (size_t)w >= cap - *used) return -1;
-        *used += (size_t)w;
-    }
-    w = snprintf(buf + *used, cap - *used, "\033[38;5;51m|" TUI_RESET "\n");
+    w = snprintf(buf + *used, cap - *used,
+                 TUI_OC_ACCENT "\xe2\x94\x83" TUI_RESET
+                 " " TUI_OC_TEXT TUI_BOLD "%s" TUI_RESET "\n",
+                 title);
     if (w < 0 || (size_t)w >= cap - *used) return -1;
     *used += (size_t)w;
     return 0;
@@ -128,35 +101,15 @@ static int menu_append_item(
     char *buf, size_t cap, size_t *used,
     int number, const char *icon, const char *label, int is_dim
 ) {
-    char content[128];
     int w = 0;
-    int dw = 0;
-    int icon_extra = 0;
-    int pad = 0;
-    int i = 0;
-    const char *num_color = is_dim ? TUI_DIM : TUI_BOLD_YELLOW;
-    const char *lbl_color = is_dim ? TUI_DIM : TUI_RESET;
-
-    snprintf(content, sizeof(content), "%d. %s", number, label);
-    dw = tui_display_width(content);
-    /* 不使用 Unicode 图标（在 Windows 中文终端宽度不可预测），改用编号徽章 */
-    (void)icon;  /* 图标信息不再用于菜单缓冲区 */
-    pad = MENU_INNER - 2 - dw;  /* 2 for leading spaces */
-    if (pad < 0) pad = 0;
-
+    const char *num_color = is_dim ? TUI_OC_DIM : TUI_OC_AMBER;
+    const char *lbl_color = is_dim ? TUI_OC_DIM : TUI_OC_MUTED;
+    (void)icon;
     w = snprintf(buf + *used, cap - *used,
-                 "\033[38;5;51m|  "
-                 "%s%d. %s%s",
+                 TUI_OC_BORDER "\xe2\x94\x83" TUI_RESET
+                 "  %s%d." TUI_RESET
+                 " %s%s" TUI_RESET "\n",
                  num_color, number, lbl_color, label);
-    if (w < 0 || (size_t)w >= cap - *used) return -1;
-    *used += (size_t)w;
-    for (i = 0; i < pad; i++) {
-        w = snprintf(buf + *used, cap - *used, " ");
-        if (w < 0 || (size_t)w >= cap - *used) return -1;
-        *used += (size_t)w;
-    }
-    w = snprintf(buf + *used, cap - *used,
-                 "\033[38;5;51m|" TUI_RESET "\n");
     if (w < 0 || (size_t)w >= cap - *used) return -1;
     *used += (size_t)w;
     return 0;
@@ -170,10 +123,7 @@ static int menu_append_footer(
 ) {
     int w = 0;
     w = snprintf(buf + *used, cap - *used,
-                 TUI_DIM "       --- HIS v" HIS_VERSION
-                 " -- "
-                 "\xe8\xbd\xbb\xe9\x87\x8f\xe7\xba\xa7\xe5\x8c\xbb\xe9\x99\xa2\xe4\xbf\xa1\xe6\x81\xaf\xe7\xb3\xbb\xe7\xbb\x9f"
-                 " ---" TUI_RESET "\n");
+                 TUI_OC_DIM "HIS v" HIS_VERSION TUI_RESET "\n");
     if (w < 0 || (size_t)w >= cap - *used) return -1;
     *used += (size_t)w;
     return 0;

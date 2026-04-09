@@ -219,7 +219,7 @@ void tui_print_logo(FILE *out) {
     fputc('\n', out);
     for (i = 0; i < LOGO_LINE_COUNT; i++) {
         tui_print_margin(out, logo_width);
-        fputs(GRADIENT_COLORS[i % GRADIENT_COUNT], out);
+        fputs(TUI_OC_ACCENT TUI_BOLD, out);
         fputs(LOGO_LINES[i], out);
         fputs(TUI_RESET, out);
         fputc('\n', out);
@@ -244,196 +244,60 @@ void tui_print_gradient_text(FILE *out, const char *text) {
 }
 
 void tui_print_banner(FILE *out, const char *title) {
-    int title_w = 0;
-    int box_w = 0;
-    int pad_left = 0;
-    int pad_right = 0;
     int i = 0;
 
     if (out == 0 || title == 0) return;
 
-    title_w = tui_display_width(title);
-    box_w = title_w + 6;
-    if (box_w < 48) box_w = 48;
-
-    pad_left = (box_w - 2 - title_w) / 2;
-    pad_right = box_w - 2 - title_w - pad_left;
-
-    /* Top border: 256-color smooth gradient */
+    /* Top thin line */
     tui_print_margin(out, 46);
-    fprintf(out, "\033[38;5;51m");  /* cyan */
-    fputs(TUI_DTL, out);
-    for (i = 0; i < box_w - 2; i++) {
-        fprintf(out, "\033[38;5;%dm", GRADIENT_256[i % GRADIENT_256_COUNT]);
-        fputs(TUI_DH, out);
-    }
-    fprintf(out, "\033[38;5;51m");
-    fputs(TUI_DTR, out);
+    fputs(TUI_OC_DIM, out);
+    for (i = 0; i < 46; i++) fputs(TUI_H, out);
     fputs(TUI_RESET, out);
     fputc('\n', out);
 
-    /* Upper decorative line: smooth 256-color blocks */
+    /* Bold title */
     tui_print_margin(out, 46);
-    fprintf(out, "\033[38;5;51m" TUI_DV TUI_RESET);
-    fputc(' ', out);
-    for (i = 0; i < box_w - 4; i++) {
-        fprintf(out, "\033[38;5;%dm", GRADIENT_256[i % GRADIENT_256_COUNT]);
-        fputs(TUI_BLOCK_UPPER, out);
-    }
-    fputs(TUI_RESET, out);
-    fputc(' ', out);
-    fprintf(out, "\033[38;5;51m" TUI_DV TUI_RESET);
-    fputc('\n', out);
-
-    /* Sparkle + title line */
-    tui_print_margin(out, 46);
-    fprintf(out, "\033[38;5;51m" TUI_DV TUI_RESET);
-    for (i = 0; i < pad_left - 2; i++) fputc(' ', out);
-    fputs(TUI_SPARKLE " ", out);
-    fputs(TUI_BOLD_WHITE, out);
+    fputs(TUI_OC_TEXT TUI_BOLD, out);
     fputs(title, out);
-    fputs(TUI_RESET " " TUI_SPARKLE, out);
-    for (i = 0; i < pad_right - 2; i++) fputc(' ', out);
-    fprintf(out, "\033[38;5;51m" TUI_DV TUI_RESET);
-    fputc('\n', out);
-
-    /* Subtitle line with version from HIS_VERSION */
-    {
-        const char *sub = TUI_MEDICAL " Hospital Information System v" HIS_VERSION;
-        int sub_w = tui_display_width(sub);
-        int spad_l = (box_w - 2 - sub_w) / 2;
-        int spad_r = box_w - 2 - sub_w - spad_l;
-        tui_print_margin(out, 46);
-        fprintf(out, "\033[38;5;51m" TUI_DV TUI_RESET);
-        for (i = 0; i < spad_l; i++) fputc(' ', out);
-        fprintf(out, "\033[38;5;245m");  /* subtle gray */
-        fputs(sub, out);
-        fputs(TUI_RESET, out);
-        for (i = 0; i < spad_r; i++) fputc(' ', out);
-        fprintf(out, "\033[38;5;51m" TUI_DV TUI_RESET);
-        fputc('\n', out);
-    }
-
-    /* Lower decorative line: reverse 256-color blocks */
-    tui_print_margin(out, 46);
-    fprintf(out, "\033[38;5;51m" TUI_DV TUI_RESET);
-    fputc(' ', out);
-    for (i = box_w - 5; i >= 0; i--) {
-        fprintf(out, "\033[38;5;%dm", GRADIENT_256[i % GRADIENT_256_COUNT]);
-        fputs(TUI_BLOCK_LOWER, out);
-    }
     fputs(TUI_RESET, out);
-    fputc(' ', out);
-    fprintf(out, "\033[38;5;51m" TUI_DV TUI_RESET);
     fputc('\n', out);
 
-    /* Bottom border: matching gradient */
+    /* Bottom thin line */
     tui_print_margin(out, 46);
-    fprintf(out, "\033[38;5;51m");
-    fputs(TUI_DBL, out);
-    for (i = 0; i < box_w - 2; i++) {
-        fprintf(out, "\033[38;5;%dm", GRADIENT_256[(box_w - 2 - i) % GRADIENT_256_COUNT]);
-        fputs(TUI_DH, out);
-    }
-    fprintf(out, "\033[38;5;51m");
-    fputs(TUI_DBR, out);
+    fputs(TUI_OC_DIM, out);
+    for (i = 0; i < 46; i++) fputs(TUI_H, out);
     fputs(TUI_RESET, out);
     fputc('\n', out);
     fputc('\n', out);
 }
 
 void tui_print_welcome(FILE *out, TuiRoleTheme theme, const char *user_id) {
-    const char *color = tui_role_color(theme);
-    const char *icon = tui_role_icon(theme);
-    const char *label = tui_role_label(theme);
-
+    (void)theme;
     if (out == 0) return;
 
     fputc('\n', out);
     tui_print_margin(out, 46);
-    fputs(color, out);
-    fputs(TUI_HTL, out);
-    tui_repeat(out, TUI_HH, 40);
-    fputs(TUI_HTR, out);
-    fputs(TUI_RESET, out);
-    fputc('\n', out);
-
-    tui_print_margin(out, 46);
-    fputs(color, out);
-    fputs(TUI_HV, out);
-    fputs(TUI_RESET, out);
-    fprintf(out, "  %s %s%s%s", TUI_SPARKLE, TUI_BOLD_WHITE, "\xe6\xac\xa2\xe8\xbf\x8e\xe7\x99\xbb\xe5\xbd\x95" /* 欢迎登录 */, TUI_RESET);
-    fputs("                       ", out);
-    fputs(color, out);
-    fputs(TUI_HV, out);
-    fputs(TUI_RESET, out);
-    fputc('\n', out);
-
-    tui_print_margin(out, 46);
-    fputs(color, out);
-    fputs(TUI_HV, out);
-    fputs(TUI_RESET, out);
-    fprintf(out, "  %s %s %s%s%s [%s]",
-        icon, color, label, TUI_RESET, TUI_DIM, user_id);
-    {
-        char tmp[128];
-        int tw = 0;
-        snprintf(tmp, sizeof(tmp), "  %s %s [%s]", icon, label, user_id);
-        tw = tui_display_width(tmp);
-        { int pad = 40 - tw; int j; for (j = 0; j < pad; j++) fputc(' ', out); }
+    fprintf(out, TUI_OC_SUCCESS "%s" TUI_RESET " " TUI_OC_TEXT "\xe6\xac\xa2\xe8\xbf\x8e\xe5\x9b\x9e\xe6\x9d\xa5" TUI_RESET /* 欢迎回来 */, TUI_CHECK);
+    if (user_id != 0) {
+        fprintf(out, TUI_OC_MUTED " (%s)" TUI_RESET, user_id);
     }
-    fputs(TUI_RESET, out);
-    fputs(color, out);
-    fputs(TUI_HV, out);
-    fputs(TUI_RESET, out);
     fputc('\n', out);
 
     tui_print_margin(out, 46);
-    fputs(color, out);
-    fputs(TUI_HBL, out);
-    tui_repeat(out, TUI_HH, 40);
-    fputs(TUI_HBR, out);
-    fputs(TUI_RESET, out);
+    fprintf(out, TUI_OC_MUTED "HIS v" HIS_VERSION " \xe2\x80\x94 \xe8\xbd\xbb\xe9\x87\x8f\xe7\xba\xa7\xe5\x8c\xbb\xe9\x99\xa2\xe4\xbf\xa1\xe6\x81\xaf\xe7\xb3\xbb\xe7\xbb\x9f" TUI_RESET /* 轻量级医院信息系统 */);
     fputc('\n', out);
     fputc('\n', out);
 }
 
 void tui_print_goodbye(FILE *out) {
-    int i = 0;
-
     if (out == 0) return;
 
     fputc('\n', out);
-
-    /* Top divider: smooth 256-color gradient line */
     tui_print_margin(out, 46);
-    for (i = 0; i < 46; i++) {
-        fprintf(out, "\033[38;5;%dm", GRADIENT_256[i % GRADIENT_256_COUNT]);
-        fputs(TUI_HH, out);
-    }
-    fputs(TUI_RESET, out);
-    fputc('\n', out);
+    fprintf(out, TUI_OC_SUCCESS "%s" TUI_RESET " " TUI_OC_TEXT "\xe5\x86\x8d\xe8\xa7\x81\xef\xbc\x81" TUI_RESET "\n" /* 再见！ */, TUI_CHECK);
 
-    /* Content line */
     tui_print_margin(out, 46);
-    fputs(TUI_SPARKLE " ", out);
-    tui_print_gradient_text(out, "\xe6\x84\x9f\xe8\xb0\xa2\xe4\xbd\xbf\xe7\x94\xa8" /* 感谢使用 */);
-    fputs(TUI_BOLD_WHITE " HIS " TUI_RESET, out);
-    tui_print_gradient_text(out, "\xe7\xb3\xbb\xe7\xbb\x9f" /* 系统 */);
-    fprintf(out, " \033[38;5;245m- ");
-    tui_print_gradient_text(out, "\xe5\x86\x8d\xe8\xa7\x81" /* 再见 */);
-    fprintf(out, " %s", TUI_SPARKLE);
-    fputs(TUI_RESET, out);
-    fputc('\n', out);
-
-    /* Bottom divider: reverse gradient */
-    tui_print_margin(out, 46);
-    for (i = 45; i >= 0; i--) {
-        fprintf(out, "\033[38;5;%dm", GRADIENT_256[i % GRADIENT_256_COUNT]);
-        fputs(TUI_HH, out);
-    }
-    fputs(TUI_RESET, out);
-    fputc('\n', out);
+    fputs(TUI_OC_MUTED "\xe6\x84\x9f\xe8\xb0\xa2\xe4\xbd\xbf\xe7\x94\xa8 HIS \xe7\xb3\xbb\xe7\xbb\x9f" TUI_RESET "\n" /* 感谢使用 HIS 系统 */, out);
     fputc('\n', out);
 }
 
@@ -456,65 +320,36 @@ void tui_print_status_bar(FILE *out, const char *role, const char *user_id) {
 }
 
 void tui_print_status_bar_themed(FILE *out, TuiRoleTheme theme, const char *user_id) {
-    const char *bg = tui_role_bg(theme);
-    const char *icon = tui_role_icon(theme);
     const char *label = tui_role_label(theme);
+    int tw = tui_get_terminal_width();
 
     if (out == 0) return;
 
-    /* Left accent: gradient edge ▐█ */
-    fputs(TUI_DIM, out);
-    fputs(tui_role_color(theme), out);
-    fputs(TUI_BLOCK_RIGHT, out);
-    fputs(TUI_RESET, out);
-    fputs(tui_role_color(theme), out);
-    fputs(TUI_BLOCK_FULL, out);
+    /* Full-width bar with panel background */
+    fputs(TUI_OC_BG_PANEL TUI_BOLD TUI_WHITE, out);
+    fprintf(out, " %s ", label);
     fputs(TUI_RESET, out);
 
-    /* Main role badge */
-    fputs(TUI_BOLD, out);
-    fputs(bg, out);
-    fputs(TUI_WHITE, out);
-    fprintf(out, " %s %s ", icon, label);
-    fputs(TUI_RESET, out);
-
-    /* Separator glyph */
-    fputs(tui_role_color(theme), out);
-    fputs(TUI_BLOCK_RIGHT, out);
-    fputs(TUI_RESET, out);
-
-    /* User ID section with subtle background */
-    fprintf(out, "\033[48;5;236m");  /* dark gray bg */
-    fputs(TUI_BOLD_WHITE, out);
-    if (user_id != 0) {
-        fprintf(out, " %s %s ", TUI_DOT, user_id);
-    }
-    fputs(TUI_RESET, out);
-
-    /* HIS badge */
-    fprintf(out, "\033[48;5;238m\033[38;5;245m");
-    fprintf(out, " %s HIS ", TUI_MEDICAL);
-    fputs(TUI_RESET, out);
-
-    /* Timestamp section */
+    /* Right-align: user_id + version */
     {
-        time_t now = time(NULL);
-        struct tm *t = localtime(&now);
-        char time_str[16];
-        if (t != NULL) {
-            strftime(time_str, sizeof(time_str), "%H:%M:%S", t);
-        } else {
-            strcpy(time_str, "--:--:--");
-        }
-        fprintf(out, "\033[48;5;235m\033[38;5;240m");
-        fprintf(out, " %s %s ", TUI_GEAR, time_str);
+        char right[128];
+        int right_w = 0;
+        int label_w = tui_display_width(label) + 2; /* " label " */
+        int pad = 0;
+        int i = 0;
+
+        snprintf(right, sizeof(right), "%s  HIS v" HIS_VERSION " ",
+                 user_id != 0 ? user_id : "");
+        right_w = tui_display_width(right);
+        pad = tw - label_w - right_w;
+        if (pad < 0) pad = 0;
+
+        fputs(TUI_OC_BG_PANEL, out);
+        for (i = 0; i < pad; i++) fputc(' ', out);
+        fputs(TUI_OC_MUTED, out);
+        fputs(right, out);
         fputs(TUI_RESET, out);
     }
-
-    /* Right fade: smooth block density transition */
-    fputs(tui_role_color(theme), out);
-    fputs(TUI_BLOCK_DARK TUI_BLOCK_MED TUI_BLOCK_LIGHT, out);
-    fputs(TUI_RESET, out);
     fputc('\n', out);
 }
 
@@ -554,28 +389,16 @@ void tui_print_header(FILE *out, const char *title, int width) {
 }
 
 void tui_print_section(FILE *out, const char *icon, const char *title) {
-    int i = 0;
-
+    (void)icon;
     if (out == 0 || title == 0) return;
 
     fputc('\n', out);
     tui_print_margin(out, 46);
-    if (icon != 0) {
-        fprintf(out, "\033[38;5;214m");  /* warm orange */
-        fputs(icon, out);
-        fputs(TUI_RESET, out);
-        fputc(' ', out);
-    }
+    fputs(TUI_OC_ACCENT, out);
+    fputs(TUI_HV, out);
+    fputs(TUI_RESET " ", out);
     fputs(TUI_BOLD_WHITE, out);
     fputs(title, out);
-    fputs(TUI_RESET, out);
-    fputc('\n', out);
-    /* Gradient underline */
-    tui_print_margin(out, 46);
-    for (i = 0; i < 38; i++) {
-        fprintf(out, "\033[38;5;%dm", 236 + (i * 8 / 38)); /* dark to medium gray */
-        fputs(TUI_H, out);
-    }
     fputs(TUI_RESET, out);
     fputc('\n', out);
 }
@@ -600,8 +423,9 @@ void tui_print_gradient_hline(FILE *out, int width) {
     int i = 0;
     if (out == 0) return;
     tui_print_margin(out, 46);
+    fputs(TUI_OC_BORDER, out);
     for (i = 0; i < width; i++) {
-        fprintf(out, "\033[38;5;%dm-", GRADIENT_256[i % GRADIENT_256_COUNT]);
+        fputc('-', out);
     }
     fputs(TUI_RESET, out);
     fputc('\n', out);
@@ -613,33 +437,40 @@ void tui_print_gradient_hline(FILE *out, int width) {
 
 void tui_print_success(FILE *out, const char *message) {
     if (out == 0 || message == 0) return;
-    fputc('\n', out); tui_print_margin(out, 46); fprintf(out, "\033[48;5;22m\033[38;5;46m %s \033[1m%s \033[0m\n", TUI_CHECK, message);
+    fputc('\n', out); tui_print_margin(out, 46);
+    fprintf(out, TUI_OC_SUCCESS " %s " TUI_OC_TEXT "%s" TUI_RESET "\n", TUI_CHECK, message);
 }
 
 void tui_print_error(FILE *out, const char *message) {
     if (out == 0 || message == 0) return;
-    fputc('\n', out); tui_print_margin(out, 46); fprintf(out, "\033[48;5;52m\033[38;5;196m %s \033[1m%s \033[0m\n", TUI_CROSS, message);
+    fputc('\n', out); tui_print_margin(out, 46);
+    fprintf(out, TUI_OC_ERROR " %s " TUI_OC_TEXT "%s" TUI_RESET "\n", TUI_CROSS, message);
 }
 
 void tui_print_warning(FILE *out, const char *message) {
     if (out == 0 || message == 0) return;
-    fputc('\n', out); tui_print_margin(out, 46); fprintf(out, "\033[48;5;58m\033[38;5;220m %s \033[1m%s \033[0m\n", TUI_TRIANGLE, message);
+    fputc('\n', out); tui_print_margin(out, 46);
+    fprintf(out, TUI_OC_WARN " %s " TUI_OC_TEXT "%s" TUI_RESET "\n", TUI_TRIANGLE, message);
 }
 
 void tui_print_info(FILE *out, const char *message) {
     if (out == 0 || message == 0) return;
-    tui_print_margin(out, 46); fprintf(out, "\033[38;5;39m%s\033[0m \033[38;5;252m%s\033[0m\n", TUI_DOT, message);
+    tui_print_margin(out, 46);
+    fprintf(out, TUI_OC_BLUE "%s" TUI_RESET " " TUI_OC_MUTED "%s" TUI_RESET "\n", TUI_DOT, message);
 }
 
 void tui_print_prompt(FILE *out, const char *text) {
     if (out == 0 || text == 0) return;
-    fputc('\n', out); tui_print_margin(out, 46); fprintf(out, "\033[38;5;214m%s\033[0m \033[1;37m%s\033[0m", TUI_ARROW, text);
+    fputc('\n', out); tui_print_margin(out, 46);
+    fprintf(out, TUI_OC_AMBER "%s" TUI_RESET " " TUI_OC_TEXT "%s" TUI_RESET, TUI_ARROW, text);
     fflush(out);
 }
 
 void tui_print_prompt_themed(FILE *out, const char *text, TuiRoleTheme theme) {
+    (void)theme;
     if (out == 0 || text == 0) return;
-    fputc('\n', out); tui_print_margin(out, 46); fprintf(out, "%s%s\033[0m \033[1;37m%s\033[0m", tui_role_color(theme), TUI_ARROW, text);
+    fputc('\n', out); tui_print_margin(out, 46);
+    fprintf(out, TUI_OC_ACCENT "%s" TUI_RESET " " TUI_OC_TEXT "%s" TUI_RESET, TUI_ARROW, text);
     fflush(out);
 }
 
@@ -1023,6 +854,21 @@ int tui_get_terminal_width(void) {
     return 80;
 }
 
+int tui_get_terminal_height(void) {
+#ifdef _WIN32
+    CONSOLE_SCREEN_BUFFER_INFO csbi;
+    if (GetConsoleScreenBufferInfo(GetStdHandle(STD_OUTPUT_HANDLE), &csbi)) {
+        return csbi.srWindow.Bottom - csbi.srWindow.Top + 1;
+    }
+#else
+    struct winsize ws;
+    if (ioctl(STDOUT_FILENO, TIOCGWINSZ, &ws) == 0 && ws.ws_row > 0) {
+        return ws.ws_row;
+    }
+#endif
+    return 24;
+}
+
 /**
  * @brief 打印居中左边距
  * @param out    输出流
@@ -1046,170 +892,13 @@ void tui_delay(int ms) {
 /* ── Animated Logo ────────────────────────────────────────────── */
 
 void tui_animate_logo(FILE *out) {
-    int i = 0;
-    int logo_width = 0;
-    if (out == 0) return;
-
-    if (!tui_is_interactive()) {
-        tui_print_logo(out);
-        return;
-    }
-
-    logo_width = tui_display_width(LOGO_LINES[0]);
-    tui_hide_cursor(out);
-    fputc('\n', out);
-    for (i = 0; i < LOGO_LINE_COUNT; i++) {
-        tui_print_margin(out, logo_width);
-        fputs(GRADIENT_COLORS[i % GRADIENT_COUNT], out);
-        fputs(LOGO_LINES[i], out);
-        fputs(TUI_RESET, out);
-        fputc('\n', out);
-        fflush(out);
-        tui_sleep_ms(60);
-    }
-    tui_show_cursor(out);
+    tui_print_logo(out);
 }
 
 /* ── Animated Banner ──────────────────────────────────────────── */
 
 void tui_animate_banner(FILE *out, const char *title) {
-    int title_w = 0;
-    int box_w = 0;
-    int pad_left = 0;
-    int pad_right = 0;
-    int i = 0;
-
-    if (out == 0 || title == 0) return;
-
-    if (!tui_is_interactive()) {
-        tui_print_banner(out, title);
-        return;
-    }
-
-    title_w = tui_display_width(title);
-    box_w = title_w + 6;
-    if (box_w < 42) box_w = 42;
-    pad_left = (box_w - 2 - title_w) / 2;
-    pad_right = box_w - 2 - title_w - pad_left;
-
-    tui_hide_cursor(out);
-
-    /* Top border - draw left to right */
-    tui_print_margin(out, 46);
-    fputs(TUI_BOLD_CYAN, out);
-    fputs(TUI_DTL, out);
-    fflush(out);
-    for (i = 0; i < box_w - 2; i++) {
-        fputs(TUI_DH, out);
-        fflush(out);
-        tui_sleep_ms(8);
-    }
-    fputs(TUI_DTR, out);
-    fputs(TUI_RESET, out);
-    fputc('\n', out);
-    fflush(out);
-
-    /* Rainbow sweep line - animate left to right */
-    tui_print_margin(out, 46);
-    fputs(TUI_BOLD_CYAN TUI_DV TUI_RESET, out);
-    fputs(" ", out);
-    fflush(out);
-    for (i = 0; i < box_w - 4; i++) {
-        fputs(GRADIENT_COLORS[i % GRADIENT_COUNT], out);
-        fputs(TUI_BLOCK_UPPER, out);
-        fputs(TUI_RESET, out);
-        fflush(out);
-        tui_sleep_ms(12);
-    }
-    fputs(" ", out);
-    fputs(TUI_BOLD_CYAN TUI_DV TUI_RESET, out);
-    fputc('\n', out);
-    fflush(out);
-
-    /* Title line - typewriter */
-    tui_print_margin(out, 46);
-    fputs(TUI_BOLD_CYAN TUI_DV TUI_RESET, out);
-    for (i = 0; i < pad_left; i++) fputc(' ', out);
-    fflush(out);
-    {
-        const unsigned char *p = (const unsigned char *)title;
-        fputs(TUI_BOLD_WHITE, out);
-        while (*p != 0) {
-            if (*p < 0x80) {
-                fputc(*p, out);
-                p += 1;
-            } else if (*p < 0xE0) {
-                fputc(p[0], out); fputc(p[1], out);
-                p += 2;
-            } else if (*p < 0xF0) {
-                fputc(p[0], out); fputc(p[1], out); fputc(p[2], out);
-                p += 3;
-            } else {
-                fputc(p[0], out); fputc(p[1], out); fputc(p[2], out); fputc(p[3], out);
-                p += 4;
-            }
-            fflush(out);
-            tui_sleep_ms(40);
-        }
-        fputs(TUI_RESET, out);
-    }
-    for (i = 0; i < pad_right; i++) fputc(' ', out);
-    fputs(TUI_BOLD_CYAN TUI_DV TUI_RESET, out);
-    fputc('\n', out);
-    fflush(out);
-
-    /* Subtitle */
-    {
-        const char *sub = TUI_HEAVY_CROSS " Hospital Information System v2.0";
-        int sub_w = tui_display_width(sub);
-        int spad_l = (box_w - 2 - sub_w) / 2;
-        int spad_r = box_w - 2 - sub_w - spad_l;
-        tui_print_margin(out, 46);
-        fputs(TUI_BOLD_CYAN TUI_DV TUI_RESET, out);
-        for (i = 0; i < spad_l; i++) fputc(' ', out);
-        fputs(TUI_DIM, out);
-        fputs(sub, out);
-        fputs(TUI_RESET, out);
-        for (i = 0; i < spad_r; i++) fputc(' ', out);
-        fputs(TUI_BOLD_CYAN TUI_DV TUI_RESET, out);
-        fputc('\n', out);
-        fflush(out);
-        tui_sleep_ms(50);
-    }
-
-    /* Bottom rainbow sweep - reverse direction */
-    tui_print_margin(out, 46);
-    fputs(TUI_BOLD_CYAN TUI_DV TUI_RESET, out);
-    fputs(" ", out);
-    fflush(out);
-    for (i = box_w - 5; i >= 0; i--) {
-        fputs(GRADIENT_COLORS[i % GRADIENT_COUNT], out);
-        fputs(TUI_BLOCK_LOWER, out);
-        fputs(TUI_RESET, out);
-        fflush(out);
-        tui_sleep_ms(10);
-    }
-    fputs(" ", out);
-    fputs(TUI_BOLD_CYAN TUI_DV TUI_RESET, out);
-    fputc('\n', out);
-    fflush(out);
-
-    /* Bottom border */
-    tui_print_margin(out, 46);
-    fputs(TUI_BOLD_CYAN, out);
-    fputs(TUI_DBL, out);
-    for (i = 0; i < box_w - 2; i++) {
-        fputs(TUI_DH, out);
-        fflush(out);
-        tui_sleep_ms(6);
-    }
-    fputs(TUI_DBR, out);
-    fputs(TUI_RESET, out);
-    fputc('\n', out);
-    fputc('\n', out);
-    fflush(out);
-
-    tui_show_cursor(out);
+    tui_print_banner(out, title);
 }
 
 /* ── Typewriter ───────────────────────────────────────────────── */
@@ -1232,152 +921,13 @@ void tui_animate_typewriter(FILE *out, const char *text, int char_delay_ms) {
 /* ── Animated Welcome ─────────────────────────────────────────── */
 
 void tui_animate_welcome(FILE *out, TuiRoleTheme theme, const char *user_id) {
-    const char *color = tui_role_color(theme);
-    const char *icon = tui_role_icon(theme);
-    const char *label = tui_role_label(theme);
-    int i = 0;
-
-    if (out == 0) return;
-    if (!tui_is_interactive()) { tui_print_welcome(out, theme, user_id); return; }
-
-    tui_hide_cursor(out);
-    fputc('\n', out);
-
-    /* Draw top border animated */
-    tui_print_margin(out, 46);
-    fputs(color, out);
-    fputs(TUI_HTL, out);
-    fflush(out);
-    for (i = 0; i < 40; i++) {
-        fputs(TUI_HH, out);
-        fflush(out);
-        tui_sleep_ms(10);
-    }
-    fputs(TUI_HTR, out);
-    fputs(TUI_RESET, out);
-    fputc('\n', out);
-    fflush(out);
-
-    /* Welcome text - typewriter */
-    tui_print_margin(out, 46);
-    fputs(color, out);
-    fputs(TUI_HV, out);
-    fputs(TUI_RESET, out);
-    fputs("  ", out);
-    fputs(TUI_SPARKLE, out);
-    fputs(" ", out);
-    fputs(TUI_BOLD_WHITE, out);
-    tui_animate_typewriter(out, "\xe6\xac\xa2\xe8\xbf\x8e\xe7\x99\xbb\xe5\xbd\x95" /* 欢迎登录 */, 80);
-    fputs(TUI_RESET, out);
-    /* pad to fill */
-    for (i = 0; i < 23; i++) fputc(' ', out);
-    fputs(color, out);
-    fputs(TUI_HV, out);
-    fputs(TUI_RESET, out);
-    fputc('\n', out);
-    fflush(out);
-    tui_sleep_ms(100);
-
-    /* Role info line */
-    tui_print_margin(out, 46);
-    fputs(color, out);
-    fputs(TUI_HV, out);
-    fputs(TUI_RESET, out);
-    fprintf(out, "  %s %s%s%s", icon, color, label, TUI_RESET);
-    fprintf(out, TUI_DIM " [%s]" TUI_RESET, user_id != 0 ? user_id : "");
-    {
-        char tmp[128];
-        int tw = 0;
-        snprintf(tmp, sizeof(tmp), "  %s %s [%s]", icon, label, user_id != 0 ? user_id : "");
-        tw = tui_display_width(tmp);
-        for (i = 0; i < 40 - tw; i++) fputc(' ', out);
-    }
-    fputs(color, out);
-    fputs(TUI_HV, out);
-    fputs(TUI_RESET, out);
-    fputc('\n', out);
-    fflush(out);
-    tui_sleep_ms(100);
-
-    /* Draw bottom border animated */
-    tui_print_margin(out, 46);
-    fputs(color, out);
-    fputs(TUI_HBL, out);
-    fflush(out);
-    for (i = 0; i < 40; i++) {
-        fputs(TUI_HH, out);
-        fflush(out);
-        tui_sleep_ms(8);
-    }
-    fputs(TUI_HBR, out);
-    fputs(TUI_RESET, out);
-    fputc('\n', out);
-    fputc('\n', out);
-    fflush(out);
-
-    tui_show_cursor(out);
+    tui_print_welcome(out, theme, user_id);
 }
 
 /* ── Animated Goodbye ─────────────────────────────────────────── */
 
 void tui_animate_goodbye(FILE *out) {
-    int frame = 0;
-    int i = 0;
-    /* UTF-8 bytes for 感谢使用HIS系统再见 */
-    const char *words[] = {
-        "\xe6\x84\x9f", "\xe8\xb0\xa2", "\xe4\xbd\xbf", "\xe7\x94\xa8",
-        " H", "I", "S ", "\xe7\xb3\xbb", "\xe7\xbb\x9f",
-        " - ", "\xe5\x86\x8d", "\xe8\xa7\x81", " ", TUI_SPARKLE
-    };
-    int word_count = 14;
-
-    if (out == 0) return;
-    if (!tui_is_interactive()) { tui_print_goodbye(out); return; }
-
-    tui_hide_cursor(out);
-    fputc('\n', out);
-
-    /* Animated divider sweep */
-    tui_print_margin(out, 46);
-    for (i = 0; i < 42; i++) {
-        fputs(GRADIENT_COLORS[i % GRADIENT_COUNT], out);
-        fputs(TUI_H, out);
-        fputs(TUI_RESET, out);
-        fflush(out);
-        tui_sleep_ms(15);
-    }
-    fputc('\n', out);
-    fflush(out);
-    tui_sleep_ms(200);
-
-    /* Words appear one by one with color cycling */
-    tui_print_margin(out, 46);
-    for (frame = 0; frame < word_count; frame++) {
-        fputs(GRADIENT_COLORS[frame % GRADIENT_COUNT], out);
-        fputs(TUI_BOLD, out);
-        fputs(words[frame], out);
-        fputs(TUI_RESET, out);
-        fflush(out);
-        tui_sleep_ms(120);
-    }
-    fputc('\n', out);
-    fflush(out);
-    tui_sleep_ms(200);
-
-    /* Bottom divider - reverse sweep */
-    tui_print_margin(out, 46);
-    for (i = 41; i >= 0; i--) {
-        fputs(GRADIENT_COLORS[i % GRADIENT_COUNT], out);
-        fputs(TUI_H, out);
-        fputs(TUI_RESET, out);
-        fflush(out);
-        tui_sleep_ms(12);
-    }
-    fputc('\n', out);
-    fputc('\n', out);
-    fflush(out);
-
-    tui_show_cursor(out);
+    tui_print_goodbye(out);
 }
 
 /* ── Screen Transition ────────────────────────────────────────── */
