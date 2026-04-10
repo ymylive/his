@@ -324,6 +324,19 @@ int InputHelper_read_line(FILE *input, char *buffer, size_t capacity) {
             raw_settings.c_cc[VTIME] = 0;
             tcsetattr(input_fd, TCSANOW, &raw_settings);
 
+            /* 排空 stdio 缓冲区中的残留字节（tcflush 只清内核缓冲区）
+             * 防止前一次 InputHelper_read_key 留下的 Enter 等字符
+             * 被本次读取立即消费导致闪屏 */
+            {
+                struct termios drain = raw_settings;
+                drain.c_cc[VMIN] = 0;
+                drain.c_cc[VTIME] = 0;
+                tcsetattr(input_fd, TCSANOW, &drain);
+                while (fgetc(input) != EOF) { /* drain stdio buffer */ }
+                clearerr(input);
+                tcsetattr(input_fd, TCSANOW, &raw_settings);
+            }
+
             length = 0;
             buffer[0] = '\0';
 

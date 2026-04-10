@@ -4383,6 +4383,7 @@ Result MenuApplication_execute_action(
             return MenuAction_handle_doctor(application, action, input, output);
 
         case MENU_ACTION_PATIENT_BASIC_INFO:
+        case MENU_ACTION_PATIENT_SELF_REGISTER:
         case MENU_ACTION_PATIENT_QUERY_REGISTRATION:
         case MENU_ACTION_PATIENT_QUERY_VISITS:
         case MENU_ACTION_PATIENT_QUERY_EXAMS:

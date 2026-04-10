@@ -156,12 +156,13 @@ static const MenuOption MENU_DOCTOR_OPTIONS[] = {
 /** @brief 患者菜单选项 */
 static const MenuOption MENU_PATIENT_OPTIONS[] = {
     {1, MENU_ACTION_PATIENT_BASIC_INFO, "基本信息", TUI_HEART},
-    {2, MENU_ACTION_PATIENT_QUERY_REGISTRATION, "挂号查询", TUI_LOZENGE},
-    {3, MENU_ACTION_PATIENT_QUERY_VISITS, "个人看诊历史", TUI_HEAVY_CROSS},
-    {4, MENU_ACTION_PATIENT_QUERY_EXAMS, "个人检查历史", TUI_STAR},
-    {5, MENU_ACTION_PATIENT_QUERY_ADMISSIONS, "个人住院历史", TUI_CIRCLE},
-    {6, MENU_ACTION_PATIENT_QUERY_DISPENSE, "个人发药历史", TUI_FLASK},
-    {7, MENU_ACTION_PATIENT_QUERY_MEDICINE_USAGE, "药品使用方法", TUI_DIAMOND},
+    {2, MENU_ACTION_PATIENT_SELF_REGISTER, "自助挂号", TUI_HEAVY_CROSS},
+    {3, MENU_ACTION_PATIENT_QUERY_REGISTRATION, "挂号查询", TUI_LOZENGE},
+    {4, MENU_ACTION_PATIENT_QUERY_VISITS, "个人看诊历史", TUI_HEAVY_CROSS},
+    {5, MENU_ACTION_PATIENT_QUERY_EXAMS, "个人检查历史", TUI_STAR},
+    {6, MENU_ACTION_PATIENT_QUERY_ADMISSIONS, "个人住院历史", TUI_CIRCLE},
+    {7, MENU_ACTION_PATIENT_QUERY_DISPENSE, "个人发药历史", TUI_FLASK},
+    {8, MENU_ACTION_PATIENT_QUERY_MEDICINE_USAGE, "药品使用方法", TUI_DIAMOND},
     {0, MENU_ACTION_BACK, "返回上级菜单", TUI_ARROW_R}
 };
 
@@ -536,6 +537,8 @@ const char *MenuController_action_label(MenuAction action) {
             return "检查记录/检查结果";
         case MENU_ACTION_PATIENT_BASIC_INFO:
             return "基本信息";
+        case MENU_ACTION_PATIENT_SELF_REGISTER:
+            return "自助挂号";
         case MENU_ACTION_PATIENT_QUERY_REGISTRATION:
             return "挂号查询";
         case MENU_ACTION_PATIENT_QUERY_VISITS:

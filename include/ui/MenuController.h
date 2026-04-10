@@ -61,6 +61,7 @@ typedef enum MenuAction {
 
     /* 患者操作 (4xx) */
     MENU_ACTION_PATIENT_BASIC_INFO = 401,          /**< 基本信息 */
+    MENU_ACTION_PATIENT_SELF_REGISTER = 408,       /**< 自助挂号 */
     MENU_ACTION_PATIENT_QUERY_REGISTRATION = 402,  /**< 挂号查询 */
     MENU_ACTION_PATIENT_QUERY_VISITS = 403,        /**< 个人看诊历史 */
     MENU_ACTION_PATIENT_QUERY_EXAMS = 404,         /**< 个人检查历史 */

@@ -21,6 +21,7 @@
 #include "domain/Doctor.h"
 #include "domain/Department.h"
 #include "domain/Medicine.h"
+#include "domain/Registration.h"
 
 /* ─── Shared types used by all domain handlers ─────────────────────── */
 
