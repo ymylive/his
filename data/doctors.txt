@@ -1,0 +1,11 @@
+doctor_id|name|title|department_id|schedule|status
+DOC0001|AliceLin|Attending|DEP0001|Mon-Fri AM|1
+DOC0002|BrianZhou|Associate|DEP0002|Mon-Fri PM|1
+DOC0003|CathyHe|Attending|DEP0003|Tue-Sat AM|1
+DOC0004|DavidLiu|Chief|DEP0004|Mon-Sun|1
+DOC0005|EvaSun|Attending|DEP0002|Mon-Wed|1
+DOC0006|FrankGuo|Attending|DEP0003|Thu-Sun|1
+DOC0007|GraceQiao|Resident|DEP0001|Mon-Fri|1
+DOC0008|HenryXu|Chief|DEP0005|Mon-Thu AM|1
+DOC0009|IrisTang|Associate|DEP0006|Tue-Fri PM|1
+DOC0010|JasonMo|Attending|DEP0004|Wed-Sun PM|1

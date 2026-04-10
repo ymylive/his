@@ -1,0 +1,18 @@
+visit_id|registration_id|patient_id|doctor_id|department_id|chief_complaint|diagnosis|advice|need_exam|need_admission|need_medicine|visit_time
+VIS0001|REG0001|PAT0001|DOC0001|DEP0001|fever and cough|upper respiratory infection|drink water and rest|1|0|1|2026-03-26 09:00
+VIS0002|REG0004|PAT0004|DOC0004|DEP0004|shortness of breath|lung infection|admit for observation|1|1|1|2026-03-26 10:45
+VIS0003|REG0005|PAT0005|DOC0001|DEP0001|headache|migraine|oral medication and follow-up|0|0|1|2026-03-26 11:20
+VIS0004|REG0007|PAT0007|DOC0006|DEP0003|fever|viral infection|lab check and home rest|1|0|0|2026-03-26 15:30
+VIS0005|REG0008|PAT0008|DOC0004|DEP0004|post surgery cough|post-op pulmonary care|admit then discharge after recovery|0|1|1|2026-03-27 09:20
+VIS0006|REG0009|PAT0009|DOC0007|DEP0001|thyroid discomfort|thyroiditis follow-up|medication and review in one week|1|0|1|2026-03-27 09:50
+VIS0007|REG0011|PAT0012|DOC0002|DEP0002|right upper abdominal pain|gallbladder stones|schedule surgery review|1|0|1|2026-03-27 11:05
+VIS0008|REG0012|PAT0013|DOC0010|DEP0004|wheezing and chest tightness|asthma flare|do respiratory test and inhalation therapy|1|0|1|2026-03-27 11:40
+VIS0009|REG0013|PAT0014|DOC0009|DEP0006|knee instability|acl injury|admit for orthopedic observation|0|1|1|2026-03-27 13:30
+VIS0010|REG0014|PAT0015|DOC0003|DEP0003|fever and sore throat|pediatric viral fever|home rest and hydration|1|0|0|2026-03-27 13:55
+VIS0011|REG0015|PAT0016|DOC0008|DEP0005|chest pain after exercise|stable angina|complete ecg and continue medicine|1|0|1|2026-03-28 09:10
+VIS0012|REG0017|PAT0018|DOC0009|DEP0006|shoulder pain|rotator cuff strain|physical therapy and analgesic|0|0|1|2026-03-28 10:05
+VIS0013|REG0018|PAT0019|DOC0004|DEP0004|night cough|copd exacerbation|admit for oxygen observation|1|1|1|2026-03-28 10:45
+VIS0014|REG0020|PAT0024|DOC0009|DEP0006|lumbar pain|lumbar muscle strain|pain control and medicine review|0|0|1|2026-03-28 14:45
+VIS0015|REG0023|PAT0027|DOC0008|DEP0005|chest tightness and dizziness|hypertensive heart disease|admit for cardiac monitoring|1|1|1|2026-03-29 09:50
+VIS0016|REG0027|PAT0001|DOC0008|DEP0005|occasional palpitation|sinus tachycardia|ecg monitoring and follow-up|1|0|1|2026-03-29 14:30
+VIS0017|REG0044|PAT0001|DOC0001|DEP0001||11|1111|1|1|1|11

@@ -1,0 +1,52 @@
+name: Portable Release
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  build-portable:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup MSYS2
+        uses: msys2/setup-msys2@v2
+        with:
+          msystem: MINGW32
+          update: true
+          install: >-
+            mingw-w64-i686-gcc
+            mingw-w64-i686-cmake
+            mingw-w64-i686-ninja
+            git
+
+      - name: Sync glyph seed if needed
+        shell: powershell
+        run: |
+          python .\scripts\sync-desktop-glyph-seed.py --write
+        continue-on-error: true
+
+      - name: Build and package portable
+        shell: powershell
+        run: |
+          powershell -ExecutionPolicy Bypass -File .\scripts\package-release.ps1 -Version ${{ github.ref_name }} -SkipSmoke
+
+      - name: Upload portable artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: lightweight-his-portable
+          path: dist/*.zip
+
+      - name: Publish GitHub release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/*.zip

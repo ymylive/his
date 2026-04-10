@@ -1,0 +1,8 @@
+build/
+build-release/
+build-win64/
+dist/
+Testing/
+third_party/raylib/
+.worktrees/
+.superpowers/

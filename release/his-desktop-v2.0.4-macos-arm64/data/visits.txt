@@ -1,0 +1,6 @@
+visit_id|registration_id|patient_id|doctor_id|department_id|chief_complaint|diagnosis|advice|need_exam|need_admission|need_medicine|visit_time
+VIS0001|REG0001|PAT0001|DOC0001|DEP0001|fever and cough|upper respiratory infection|drink water and rest|1|0|1|2026-03-26 09:00
+VIS0002|REG0004|PAT0004|DOC0004|DEP0004|shortness of breath|lung infection|admit for observation|1|1|1|2026-03-26 10:45
+VIS0003|REG0005|PAT0005|DOC0001|DEP0001|headache|migraine|oral medication and follow-up|0|0|1|2026-03-26 11:20
+VIS0004|REG0007|PAT0007|DOC0006|DEP0003|fever|viral infection|lab check and home rest|1|0|0|2026-03-26 15:30
+VIS0005|REG0008|PAT0008|DOC0004|DEP0004|post surgery cough|post-op pulmonary care|admit then discharge after recovery|0|1|1|2026-03-27 09:20

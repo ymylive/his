@@ -1,0 +1,991 @@
+/**
+ * @file InpatientService.c
+ * @brief 住院服务模块实现
+ *
+ * 实现住院管理的核心业务功能，包括患者入院、出院、转床以及住院记录查询。
+ * 该服务需要协调患者、病房、床位和住院记录四个仓库，
+ * 通过全量加载-修改-保存的事务性方式确保多实体状态的一致性。
+ */
+
+#include "service/InpatientService.h"
+
+#include <ctype.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+
+#include "common/IdGenerator.h"
+#include "common/StringUtils.h"
+#include "repository/RepositoryUtils.h"
+
+/** @brief 住院记录ID的前缀 */
+#define INPATIENT_SERVICE_ID_PREFIX "ADM"
+
+/** @brief 住院记录ID序号部分的位宽 */
+#define INPATIENT_SERVICE_ID_WIDTH 4
+
+
+/**
+ * @brief 校验必填文本字段
+ *
+ * 检查文本是否为空白以及是否包含保留字符。
+ *
+ * @param text        待校验的文本
+ * @param field_name  字段名称（用于错误消息）
+ * @return Result     校验结果
+ */
+static Result InpatientService_validate_required_text(const char *text, const char *field_name) {
+    char message[RESULT_MESSAGE_CAPACITY];
+
+    if (StringUtils_is_blank(text)) {
+        snprintf(message, sizeof(message), "%s missing", field_name);
+        return Result_make_failure(message);
+    }
+
+    if (!RepositoryUtils_is_safe_field_text(text)) {
+        snprintf(message, sizeof(message), "%s contains reserved characters", field_name);
+        return Result_make_failure(message);
+    }
+
+    return Result_make_success("inpatient text valid");
+}
+
+/**
+ * @brief 从患者仓库加载所有患者数据
+ *
+ * @param service       指向住院服务结构体
+ * @param out_patients  输出参数，患者链表
+ * @return Result       操作结果
+ */
+static Result InpatientService_load_patients(
+    InpatientService *service,
+    LinkedList *out_patients
+) {
+    return PatientRepository_load_all(&service->patient_repository, out_patients);
+}
+
+/**
+ * @brief 从病房仓库加载所有病房数据
+ *
+ * @param service    指向住院服务结构体
+ * @param out_wards  输出参数，病房链表
+ * @return Result    操作结果
+ */
+static Result InpatientService_load_wards(InpatientService *service, LinkedList *out_wards) {
+    return WardRepository_load_all(&service->ward_repository, out_wards);
+}
+
+/**
+ * @brief 从床位仓库加载所有床位数据
+ *
+ * @param service   指向住院服务结构体
+ * @param out_beds  输出参数，床位链表
+ * @return Result   操作结果
+ */
+static Result InpatientService_load_beds(InpatientService *service, LinkedList *out_beds) {
+    return BedRepository_load_all(&service->bed_repository, out_beds);
+}
+
+/**
+ * @brief 从住院记录仓库加载所有住院记录
+ *
+ * @param service         指向住院服务结构体
+ * @param out_admissions  输出参数，住院记录链表
+ * @return Result         操作结果
+ */
+static Result InpatientService_load_admissions(
+    InpatientService *service,
+    LinkedList *out_admissions
+) {
+    return AdmissionRepository_load_all(&service->admission_repository, out_admissions);
+}
+
+/**
+ * @brief 在患者链表中按ID查找患者
+ *
+ * @param patients    患者链表
+ * @param patient_id  待查找的患者ID
+ * @return Patient*   找到时返回指针，未找到返回 NULL
+ */
+static Patient *InpatientService_find_patient(LinkedList *patients, const char *patient_id) {
+    LinkedListNode *current = 0;
+
+    if (patients == 0 || patient_id == 0) {
+        return 0;
+    }
+
+    current = patients->head;
+    while (current != 0) {
+        Patient *patient = (Patient *)current->data;
+
+        if (strcmp(patient->patient_id, patient_id) == 0) {
+            return patient;
+        }
+
+        current = current->next;
+    }
+
+    return 0;
+}
+
+/**
+ * @brief 在病房链表中按ID查找病房
+ *
+ * @param wards    病房链表
+ * @param ward_id  待查找的病房ID
+ * @return Ward*   找到时返回指针，未找到返回 NULL
+ */
+static Ward *InpatientService_find_ward(LinkedList *wards, const char *ward_id) {
+    LinkedListNode *current = 0;
+
+    if (wards == 0 || ward_id == 0) {
+        return 0;
+    }
+
+    current = wards->head;
+    while (current != 0) {
+        Ward *ward = (Ward *)current->data;
+
+        if (strcmp(ward->ward_id, ward_id) == 0) {
+            return ward;
+        }
+
+        current = current->next;
+    }
+
+    return 0;
+}
+
+/**
+ * @brief 在床位链表中按ID查找床位
+ *
+ * @param beds    床位链表
+ * @param bed_id  待查找的床位ID
+ * @return Bed*   找到时返回指针，未找到返回 NULL
+ */
+static Bed *InpatientService_find_bed(LinkedList *beds, const char *bed_id) {
+    LinkedListNode *current = 0;
+
+    if (beds == 0 || bed_id == 0) {
+        return 0;
+    }
+
+    current = beds->head;
+    while (current != 0) {
+        Bed *bed = (Bed *)current->data;
+
+        if (strcmp(bed->bed_id, bed_id) == 0) {
+            return bed;
+        }
+
+        current = current->next;
+    }
+
+    return 0;
+}
+
+/**
+ * @brief 在住院记录链表中按ID查找住院记录
+ *
+ * @param admissions    住院记录链表
+ * @param admission_id  待查找的住院记录ID
+ * @return Admission*   找到时返回指针，未找到返回 NULL
+ */
+static Admission *InpatientService_find_admission(
+    LinkedList *admissions,
+    const char *admission_id
+) {
+    LinkedListNode *current = 0;
+
+    if (admissions == 0 || admission_id == 0) {
+        return 0;
+    }
+
+    current = admissions->head;
+    while (current != 0) {
+        Admission *admission = (Admission *)current->data;
+
+        if (strcmp(admission->admission_id, admission_id) == 0) {
+            return admission;
+        }
+
+        current = current->next;
+    }
+
+    return 0;
+}
+
+/**
+ * @brief 检查指定患者是否有活跃的住院记录
+ *
+ * @param admissions  住院记录链表
+ * @param patient_id  患者ID
+ * @return int        1=有活跃记录，0=无
+ */
+static int InpatientService_has_active_admission_for_patient(
+    const LinkedList *admissions,
+    const char *patient_id
+) {
+    const LinkedListNode *current = 0;
+
+    if (admissions == 0 || patient_id == 0) {
+        return 0;
+    }
+
+    current = admissions->head;
+    while (current != 0) {
+        const Admission *admission = (const Admission *)current->data;
+
+        if (admission->status == ADMISSION_STATUS_ACTIVE &&
+            strcmp(admission->patient_id, patient_id) == 0) {
+            return 1;
+        }
+
+        current = current->next;
+    }
+
+    return 0;
+}
+
+/**
+ * @brief 检查指定床位是否有活跃的住院记录
+ *
+ * @param admissions  住院记录链表
+ * @param bed_id      床位ID
+ * @return int        1=有活跃记录，0=无
+ */
+static int InpatientService_has_active_admission_for_bed(
+    const LinkedList *admissions,
+    const char *bed_id
+) {
+    const LinkedListNode *current = 0;
+
+    if (admissions == 0 || bed_id == 0) {
+        return 0;
+    }
+
+    current = admissions->head;
+    while (current != 0) {
+        const Admission *admission = (const Admission *)current->data;
+
+        if (admission->status == ADMISSION_STATUS_ACTIVE &&
+            strcmp(admission->bed_id, bed_id) == 0) {
+            return 1;
+        }
+
+        current = current->next;
+    }
+
+    return 0;
+}
+
+/**
+ * @brief 从已加载的住院记录列表中计算下一个序列号
+ *
+ * @param admissions    已加载的住院记录链表
+ * @param out_sequence  输出参数，下一个可用序列号
+ * @return Result       操作结果
+ */
+static Result InpatientService_next_admission_sequence_from_list(
+    const LinkedList *admissions,
+    int *out_sequence
+) {
+    LinkedListNode *current = 0;
+    int max_sequence = 0;
+
+    if (out_sequence == 0) {
+        return Result_make_failure("admission sequence output missing");
+    }
+
+    /* 遍历所有住院记录，提取ID中的序列号并找到最大值 */
+    current = admissions->head;
+    while (current != 0) {
+        const Admission *admission = (const Admission *)current->data;
+        const char *suffix = admission->admission_id + strlen(INPATIENT_SERVICE_ID_PREFIX);
+        char *end_pointer = 0;
+        long value = 0;
+
+        /* 验证ID前缀格式 */
+        if (strncmp(
+                admission->admission_id,
+                INPATIENT_SERVICE_ID_PREFIX,
+                strlen(INPATIENT_SERVICE_ID_PREFIX)
+            ) != 0) {
+            return Result_make_failure("admission id format invalid");
+        }
+
+        /* 解析序列号 */
+        value = strtol(suffix, &end_pointer, 10);
+        if (end_pointer == suffix || end_pointer == 0 || *end_pointer != '\0' || value < 0) {
+            return Result_make_failure("admission id format invalid");
+        }
+
+        if ((int)value > max_sequence) {
+            max_sequence = (int)value;
+        }
+
+        current = current->next;
+    }
+
+    *out_sequence = max_sequence + 1;
+    return Result_make_success("admission sequence ready");
+}
+
+/**
+ * @brief 从存储中计算下一个住院记录序列号
+ *
+ * @param service       指向住院服务结构体
+ * @param out_sequence  输出参数，下一个可用序列号
+ * @return Result       操作结果
+ */
+static Result InpatientService_next_admission_sequence(
+    InpatientService *service,
+    int *out_sequence
+) {
+    LinkedList admissions;
+    LinkedListNode *current = 0;
+    int max_sequence = 0;
+    Result result;
+
+    if (out_sequence == 0) {
+        return Result_make_failure("admission sequence output missing");
+    }
+
+    result = InpatientService_load_admissions(service, &admissions);
+    if (result.success == 0) {
+        return result;
+    }
+
+    /* 遍历所有住院记录提取最大序列号 */
+    current = admissions.head;
+    while (current != 0) {
+        const Admission *admission = (const Admission *)current->data;
+        const char *suffix = admission->admission_id + strlen(INPATIENT_SERVICE_ID_PREFIX);
+        char *end_pointer = 0;
+        long value = 0;
+
+        if (strncmp(
+                admission->admission_id,
+                INPATIENT_SERVICE_ID_PREFIX,
+                strlen(INPATIENT_SERVICE_ID_PREFIX)
+            ) != 0) {
+            AdmissionRepository_clear_loaded_list(&admissions);
+            return Result_make_failure("admission id format invalid");
+        }
+
+        value = strtol(suffix, &end_pointer, 10);
+        if (end_pointer == suffix || end_pointer == 0 || *end_pointer != '\0' || value < 0) {
+            AdmissionRepository_clear_loaded_list(&admissions);
+            return Result_make_failure("admission id format invalid");
+        }
+
+        if ((int)value > max_sequence) {
+            max_sequence = (int)value;
+        }
+
+        current = current->next;
+    }
+
+    AdmissionRepository_clear_loaded_list(&admissions);
+    *out_sequence = max_sequence + 1;
+    return Result_make_success("admission sequence ready");
+}
+
+/**
+ * @brief 保存所有仓库数据（患者、病房、床位、住院记录）
+ *
+ * 依次保存四个仓库的全量数据，任一保存失败则返回错误。
+ *
+ * @param service     指向住院服务结构体
+ * @param patients    患者链表
+ * @param wards       病房链表
+ * @param beds        床位链表
+ * @param admissions  住院记录链表
+ * @return Result     操作结果
+ */
+static Result InpatientService_save_all(
+    InpatientService *service,
+    LinkedList *patients,
+    LinkedList *wards,
+    LinkedList *beds,
+    LinkedList *admissions
+) {
+    Result result;
+
+    result = PatientRepository_save_all(&service->patient_repository, patients);
+    if (result.success == 0) {
+        return result;
+    }
+
+    result = WardRepository_save_all(&service->ward_repository, wards);
+    if (result.success == 0) {
+        return result;
+    }
+
+    result = BedRepository_save_all(&service->bed_repository, beds);
+    if (result.success == 0) {
+        return result;
+    }
+
+    return AdmissionRepository_save_all(&service->admission_repository, admissions);
+}
+
+/**
+ * @brief 释放所有已加载的链表数据
+ *
+ * @param patients    患者链表
+ * @param wards       病房链表
+ * @param beds        床位链表
+ * @param admissions  住院记录链表
+ */
+static void InpatientService_clear_all(
+    LinkedList *patients,
+    LinkedList *wards,
+    LinkedList *beds,
+    LinkedList *admissions
+) {
+    PatientRepository_clear_loaded_list(patients);
+    WardRepository_clear_loaded_list(wards);
+    BedRepository_clear_loaded_list(beds);
+    AdmissionRepository_clear_loaded_list(admissions);
+}
+
+/**
+ * @brief 初始化住院服务
+ *
+ * 分别初始化患者、病房、床位和住院记录仓库。
+ *
+ * @param service         指向待初始化的住院服务结构体
+ * @param patient_path    患者数据文件路径
+ * @param ward_path       病房数据文件路径
+ * @param bed_path        床位数据文件路径
+ * @param admission_path  住院记录数据文件路径
+ * @return Result         操作结果
+ */
+Result InpatientService_init(
+    InpatientService *service,
+    const char *patient_path,
+    const char *ward_path,
+    const char *bed_path,
+    const char *admission_path
+) {
+    Result result;
+
+    if (service == 0) {
+        return Result_make_failure("inpatient service missing");
+    }
+
+    result = PatientRepository_init(&service->patient_repository, patient_path);
+    if (result.success == 0) {
+        return result;
+    }
+
+    result = WardRepository_init(&service->ward_repository, ward_path);
+    if (result.success == 0) {
+        return result;
+    }
+
+    result = BedRepository_init(&service->bed_repository, bed_path);
+    if (result.success == 0) {
+        return result;
+    }
+
+    return AdmissionRepository_init(&service->admission_repository, admission_path);
+}
+
+/**
+ * @brief 患者入院
+ *
+ * 流程：校验所有必填参数 -> 加载四个仓库的全量数据 ->
+ * 验证患者、病房、床位的存在性和状态 -> 检查患者未住院、病房有容量、床位可分配 ->
+ * 生成住院ID -> 创建住院记录 -> 更新患者住院状态、病房占用数、床位状态 ->
+ * 保存全量数据。
+ *
+ * @param service        指向住院服务结构体
+ * @param patient_id     患者ID
+ * @param ward_id        病房ID
+ * @param bed_id         床位ID
+ * @param admitted_at    入院时间字符串
+ * @param summary        入院摘要
+ * @param out_admission  输出参数，入院成功时存放住院记录
+ * @return Result        操作结果
+ */
+Result InpatientService_admit_patient(
+    InpatientService *service,
+    const char *patient_id,
+    const char *ward_id,
+    const char *bed_id,
+    const char *admitted_at,
+    const char *summary,
+    Admission *out_admission
+) {
+    LinkedList patients;
+    LinkedList wards;
+    LinkedList beds;
+    LinkedList admissions;
+    Patient *patient = 0;
+    Ward *ward = 0;
+    Bed *bed = 0;
+    Admission *admission = 0;
+    int next_sequence = 0;
+    Result result = InpatientService_validate_required_text(patient_id, "patient id");
+
+    if (result.success == 0) {
+        return result;
+    }
+
+    result = InpatientService_validate_required_text(ward_id, "ward id");
+    if (result.success == 0) {
+        return result;
+    }
+
+    result = InpatientService_validate_required_text(bed_id, "bed id");
+    if (result.success == 0) {
+        return result;
+    }
+
+    result = InpatientService_validate_required_text(admitted_at, "admitted at");
+    if (result.success == 0) {
+        return result;
+    }
+
+    result = InpatientService_validate_required_text(summary, "admission summary");
+    if (result.success == 0) {
+        return result;
+    }
+
+    if (service == 0 || out_admission == 0) {
+        return Result_make_failure("inpatient service arguments missing");
+    }
+
+    /* 依次加载四个仓库的全量数据 */
+    result = InpatientService_load_patients(service, &patients);
+    if (result.success == 0) {
+        return result;
+    }
+
+    result = InpatientService_load_wards(service, &wards);
+    if (result.success == 0) {
+        PatientRepository_clear_loaded_list(&patients);
+        return result;
+    }
+
+    result = InpatientService_load_beds(service, &beds);
+    if (result.success == 0) {
+        PatientRepository_clear_loaded_list(&patients);
+        WardRepository_clear_loaded_list(&wards);
+        return result;
+    }
+
+    result = InpatientService_load_admissions(service, &admissions);
+    if (result.success == 0) {
+        PatientRepository_clear_loaded_list(&patients);
+        WardRepository_clear_loaded_list(&wards);
+        BedRepository_clear_loaded_list(&beds);
+        return result;
+    }
+
+    /* 查找并验证患者、病房、床位是否存在 */
+    patient = InpatientService_find_patient(&patients, patient_id);
+    ward = InpatientService_find_ward(&wards, ward_id);
+    bed = InpatientService_find_bed(&beds, bed_id);
+    if (patient == 0 || ward == 0 || bed == 0) {
+        InpatientService_clear_all(&patients, &wards, &beds, &admissions);
+        return Result_make_failure("inpatient related entity not found");
+    }
+
+    /* 检查患者是否已经住院 */
+    if (patient->is_inpatient != 0 || InpatientService_has_active_admission_for_patient(&admissions, patient_id)) {
+        InpatientService_clear_all(&patients, &wards, &beds, &admissions);
+        return Result_make_failure("patient already admitted");
+    }
+
+    /* 检查病房是否有容量（状态活跃且有空余床位） */
+    if (ward->status != WARD_STATUS_ACTIVE || !Ward_has_capacity(ward)) {
+        InpatientService_clear_all(&patients, &wards, &beds, &admissions);
+        return Result_make_failure("ward has no capacity");
+    }
+
+    /* 检查床位是否可分配（属于目标病房、状态可用、无活跃住院记录） */
+    if (strcmp(bed->ward_id, ward_id) != 0 || !Bed_is_assignable(bed) ||
+        InpatientService_has_active_admission_for_bed(&admissions, bed_id)) {
+        InpatientService_clear_all(&patients, &wards, &beds, &admissions);
+        return Result_make_failure("bed not assignable");
+    }
+
+    /* 生成住院记录序列号 */
+    result = InpatientService_next_admission_sequence_from_list(&admissions, &next_sequence);
+    if (result.success == 0) {
+        InpatientService_clear_all(&patients, &wards, &beds, &admissions);
+        return result;
+    }
+
+    /* 分配并初始化住院记录 */
+    admission = (Admission *)malloc(sizeof(*admission));
+    if (admission == 0) {
+        InpatientService_clear_all(&patients, &wards, &beds, &admissions);
+        return Result_make_failure("failed to allocate admission");
+    }
+
+    memset(admission, 0, sizeof(*admission));
+    /* 生成格式化的住院ID（如 ADM0001） */
+    if (!IdGenerator_format(
+            admission->admission_id,
+            sizeof(admission->admission_id),
+            INPATIENT_SERVICE_ID_PREFIX,
+            next_sequence,
+            INPATIENT_SERVICE_ID_WIDTH
+        )) {
+        free(admission);
+        InpatientService_clear_all(&patients, &wards, &beds, &admissions);
+        return Result_make_failure("failed to generate admission id");
+    }
+
+    /* 填充住院记录各字段 */
+    strncpy(admission->patient_id, patient_id, sizeof(admission->patient_id) - 1);
+    strncpy(admission->ward_id, ward_id, sizeof(admission->ward_id) - 1);
+    strncpy(admission->bed_id, bed_id, sizeof(admission->bed_id) - 1);
+    strncpy(admission->admitted_at, admitted_at, sizeof(admission->admitted_at) - 1);
+    strncpy(admission->summary, summary, sizeof(admission->summary) - 1);
+    admission->status = ADMISSION_STATUS_ACTIVE;
+
+    /* 同步更新关联实体状态：患者标记为住院、病房占用+1、床位标记为已占用 */
+    patient->is_inpatient = 1;
+    if (!Ward_occupy_bed(ward) || !Bed_assign(bed, admission->admission_id, admitted_at)) {
+        free(admission);
+        InpatientService_clear_all(&patients, &wards, &beds, &admissions);
+        return Result_make_failure("failed to assign inpatient resources");
+    }
+
+    /* 将新住院记录追加到链表 */
+    if (!LinkedList_append(&admissions, admission)) {
+        free(admission);
+        InpatientService_clear_all(&patients, &wards, &beds, &admissions);
+        return Result_make_failure("failed to append admission");
+    }
+
+    /* 保存所有仓库的全量数据 */
+    result = InpatientService_save_all(service, &patients, &wards, &beds, &admissions);
+    if (result.success == 0) {
+        InpatientService_clear_all(&patients, &wards, &beds, &admissions);
+        return result;
+    }
+
+    *out_admission = *admission;
+    InpatientService_clear_all(&patients, &wards, &beds, &admissions);
+    return Result_make_success("patient admitted");
+}
+
+/**
+ * @brief 患者出院
+ *
+ * 流程：校验参数 -> 加载四个仓库数据 -> 查找活跃住院记录 ->
+ * 查找关联的患者、病房、床位 -> 验证状态一致性 ->
+ * 更新患者住院标志、住院记录状态、释放床位和病房资源 -> 保存全量数据。
+ *
+ * @param service        指向住院服务结构体
+ * @param admission_id   住院记录ID
+ * @param discharged_at  出院时间字符串
+ * @param summary        出院摘要
+ * @param out_admission  输出参数，出院成功时存放更新后的住院记录
+ * @return Result        操作结果
+ */
+Result InpatientService_discharge_patient(
+    InpatientService *service,
+    const char *admission_id,
+    const char *discharged_at,
+    const char *summary,
+    Admission *out_admission
+) {
+    LinkedList patients;
+    LinkedList wards;
+    LinkedList beds;
+    LinkedList admissions;
+    Admission *admission = 0;
+    Patient *patient = 0;
+    Ward *ward = 0;
+    Bed *bed = 0;
+    Result result = InpatientService_validate_required_text(admission_id, "admission id");
+
+    if (result.success == 0) {
+        return result;
+    }
+
+    result = InpatientService_validate_required_text(discharged_at, "discharged at");
+    if (result.success == 0) {
+        return result;
+    }
+
+    result = InpatientService_validate_required_text(summary, "discharge summary");
+    if (result.success == 0) {
+        return result;
+    }
+
+    if (service == 0 || out_admission == 0) {
+        return Result_make_failure("inpatient service arguments missing");
+    }
+
+    /* 加载四个仓库的全量数据 */
+    result = InpatientService_load_patients(service, &patients);
+    if (result.success == 0) {
+        return result;
+    }
+
+    result = InpatientService_load_wards(service, &wards);
+    if (result.success == 0) {
+        PatientRepository_clear_loaded_list(&patients);
+        return result;
+    }
+
+    result = InpatientService_load_beds(service, &beds);
+    if (result.success == 0) {
+        PatientRepository_clear_loaded_list(&patients);
+        WardRepository_clear_loaded_list(&wards);
+        return result;
+    }
+
+    result = InpatientService_load_admissions(service, &admissions);
+    if (result.success == 0) {
+        PatientRepository_clear_loaded_list(&patients);
+        WardRepository_clear_loaded_list(&wards);
+        BedRepository_clear_loaded_list(&beds);
+        return result;
+    }
+
+    /* 查找活跃的住院记录 */
+    admission = InpatientService_find_admission(&admissions, admission_id);
+    if (admission == 0 || admission->status != ADMISSION_STATUS_ACTIVE) {
+        InpatientService_clear_all(&patients, &wards, &beds, &admissions);
+        return Result_make_failure("active admission not found");
+    }
+
+    /* 查找关联的患者、病房、床位 */
+    patient = InpatientService_find_patient(&patients, admission->patient_id);
+    ward = InpatientService_find_ward(&wards, admission->ward_id);
+    bed = InpatientService_find_bed(&beds, admission->bed_id);
+    if (patient == 0 || ward == 0 || bed == 0) {
+        InpatientService_clear_all(&patients, &wards, &beds, &admissions);
+        return Result_make_failure("inpatient related entity not found");
+    }
+
+    /* 验证状态一致性：患者应为住院状态、床位应为已占用状态 */
+    if (patient->is_inpatient == 0 || bed->status != BED_STATUS_OCCUPIED) {
+        InpatientService_clear_all(&patients, &wards, &beds, &admissions);
+        return Result_make_failure("inpatient state invalid");
+    }
+
+    /* 执行出院操作：更新患者住院标志、住院记录状态、释放床位和病房 */
+    patient->is_inpatient = 0;
+    strncpy(admission->summary, summary, sizeof(admission->summary) - 1);
+    admission->summary[sizeof(admission->summary) - 1] = '\0';
+    if (!Admission_discharge(admission, discharged_at) ||
+        !Bed_release(bed, discharged_at) ||
+        !Ward_release_bed(ward)) {
+        InpatientService_clear_all(&patients, &wards, &beds, &admissions);
+        return Result_make_failure("failed to discharge patient");
+    }
+
+    /* 保存全量数据 */
+    result = InpatientService_save_all(service, &patients, &wards, &beds, &admissions);
+    if (result.success == 0) {
+        InpatientService_clear_all(&patients, &wards, &beds, &admissions);
+        return result;
+    }
+
+    *out_admission = *admission;
+    InpatientService_clear_all(&patients, &wards, &beds, &admissions);
+    return Result_make_success("patient discharged");
+}
+
+/**
+ * @brief 转床
+ *
+ * 流程：校验参数 -> 加载四个仓库数据 -> 查找住院记录和目标床位 ->
+ * 验证当前状态（住院记录活跃、目标床位可分配、非同一床位） ->
+ * 释放当前床位 -> 分配目标床位 -> 若跨病房则同步更新病房占用数 ->
+ * 更新住院记录中的病房和床位ID -> 保存全量数据。
+ *
+ * @param service          指向住院服务结构体
+ * @param admission_id     住院记录ID
+ * @param target_bed_id    目标床位ID
+ * @param transferred_at   转床时间字符串
+ * @param out_admission    输出参数，转床成功时存放更新后的住院记录
+ * @return Result          操作结果
+ */
+Result InpatientService_transfer_bed(
+    InpatientService *service,
+    const char *admission_id,
+    const char *target_bed_id,
+    const char *transferred_at,
+    Admission *out_admission
+) {
+    LinkedList patients;
+    LinkedList wards;
+    LinkedList beds;
+    LinkedList admissions;
+    Admission *admission = 0;
+    Bed *current_bed = 0;
+    Bed *target_bed = 0;
+    Ward *current_ward = 0;
+    Ward *target_ward = 0;
+    Result result = InpatientService_validate_required_text(admission_id, "admission id");
+
+    if (result.success == 0) {
+        return result;
+    }
+
+    result = InpatientService_validate_required_text(target_bed_id, "target bed id");
+    if (result.success == 0) {
+        return result;
+    }
+
+    result = InpatientService_validate_required_text(transferred_at, "transferred at");
+    if (result.success == 0) {
+        return result;
+    }
+
+    if (service == 0 || out_admission == 0) {
+        return Result_make_failure("inpatient service arguments missing");
+    }
+
+    /* 加载四个仓库的全量数据 */
+    result = InpatientService_load_patients(service, &patients);
+    if (result.success == 0) {
+        return result;
+    }
+
+    result = InpatientService_load_wards(service, &wards);
+    if (result.success == 0) {
+        PatientRepository_clear_loaded_list(&patients);
+        return result;
+    }
+
+    result = InpatientService_load_beds(service, &beds);
+    if (result.success == 0) {
+        PatientRepository_clear_loaded_list(&patients);
+        WardRepository_clear_loaded_list(&wards);
+        return result;
+    }
+
+    result = InpatientService_load_admissions(service, &admissions);
+    if (result.success == 0) {
+        PatientRepository_clear_loaded_list(&patients);
+        WardRepository_clear_loaded_list(&wards);
+        BedRepository_clear_loaded_list(&beds);
+        return result;
+    }
+
+    /* 查找住院记录和目标床位 */
+    admission = InpatientService_find_admission(&admissions, admission_id);
+    target_bed = InpatientService_find_bed(&beds, target_bed_id);
+    if (admission == 0 || admission->status != ADMISSION_STATUS_ACTIVE || target_bed == 0) {
+        InpatientService_clear_all(&patients, &wards, &beds, &admissions);
+        return Result_make_failure("transfer target not found");
+    }
+
+    /* 查找当前床位和相关病房 */
+    current_bed = InpatientService_find_bed(&beds, admission->bed_id);
+    current_ward = InpatientService_find_ward(&wards, admission->ward_id);
+    target_ward = InpatientService_find_ward(&wards, target_bed->ward_id);
+    if (current_bed == 0 || current_ward == 0 || target_ward == 0) {
+        InpatientService_clear_all(&patients, &wards, &beds, &admissions);
+        return Result_make_failure("transfer related entity not found");
+    }
+
+    /* 不能转到同一张床位 */
+    if (strcmp(current_bed->bed_id, target_bed->bed_id) == 0) {
+        InpatientService_clear_all(&patients, &wards, &beds, &admissions);
+        return Result_make_failure("target bed unchanged");
+    }
+
+    /* 检查目标床位是否可分配 */
+    if (current_bed->status != BED_STATUS_OCCUPIED || !Bed_is_assignable(target_bed) ||
+        InpatientService_has_active_admission_for_bed(&admissions, target_bed_id)) {
+        InpatientService_clear_all(&patients, &wards, &beds, &admissions);
+        return Result_make_failure("target bed not assignable");
+    }
+
+    /* 释放当前床位并分配目标床位 */
+    if (!Bed_release(current_bed, transferred_at) ||
+        !Bed_assign(target_bed, admission_id, transferred_at)) {
+        InpatientService_clear_all(&patients, &wards, &beds, &admissions);
+        return Result_make_failure("failed to transfer bed");
+    }
+
+    /* 跨病房转床时需同步更新病房占用数 */
+    if (strcmp(current_ward->ward_id, target_ward->ward_id) != 0) {
+        if (!Ward_release_bed(current_ward) || !Ward_occupy_bed(target_ward)) {
+            InpatientService_clear_all(&patients, &wards, &beds, &admissions);
+            return Result_make_failure("failed to transfer ward occupancy");
+        }
+
+        /* 更新住院记录中的病房ID */
+        strncpy(admission->ward_id, target_ward->ward_id, sizeof(admission->ward_id) - 1);
+        admission->ward_id[sizeof(admission->ward_id) - 1] = '\0';
+    }
+
+    /* 更新住院记录中的床位ID */
+    strncpy(admission->bed_id, target_bed_id, sizeof(admission->bed_id) - 1);
+    admission->bed_id[sizeof(admission->bed_id) - 1] = '\0';
+
+    /* 保存全量数据 */
+    result = InpatientService_save_all(service, &patients, &wards, &beds, &admissions);
+    if (result.success == 0) {
+        InpatientService_clear_all(&patients, &wards, &beds, &admissions);
+        return result;
+    }
+
+    *out_admission = *admission;
+    InpatientService_clear_all(&patients, &wards, &beds, &admissions);
+    return Result_make_success("bed transferred");
+}
+
+/**
+ * @brief 根据住院记录ID查找住院记录
+ *
+ * @param service        指向住院服务结构体
+ * @param admission_id   住院记录ID
+ * @param out_admission  输出参数，查找成功时存放住院记录
+ * @return Result        操作结果
+ */
+Result InpatientService_find_by_id(
+    InpatientService *service,
+    const char *admission_id,
+    Admission *out_admission
+) {
+    if (service == 0 || out_admission == 0) {
+        return Result_make_failure("inpatient service arguments missing");
+    }
+
+    /* 委托仓库层按ID查找 */
+    return AdmissionRepository_find_by_id(
+        &service->admission_repository,
+        admission_id,
+        out_admission
+    );
+}
+
+/**
+ * @brief 根据患者ID查找当前活跃的住院记录
+ *
+ * @param service        指向住院服务结构体
+ * @param patient_id     患者ID
+ * @param out_admission  输出参数，查找成功时存放住院记录
+ * @return Result        操作结果
+ */
+Result InpatientService_find_active_by_patient_id(
+    InpatientService *service,
+    const char *patient_id,
+    Admission *out_admission
+) {
+    if (service == 0 || out_admission == 0) {
+        return Result_make_failure("inpatient service arguments missing");
+    }
+
+    /* 委托仓库层按患者ID查找活跃住院记录 */
+    return AdmissionRepository_find_active_by_patient_id(
+        &service->admission_repository,
+        patient_id,
+        out_admission
+    );
+}

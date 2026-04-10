@@ -1,0 +1,15 @@
+build
+build-release
+dist
+.git
+.github
+.worktrees
+*.zip
+*.exe
+*.obj
+*.a
+*.dll
+*.pdb
+CMakeFiles
+CMakeCache.txt
+Testing

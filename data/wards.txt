@@ -1,0 +1,6 @@
+ward_id|name|department_id|location|capacity|occupied_beds|status
+WRD0001|RespWardA|DEP0004|Ward Tower 2F|4|2|0
+WRD0002|SurgeryWardA|DEP0002|Ward Tower 3F|4|0|0
+WRD0003|PediatricWardA|DEP0003|Ward Tower 4F|3|0|0
+WRD0004|CardioWardA|DEP0005|Ward Tower 5F|4|1|0
+WRD0005|OrthoWardA|DEP0006|Ward Tower 6F|4|1|0

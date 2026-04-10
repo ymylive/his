@@ -1,0 +1,31 @@
+patient_id|name|gender|age|contact|id_card|allergy|medical_history|is_inpatient|remarks
+PAT0001|LinYue|2|28|13800000001|110101199801010011|None|Healthy|0|patient account demo
+PAT0002|ChenBo|1|34|13800000002|110101199201010022|Penicillin|Gastritis history|0|pending registration sample
+PAT0003|WangXin|2|19|13800000003|110101200601010033|Seafood|Seasonal allergy|0|cancelled registration sample
+PAT0004|ZhouQing|1|47|13800000004|110101197901010044|None|Bronchitis follow-up|1|active inpatient respiratory
+PAT0005|LiNa|2|52|13800000005|110101197401010055|Sulfa|Hypertension|0|outpatient medication chain
+PAT0006|GuoLei|1|41|13800000006|110101198501010066|None|Migraine|0|doctor pending queue
+PAT0007|HeTing|2|8|13800000007|110101201701010077|Dust|Pediatric fever|0|examination complete sample
+PAT0008|SunYi|1|63|13800000008|110101196201010088|None|Post-op recovery|0|discharged admission history
+PAT0009|QiaoRan|2|31|13800000009|110101199301010099|None|Thyroid follow-up|0|registration and pharmacy sample
+PAT0010|DengKe|1|56|13800000010|110101196801010101|Aspirin|Diabetes|0|admin search sample
+PAT0011|FangWei|1|45|13800000011|110101198101010111|None|Cardiac discomfort|0|cardiology pending
+PAT0012|LuoJing|2|39|13800000012|110101198701010122|None|Gallbladder stones|0|surgery follow-up
+PAT0013|TianMiao|2|27|13800000013|110101199901010133|Cephalosporin|Asthma|0|respiratory with pending exam
+PAT0014|XuChen|1|33|13800000014|110101199301010144|None|ACL injury|1|orthopedics inpatient
+PAT0015|ShenYue|2|12|13800000015|110101201401010155|Peanut|Recurrent fever|0|pediatric completed exam
+PAT0016|MaHao|1|58|13800000016|110101196601010166|None|Coronary disease|0|cardiology discharged sample
+PAT0017|YuLan|2|25|13800000017|110101200101010177|None|Skin rash|0|general pending queue
+PAT0018|ZhaoMin|2|44|13800000018|110101198201010188|None|Shoulder pain|0|orthopedics outpatient
+PAT0019|PengChao|1|61|13800000019|110101196501010199|Iodine|COPD|1|respiratory inpatient
+PAT0020|CaoXin|2|36|13800000020|110101199001010200|None|Appendix surgery history|0|surgery ready for registration
+PAT0021|WeiJia|1|29|13800000021|110101199701010211|None|Healthy|0|new patient for clerk
+PAT0022|TangMu|2|49|13800000022|110101197701010222|None|Arrhythmia|0|cardiology review
+PAT0023|HanYu|1|17|13800000023|110101200901010233|Dust|Pediatric asthma|0|pediatrics pending
+PAT0024|SongQi|2|54|13800000024|110101197201010244|None|Lumbar pain|0|orthopedics low stock demo
+PAT0025|ZhangLi|2|35|13800000025|110101199101010255|None|Healthy|0|new patient for demo
+PAT0026|LiuWen|1|42|13800000026|110101198401010266|None|Chronic gastritis|0|surgery consultation
+PAT0027|HuangYi|2|66|13800000027|110101196001010277|None|Hypertension and diabetes|1|cardiology inpatient
+PAT0028|WuMing|1|22|13800000028|110101200401010288|None|Sports injury|0|orthopedics outpatient
+PAT0029|XiaoHong|2|5|13800000029|110101202101010299|Milk|Pediatric bronchitis|0|pediatrics follow-up
+PAT0030|ZengFei|1|50|13800000030|110101197601010300|None|Chronic cough|0|respiratory outpatient

@@ -1,0 +1,13 @@
+medicine_id|name|price|stock|department_id|low_stock_threshold
+MED0001|Ibuprofen|18.50|24|DEP0001|6
+MED0002|Azithromycin|26.80|3|DEP0004|5
+MED0003|Cefuroxime|32.00|18|DEP0002|5
+MED0004|Oseltamivir|29.00|7|DEP0003|4
+MED0005|Salbutamol|22.50|2|DEP0004|4
+MED0006|VitaminC|9.90|30|DEP0001|8
+MED0007|Metoprolol|35.00|9|DEP0005|4
+MED0008|Diclofenac|16.50|5|DEP0006|5
+MED0009|Amoxicillin|21.00|14|DEP0002|6
+MED0010|Montelukast|28.00|4|DEP0004|4
+MED0011|Amlodipine|15.80|20|DEP0005|5
+MED0012|Omeprazole|12.50|16|DEP0001|5

@@ -1,0 +1,8 @@
+admission_id|patient_id|ward_id|bed_id|admitted_at|status|discharged_at|summary
+ADM0001|PAT0004|WRD0001|BED0001|2026-03-26 12:20|0||respiratory observation
+ADM0002|PAT0008|WRD0002|BED0005|2026-03-27 10:10|1|2026-03-27 15:00|post-op recovery complete
+ADM0003|PAT0016|WRD0004|BED0013|2026-03-27 14:20|1|2026-03-28 11:30|pain controlled and discharge arranged
+ADM0004|PAT0014|WRD0005|BED0016|2026-03-27 16:10|0||orthopedic stabilization and bed rest
+ADM0005|PAT0008|WRD0002|BED0006|2026-03-28 09:00|1|2026-03-28 12:00|second observation complete
+ADM0006|PAT0019|WRD0001|BED0002|2026-03-28 11:30|0||copd oxygen therapy observation
+ADM0007|PAT0027|WRD0004|BED0013|2026-03-29 10:40|0||cardiac monitoring and bp control
