@@ -174,6 +174,7 @@ static void test_domain_entities_exist(void) {
     Medicine medicine = {
         "MED0001",
         "Aspirin",
+        "Aspirin/阿司匹林",
         12.5,
         20,
         "DEP0001",

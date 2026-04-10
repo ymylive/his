@@ -36,7 +36,11 @@ Result MenuAction_handle_admin(MenuApplication *app, MenuAction action, FILE *in
         case MENU_ACTION_ADMIN_PATIENT_MANAGEMENT:
             result = MenuApplication_prompt_line(
                 &context,
-                TUI_BOLD_YELLOW "1" TUI_RESET ".添加  " TUI_BOLD_YELLOW "2" TUI_RESET ".修改  " TUI_BOLD_YELLOW "3" TUI_RESET ".删除  " TUI_BOLD_YELLOW "4" TUI_RESET ".查询\n请选择: ",
+                "\n  " TUI_BOLD_YELLOW "[1]" TUI_RESET " 添加患者\n"
+                "  " TUI_BOLD_YELLOW "[2]" TUI_RESET " 修改患者信息\n"
+                "  " TUI_BOLD_YELLOW "[3]" TUI_RESET " 删除患者\n"
+                "  " TUI_BOLD_YELLOW "[4]" TUI_RESET " 查询患者\n"
+                "\n请选择操作编号: ",
                 first_id,
                 sizeof(first_id)
             );
@@ -47,6 +51,21 @@ Result MenuAction_handle_admin(MenuApplication *app, MenuAction action, FILE *in
                 result = MenuApplication_prompt_patient_form(&context, &patient, 0);
                 if (result.success == 0) {
                     return result;
+                }
+                fprintf(output, "\n");
+                tui_print_section(output, TUI_HEART, "确认添加以下患者");
+                fprintf(output, "  姓名: %s\n", patient.name);
+                fprintf(output, "  性别: %s\n", patient.gender == 1 ? "男" : patient.gender == 2 ? "女" : "未知");
+                fprintf(output, "  年龄: %d\n", patient.age);
+                fprintf(output, "  联系方式: %s\n", patient.contact);
+                fprintf(output, "  身份证: %s\n", patient.id_card);
+                fprintf(output, "\n");
+                {
+                    char confirm[16] = {0};
+                    result = MenuApplication_prompt_line(&context, "确认添加? (Enter确认, ESC取消): ", confirm, sizeof(confirm));
+                    if (result.success == 0) {
+                        return result;
+                    }
                 }
                 result = MenuApplication_add_patient(
                     app,
@@ -75,6 +94,21 @@ Result MenuAction_handle_admin(MenuApplication *app, MenuAction action, FILE *in
                 );
                 if (result.success == 0) {
                     return result;
+                }
+                /* Add confirmation prompt */
+                {
+                    char confirm[16] = {0};
+                    fprintf(output, "\n");
+                    tui_print_warning(output, "此操作不可撤销！");
+                    result = MenuApplication_prompt_line(
+                        &context,
+                        "确认删除? (输入 yes 确认, 其他取消): ",
+                        confirm, sizeof(confirm)
+                    );
+                    if (result.success == 0 || strcmp(confirm, "yes") != 0) {
+                        tui_print_info(output, "已取消删除操作");
+                        return Result_make_success("delete cancelled");
+                    }
                 }
                 result = MenuApplication_delete_patient(
                     app,
@@ -108,7 +142,12 @@ Result MenuAction_handle_admin(MenuApplication *app, MenuAction action, FILE *in
         case MENU_ACTION_ADMIN_DOCTOR_DEPARTMENT:
             result = MenuApplication_prompt_line(
                 &context,
-                TUI_BOLD_YELLOW "1" TUI_RESET ".新增科室  " TUI_BOLD_YELLOW "2" TUI_RESET ".修改科室  " TUI_BOLD_YELLOW "3" TUI_RESET ".添加医生  " TUI_BOLD_YELLOW "4" TUI_RESET ".查询医生  " TUI_BOLD_YELLOW "5" TUI_RESET ".按科室查看医生\n请选择: ",
+                "\n  " TUI_BOLD_YELLOW "[1]" TUI_RESET " 新增科室\n"
+                "  " TUI_BOLD_YELLOW "[2]" TUI_RESET " 修改科室\n"
+                "  " TUI_BOLD_YELLOW "[3]" TUI_RESET " 添加医生\n"
+                "  " TUI_BOLD_YELLOW "[4]" TUI_RESET " 查询医生\n"
+                "  " TUI_BOLD_YELLOW "[5]" TUI_RESET " 按科室查看医生\n"
+                "\n请选择操作编号: ",
                 first_id,
                 sizeof(first_id)
             );
@@ -137,6 +176,21 @@ Result MenuAction_handle_admin(MenuApplication *app, MenuAction action, FILE *in
                 result = MenuApplication_prompt_doctor_form(&context, &doctor, 0);
                 if (result.success == 0) {
                     return result;
+                }
+                fprintf(output, "\n");
+                tui_print_section(output, TUI_MEDICAL, "确认添加以下医生");
+                fprintf(output, "  姓名: %s\n", doctor.name);
+                fprintf(output, "  职称: %s\n", doctor.title);
+                fprintf(output, "  科室ID: %s\n", doctor.department_id);
+                fprintf(output, "  排班: %s\n", doctor.schedule);
+                fprintf(output, "  状态: %s\n", doctor.status == DOCTOR_STATUS_ACTIVE ? "在岗" : "停诊");
+                fprintf(output, "\n");
+                {
+                    char confirm[16] = {0};
+                    result = MenuApplication_prompt_line(&context, "确认添加? (Enter确认, ESC取消): ", confirm, sizeof(confirm));
+                    if (result.success == 0) {
+                        return result;
+                    }
                 }
                 result = MenuApplication_add_doctor(
                     app,
@@ -228,7 +282,9 @@ Result MenuAction_handle_admin(MenuApplication *app, MenuAction action, FILE *in
         case MENU_ACTION_ADMIN_MEDICINE_OVERVIEW:
             result = MenuApplication_prompt_line(
                 &context,
-                TUI_BOLD_YELLOW "1" TUI_RESET ".药品详情  " TUI_BOLD_YELLOW "2" TUI_RESET ".低库存提醒\n请选择: ",
+                "\n  " TUI_BOLD_YELLOW "[1]" TUI_RESET " 药品详情\n"
+                "  " TUI_BOLD_YELLOW "[2]" TUI_RESET " 低库存提醒\n"
+                "\n请选择操作编号: ",
                 first_id,
                 sizeof(first_id)
             );

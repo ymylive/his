@@ -39,6 +39,21 @@ Result MenuAction_handle_pharmacy(MenuApplication *app, MenuAction action, FILE 
             if (result.success == 0) {
                 return result;
             }
+            fprintf(output, "\n");
+            tui_print_section(output, TUI_FLASK, "确认添加以下药品");
+            fprintf(output, "  名称: %s\n", medicine.name);
+            fprintf(output, "  别名: %s\n", medicine.alias);
+            fprintf(output, "  单价: %.2f\n", medicine.price);
+            fprintf(output, "  库存: %d\n", medicine.stock);
+            fprintf(output, "  低库存阈值: %d\n", medicine.low_stock_threshold);
+            fprintf(output, "\n");
+            {
+                char confirm[16] = {0};
+                result = MenuApplication_prompt_line(&context, "确认添加? (Enter确认, ESC取消): ", confirm, sizeof(confirm));
+                if (result.success == 0) {
+                    return result;
+                }
+            }
             result = MenuApplication_add_medicine(
                 app,
                 &medicine,

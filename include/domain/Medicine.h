@@ -20,6 +20,7 @@
 typedef struct Medicine {
     char medicine_id[HIS_DOMAIN_ID_CAPACITY];      /* 药品唯一标识ID */
     char name[HIS_DOMAIN_NAME_CAPACITY];            /* 药品名称 */
+    char alias[HIS_DOMAIN_NAME_CAPACITY];           /**< 药品别名/通用名 */
     double price;                                    /* 药品单价（元） */
     int stock;                                       /* 当前库存数量 */
     char department_id[HIS_DOMAIN_ID_CAPACITY];    /* 所属科室/药房ID */

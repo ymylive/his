@@ -203,6 +203,7 @@ static void test_department_and_medicine_repository_smoke(void) {
     Medicine medicine = {
         "MED2001",
         "Amoxicillin",
+        "阿莫西林/Amoxicillin",
         18.50,
         24,
         "DEP3001",

@@ -166,6 +166,7 @@ static void test_dispense_updates_inventory_and_writes_record(void) {
         &(Medicine){
             "MED2001",
             "Ibuprofen",
+            "",
             18.00,
             20,
             "DEP02",
@@ -249,6 +250,7 @@ static void test_low_stock_alerts_and_insufficient_stock_rejected(void) {
         &(Medicine){
             "MED3001",
             "VitaminC",
+            "",
             6.80,
             4,
             "DEP03",
@@ -263,6 +265,7 @@ static void test_low_stock_alerts_and_insufficient_stock_rejected(void) {
         &(Medicine){
             "MED3002",
             "Paracetamol",
+            "",
             9.90,
             12,
             "DEP03",
@@ -368,6 +371,7 @@ static void test_query_dispense_history_by_patient_id(void) {
         &(Medicine){
             "MED9001",
             "HistoryMed",
+            "",
             10.00,
             10,
             "DEP09",

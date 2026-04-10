@@ -1635,23 +1635,36 @@ Result MenuApplication_query_medicine_stock(
     char *buffer,
     size_t capacity
 ) {
-    int stock = 0;
-    Result result = PharmacyService_get_stock(
-        &application->pharmacy_service,
+    Medicine medicine;
+    Result result = MedicineRepository_find_by_medicine_id(
+        &application->pharmacy_service.medicine_repository,
         medicine_id,
-        &stock
+        &medicine
     );
 
     if (result.success == 0) {
         return MenuApplication_write_failure(result.message, buffer, capacity);
     }
 
+    if (medicine.alias[0] != '\0') {
+        return MenuApplication_write_text(
+            buffer,
+            capacity,
+            "药品库存: %s | %s (别名: %s) | %d",
+            medicine.medicine_id,
+            medicine.name,
+            medicine.alias,
+            medicine.stock
+        );
+    }
+
     return MenuApplication_write_text(
         buffer,
         capacity,
-        "药品库存: %s | %d",
-        medicine_id,
-        stock
+        "药品库存: %s | %s | %d",
+        medicine.medicine_id,
+        medicine.name,
+        medicine.stock
     );
 }
 
@@ -1688,16 +1701,30 @@ Result MenuApplication_find_low_stock_medicines(
     while (current != 0) {
         const Medicine *medicine = (const Medicine *)current->data;
 
-        result = MenuApplication_append_text(
-            buffer,
-            capacity,
-            &used,
-            "\n%s | %s | 库存=%d | 阈值=%d",
-            medicine->medicine_id,
-            medicine->name,
-            medicine->stock,
-            medicine->low_stock_threshold
-        );
+        if (medicine->alias[0] != '\0') {
+            result = MenuApplication_append_text(
+                buffer,
+                capacity,
+                &used,
+                "\n%s | %s (别名: %s) | 库存=%d | 阈值=%d",
+                medicine->medicine_id,
+                medicine->name,
+                medicine->alias,
+                medicine->stock,
+                medicine->low_stock_threshold
+            );
+        } else {
+            result = MenuApplication_append_text(
+                buffer,
+                capacity,
+                &used,
+                "\n%s | %s | 库存=%d | 阈值=%d",
+                medicine->medicine_id,
+                medicine->name,
+                medicine->stock,
+                medicine->low_stock_threshold
+            );
+        }
         if (result.success == 0) {
             PharmacyService_clear_medicine_results(&medicines);
             return result;
@@ -3106,15 +3133,28 @@ Result MenuApplication_prompt_select_medicine(
         }
 
         MenuApplication_copy_text(options[option_count].id, sizeof(options[option_count].id), medicine->medicine_id);
-        snprintf(
-            options[option_count].label,
-            sizeof(options[option_count].label),
-            "%s | %s | 库存=%d | 阈值=%d",
-            medicine->medicine_id,
-            medicine->name,
-            medicine->stock,
-            medicine->low_stock_threshold
-        );
+        if (medicine->alias[0] != '\0') {
+            snprintf(
+                options[option_count].label,
+                sizeof(options[option_count].label),
+                "%s | %s (别名: %s) | 库存=%d | 阈值=%d",
+                medicine->medicine_id,
+                medicine->name,
+                medicine->alias,
+                medicine->stock,
+                medicine->low_stock_threshold
+            );
+        } else {
+            snprintf(
+                options[option_count].label,
+                sizeof(options[option_count].label),
+                "%s | %s | 库存=%d | 阈值=%d",
+                medicine->medicine_id,
+                medicine->name,
+                medicine->stock,
+                medicine->low_stock_threshold
+            );
+        }
         option_count++;
         current = current->next;
     }
@@ -3259,6 +3299,15 @@ Result MenuApplication_prompt_medicine_form(
         "药品名称: ",
         out_medicine->name,
         sizeof(out_medicine->name)
+    );
+    if (result.success == 0) {
+        return result;
+    }
+    result = MenuApplication_prompt_line(
+        context,
+        "药品别名/通用名(可留空): ",
+        out_medicine->alias,
+        sizeof(out_medicine->alias)
     );
     if (result.success == 0) {
         return result;
@@ -3735,6 +3784,18 @@ Result MenuApplication_query_medicine_detail(
     }
 
     if (include_instruction_note != 0) {
+        if (medicine.alias[0] != '\0') {
+            return MenuApplication_write_text(
+                buffer,
+                capacity,
+                "药品信息: %s | %s (别名: %s) | 单价=%.2f | 科室=%s | 当前系统未维护用法说明",
+                medicine.medicine_id,
+                medicine.name,
+                medicine.alias,
+                medicine.price,
+                medicine.department_id
+            );
+        }
         return MenuApplication_write_text(
             buffer,
             capacity,
@@ -3742,6 +3803,20 @@ Result MenuApplication_query_medicine_detail(
             medicine.medicine_id,
             medicine.name,
             medicine.price,
+            medicine.department_id
+        );
+    }
+
+    if (medicine.alias[0] != '\0') {
+        return MenuApplication_write_text(
+            buffer,
+            capacity,
+            "药品信息: %s | %s (别名: %s) | 单价=%.2f | 库存=%d | 科室=%s",
+            medicine.medicine_id,
+            medicine.name,
+            medicine.alias,
+            medicine.price,
+            medicine.stock,
             medicine.department_id
         );
     }
@@ -4124,15 +4199,28 @@ Result MenuApplication_browse_low_stock_table(
     while (current != 0 && option_count < MENU_APPLICATION_SELECT_OPTION_MAX) {
         const Medicine *m = (const Medicine *)current->data;
         MenuApplication_copy_text(options[option_count].id, sizeof(options[option_count].id), m->medicine_id);
-        snprintf(
-            options[option_count].label,
-            sizeof(options[option_count].label),
-            "%s | %s | \xe5\xba\x93\xe5\xad\x98=%d | \xe9\x98\x88\xe5\x80\xbc=%d",
-            m->medicine_id,
-            m->name,
-            m->stock,
-            m->low_stock_threshold
-        );
+        if (m->alias[0] != '\0') {
+            snprintf(
+                options[option_count].label,
+                sizeof(options[option_count].label),
+                "%s | %s (\xe5\x88\xab\xe5\x90\x8d: %s) | \xe5\xba\x93\xe5\xad\x98=%d | \xe9\x98\x88\xe5\x80\xbc=%d",
+                m->medicine_id,
+                m->name,
+                m->alias,
+                m->stock,
+                m->low_stock_threshold
+            );
+        } else {
+            snprintf(
+                options[option_count].label,
+                sizeof(options[option_count].label),
+                "%s | %s | \xe5\xba\x93\xe5\xad\x98=%d | \xe9\x98\x88\xe5\x80\xbc=%d",
+                m->medicine_id,
+                m->name,
+                m->stock,
+                m->low_stock_threshold
+            );
+        }
         option_count++;
         current = current->next;
     }

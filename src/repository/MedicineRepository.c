@@ -16,12 +16,15 @@
 
 #include "repository/RepositoryUtils.h"
 
-/** 药品记录的字段数量 */
-#define MEDICINE_REPOSITORY_FIELD_COUNT 6
+/** 药品记录的字段数量（含别名） */
+#define MEDICINE_REPOSITORY_FIELD_COUNT 7
+
+/** 旧版药品记录的字段数量（不含别名，用于向后兼容） */
+#define MEDICINE_REPOSITORY_LEGACY_FIELD_COUNT 6
 
 /** 药品数据文件的表头行 */
 static const char *MEDICINE_REPOSITORY_HEADER =
-    "medicine_id|name|price|stock|department_id|low_stock_threshold";
+    "medicine_id|name|alias|price|stock|department_id|low_stock_threshold";
 
 /** 加载所有药品时使用的上下文结构体 */
 typedef struct MedicineRepositoryLoadContext {
@@ -65,6 +68,7 @@ static Result MedicineRepository_validate(const Medicine *medicine) {
 
     if (!RepositoryUtils_is_safe_field_text(medicine->medicine_id) ||
         !RepositoryUtils_is_safe_field_text(medicine->name) ||
+        !RepositoryUtils_is_safe_field_text(medicine->alias) ||
         !RepositoryUtils_is_safe_field_text(medicine->department_id)) {
         return Result_make_failure("medicine field contains reserved character");
     }
@@ -108,8 +112,8 @@ static Result MedicineRepository_format_line(
     if (result.success == 0) return result;
     if (line == 0 || line_capacity == 0) return Result_make_failure("medicine line buffer missing");
 
-    written = snprintf(line, line_capacity, "%s|%s|%.2f|%d|%s|%d",
-        medicine->medicine_id, medicine->name, medicine->price,
+    written = snprintf(line, line_capacity, "%s|%s|%s|%.2f|%d|%s|%d",
+        medicine->medicine_id, medicine->name, medicine->alias, medicine->price,
         medicine->stock, medicine->department_id, medicine->low_stock_threshold);
     if (written < 0 || (size_t)written >= line_capacity) {
         return Result_make_failure("medicine line too long");
@@ -117,11 +121,12 @@ static Result MedicineRepository_format_line(
     return Result_make_success("medicine formatted");
 }
 
-/** 将一行文本解析为药品结构体 */
+/** 将一行文本解析为药品结构体（兼容新旧两种格式） */
 static Result MedicineRepository_parse_line(const char *line, Medicine *medicine) {
     char mutable_line[TEXT_FILE_REPOSITORY_LINE_CAPACITY];
     char *fields[MEDICINE_REPOSITORY_FIELD_COUNT];
     size_t field_count = 0;
+    int price_idx, stock_idx, dept_idx, threshold_idx;
     Result result;
 
     if (line == 0 || medicine == 0) return Result_make_failure("medicine line missing");
@@ -130,25 +135,44 @@ static Result MedicineRepository_parse_line(const char *line, Medicine *medicine
     result = RepositoryUtils_split_pipe_line(mutable_line, fields, MEDICINE_REPOSITORY_FIELD_COUNT, &field_count);
     if (result.success == 0) return result;
 
-    result = RepositoryUtils_validate_field_count(field_count, MEDICINE_REPOSITORY_FIELD_COUNT);
-    if (result.success == 0) return result;
+    /* 支持新格式(7字段,含alias)和旧格式(6字段,无alias) */
+    if (field_count != MEDICINE_REPOSITORY_FIELD_COUNT &&
+        field_count != MEDICINE_REPOSITORY_LEGACY_FIELD_COUNT) {
+        return Result_make_failure("medicine field count mismatch");
+    }
 
     memset(medicine, 0, sizeof(*medicine));
     MedicineRepository_copy_string(medicine->medicine_id, sizeof(medicine->medicine_id), fields[0]);
     MedicineRepository_copy_string(medicine->name, sizeof(medicine->name), fields[1]);
 
+    if (field_count == MEDICINE_REPOSITORY_FIELD_COUNT) {
+        /* 新格式: medicine_id|name|alias|price|stock|department_id|low_stock_threshold */
+        MedicineRepository_copy_string(medicine->alias, sizeof(medicine->alias), fields[2]);
+        price_idx = 3;
+        stock_idx = 4;
+        dept_idx = 5;
+        threshold_idx = 6;
+    } else {
+        /* 旧格式: medicine_id|name|price|stock|department_id|low_stock_threshold */
+        medicine->alias[0] = '\0';
+        price_idx = 2;
+        stock_idx = 3;
+        dept_idx = 4;
+        threshold_idx = 5;
+    }
+
     /* 解析价格（浮点数） */
-    result = MedicineRepository_parse_double(fields[2], &medicine->price);
+    result = MedicineRepository_parse_double(fields[price_idx], &medicine->price);
     if (result.success == 0) return result;
 
     /* 解析库存（整数） */
-    result = MedicineRepository_parse_int(fields[3], &medicine->stock);
+    result = MedicineRepository_parse_int(fields[stock_idx], &medicine->stock);
     if (result.success == 0) return result;
 
-    MedicineRepository_copy_string(medicine->department_id, sizeof(medicine->department_id), fields[4]);
+    MedicineRepository_copy_string(medicine->department_id, sizeof(medicine->department_id), fields[dept_idx]);
 
     /* 解析低库存阈值 */
-    result = MedicineRepository_parse_int(fields[5], &medicine->low_stock_threshold);
+    result = MedicineRepository_parse_int(fields[threshold_idx], &medicine->low_stock_threshold);
     if (result.success == 0) return result;
 
     return MedicineRepository_validate(medicine);

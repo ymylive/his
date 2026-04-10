@@ -192,7 +192,9 @@ Result MenuAction_handle_doctor(MenuApplication *app, MenuAction action, FILE *i
         case MENU_ACTION_DOCTOR_EXAM_RECORD:
             result = MenuApplication_prompt_line(
                 &context,
-                TUI_BOLD_YELLOW "1" TUI_RESET ". 新增检查  " TUI_BOLD_YELLOW "2" TUI_RESET ". 回写结果\n请选择: ",
+                "\n  " TUI_BOLD_YELLOW "[1]" TUI_RESET " 新增检查\n"
+                "  " TUI_BOLD_YELLOW "[2]" TUI_RESET " 回写结果\n"
+                "\n请选择操作编号: ",
                 first_id,
                 sizeof(first_id)
             );

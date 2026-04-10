@@ -681,6 +681,7 @@ static void test_pharmacy_flow_add_restock_dispense_and_low_stock(void) {
         &(Medicine){
             "MED4001",
             "Ibuprofen",
+            "",
             18.00,
             6,
             "DEP0001",
@@ -1117,6 +1118,7 @@ static void test_patient_session_authorizes_only_bound_patient_routes(void) {
         &(Medicine){
             "MED7001",
             "SessionMed",
+            "",
             12.00,
             20,
             "DEP0001",
@@ -1263,6 +1265,7 @@ static void test_execute_action_patient_query_dispense_lists_records(void) {
         &(Medicine){
             "MED8001",
             "PatientDispenseMed",
+            "",
             8.00,
             10,
             "DEP0001",
@@ -1537,7 +1540,8 @@ static void test_execute_action_admin_patient_management_deletes_patient(void) {
         &application,
         MENU_ACTION_ADMIN_PATIENT_MANAGEMENT,
         "3\n"
-        "PAT9101\n",
+        "PAT9101\n"
+        "yes\n",
         output,
         sizeof(output)
     );
@@ -1577,7 +1581,8 @@ static void test_execute_action_admin_doctor_department_adds_and_lists_doctor(vo
         "Attending\n"
         "DEP0001\n"
         "Tue PM\n"
-        "1\n",
+        "1\n"
+        "\n",
         output,
         sizeof(output)
     );
@@ -1700,6 +1705,7 @@ static void test_execute_action_admin_medicine_overview_lists_low_stock(void) {
         &(Medicine){
             "MED9101",
             "AdminLowStock",
+            "",
             6.50,
             1,
             "DEP0001",
@@ -1735,6 +1741,7 @@ static void test_execute_action_patient_query_medicine_usage_reports_missing_ins
         &(Medicine){
             "MED9102",
             "UsageInfoMed",
+            "",
             9.90,
             8,
             "DEP0001",
