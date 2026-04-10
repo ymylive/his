@@ -13,7 +13,11 @@
 #include <stdio.h>
 
 /** 当前软件版本号 */
-#define HIS_VERSION "5.1.1"
+<<<<<<< HEAD
+#define HIS_VERSION "5.1.2"
+=======
+#define HIS_VERSION "5.1.2"
+>>>>>>> 9477d5c (chore: bump version to v5.1.2)
 
 /**
  * @brief 更新信息结构体
