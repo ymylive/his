@@ -29,3 +29,73 @@ PAT0027|HuangYi|2|66|13800000027|110101196001010277|None|Hypertension and diabet
 PAT0028|WuMing|1|22|13800000028|110101200401010288|None|Sports injury|0|orthopedics outpatient
 PAT0029|XiaoHong|2|5|13800000029|110101202101010299|Milk|Pediatric bronchitis|0|pediatrics follow-up
 PAT0030|ZengFei|1|50|13800000030|110101197601010300|None|Chronic cough|0|respiratory outpatient
+PAT0031|JiangHai|1|38|13800000031|110101198801010311|None|Healthy|0|general outpatient
+PAT0032|YanLi|2|45|13800000032|110101198101010322|None|Migraine|0|general outpatient
+PAT0033|DuWei|1|55|13800000033|110101197101010333|None|Hypertension|1|cardiology inpatient
+PAT0034|LuMei|2|30|13800000034|110101199601010344|Penicillin|Healthy|0|general outpatient
+PAT0035|ShiJun|1|62|13800000035|110101196401010355|None|Diabetes and hypertension|0|general outpatient
+PAT0036|HuangLan|2|24|13800000036|110101200201010366|None|Healthy|0|general outpatient
+PAT0037|ChenYang|1|48|13800000037|110101197801010377|None|Gastric ulcer|0|surgery consultation
+PAT0038|ZhaoHui|2|33|13800000038|110101199301010388|Seafood|Eczema|0|general outpatient
+PAT0039|WangJian|1|71|13800000039|110101195501010399|None|Coronary disease|1|cardiology inpatient
+PAT0040|LiQiang|1|40|13800000040|110101198601010400|None|Lumbar disc herniation|0|orthopedics outpatient
+PAT0041|ZhouYan|2|26|13800000041|110101200001010411|None|Healthy|0|general outpatient
+PAT0042|SunPeng|1|53|13800000042|110101197301010422|Aspirin|Chronic bronchitis|0|respiratory outpatient
+PAT0043|QianXue|2|18|13800000043|110101200801010433|None|Healthy|0|general outpatient
+PAT0044|WuHong|2|60|13800000044|110101196601010444|None|Rheumatoid arthritis|0|orthopedics outpatient
+PAT0045|ZhengTao|1|35|13800000045|110101199101010455|None|Healthy|0|general outpatient
+PAT0046|FengYa|2|42|13800000046|110101198401010466|None|Thyroid nodule|0|general outpatient
+PAT0047|LuoCheng|1|57|13800000047|110101196901010477|None|Type 2 diabetes|0|general outpatient
+PAT0048|HeJing|2|29|13800000048|110101199701010488|Dust|Allergic rhinitis|0|general outpatient
+PAT0049|GaoFei|1|44|13800000049|110101198201010499|None|Fatty liver|0|general outpatient
+PAT0050|LinZhi|2|37|13800000050|110101198901010500|None|Healthy|0|general outpatient
+PAT0051|XuHao|1|65|13800000051|110101196101010511|None|COPD|1|respiratory inpatient
+PAT0052|YangMei|2|23|13800000052|110101200301010522|None|Healthy|0|general outpatient
+PAT0053|TangWei|1|50|13800000053|110101197601010533|None|Gout|0|general outpatient
+PAT0054|DongXia|2|46|13800000054|110101198001010544|Sulfa|Chronic gastritis|0|surgery outpatient
+PAT0055|RenQiang|1|32|13800000055|110101199401010555|None|Healthy|0|general outpatient
+PAT0056|PanLi|2|58|13800000056|110101196801010566|None|Osteoporosis|0|orthopedics outpatient
+PAT0057|ShenMing|1|41|13800000057|110101198501010577|None|Healthy|0|general outpatient
+PAT0058|HuFang|2|36|13800000058|110101199001010588|None|Iron deficiency anemia|0|general outpatient
+PAT0059|JiangYu|1|73|13800000059|110101195301010599|None|Cerebral infarction history|1|cardiology inpatient
+PAT0060|CaiWen|2|20|13800000060|110101200601010600|Peanut|Healthy|0|general outpatient
+PAT0061|XieJun|1|46|13800000061|110101198001010611|None|Kidney stones|0|surgery outpatient
+PAT0062|YuHua|2|55|13800000062|110101197101010622|None|Hypertension|0|general outpatient
+PAT0063|DaiLei|1|28|13800000063|110101199801010633|None|Healthy|0|general outpatient
+PAT0064|FanQing|2|43|13800000064|110101198301010644|None|Cervical spondylosis|0|orthopedics outpatient
+PAT0065|WeiGuo|1|67|13800000065|110101195901010655|None|Prostate hyperplasia|0|surgery outpatient
+PAT0066|LiangYi|2|31|13800000066|110101199501010666|None|Healthy|0|general outpatient
+PAT0067|ZouHan|1|52|13800000067|110101197401010677|Iodine|Hepatitis B carrier|0|general outpatient
+PAT0068|XiongLi|2|39|13800000068|110101198701010688|None|Uterine fibroids|0|surgery outpatient
+PAT0069|QinFeng|1|25|13800000069|110101200101010699|None|Healthy|0|general outpatient
+PAT0070|ShaoMei|2|64|13800000070|110101196201010700|None|Cataract|0|general outpatient
+PAT0071|MaoJian|1|48|13800000071|110101197801010711|None|Chronic pharyngitis|0|respiratory outpatient
+PAT0072|GuYun|2|34|13800000072|110101199201010722|Cephalosporin|Healthy|0|general outpatient
+PAT0073|KongWei|1|59|13800000073|110101196701010733|None|Atrial fibrillation|1|cardiology inpatient
+PAT0074|BaiXue|2|22|13800000074|110101200401010744|None|Healthy|0|general outpatient
+PAT0075|CaoMing|1|70|13800000075|110101195601010755|None|Stroke history|0|general outpatient
+PAT0076|DingLan|2|47|13800000076|110101197901010766|None|Gallstones|0|surgery outpatient
+PAT0077|LuFei|1|36|13800000077|110101199001010777|None|Healthy|0|general outpatient
+PAT0078|JinYa|2|51|13800000078|110101197501010788|None|Menopausal syndrome|0|general outpatient
+PAT0079|TaoCheng|1|43|13800000079|110101198301010799|None|Peptic ulcer|0|general outpatient
+PAT0080|LianHui|2|27|13800000080|110101199901010800|None|Healthy|0|general outpatient
+PAT0081|HouJun|1|61|13800000081|110101196501010811|None|Emphysema|1|respiratory inpatient
+PAT0082|YeQing|2|40|13800000082|110101198601010822|None|Chronic urticaria|0|general outpatient
+PAT0083|WanLi|1|33|13800000083|110101199301010833|None|Healthy|0|general outpatient
+PAT0084|ChengXia|2|56|13800000084|110101197001010844|None|Diabetic nephropathy|0|general outpatient
+PAT0085|ZhuHao|1|24|13800000085|110101200201010855|None|Healthy|0|general outpatient
+PAT0086|XiaoYan|2|68|13800000086|110101195801010866|None|Osteoarthritis|0|orthopedics outpatient
+PAT0087|TianLong|1|45|13800000087|110101198101010877|None|Healthy|0|general outpatient
+PAT0088|MiaoLi|2|32|13800000088|110101199401010888|Dust|Asthma|0|respiratory outpatient
+PAT0089|RaoWei|1|54|13800000089|110101197201010899|None|Chronic kidney disease|0|general outpatient
+PAT0090|NiuFang|2|21|13800000090|110101200501010900|None|Healthy|0|general outpatient
+PAT0091|LaiJun|1|63|13800000091|110101196301010911|None|Parkinson disease|0|general outpatient
+PAT0092|AnXue|2|38|13800000092|110101198801010922|None|Healthy|0|general outpatient
+PAT0093|ShangHao|1|49|13800000093|110101197701010933|None|Chronic hepatitis|0|general outpatient
+PAT0094|WenYi|2|26|13800000094|110101200001010944|None|Healthy|0|general outpatient
+PAT0095|BiCheng|1|72|13800000095|110101195401010955|None|Heart failure|1|cardiology inpatient
+PAT0096|FuMei|2|44|13800000096|110101198201010966|None|Breast nodule|0|surgery outpatient
+PAT0097|KangLei|1|30|13800000097|110101199601010977|None|Healthy|0|general outpatient
+PAT0098|MuLan|2|53|13800000098|110101197301010988|None|Hyperthyroidism|0|general outpatient
+PAT0099|QiuWei|1|37|13800000099|110101198901010999|None|Healthy|0|general outpatient
+PAT0100|LongYan|2|60|13800000100|110101196601011000|None|Rheumatic heart disease|1|cardiology inpatient

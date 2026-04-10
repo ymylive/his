@@ -175,6 +175,7 @@ static void test_domain_entities_exist(void) {
         "MED0001",
         "Aspirin",
         "Aspirin/阿司匹林",
+        "解热镇痛",
         12.5,
         20,
         "DEP0001",

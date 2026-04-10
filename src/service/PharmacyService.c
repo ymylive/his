@@ -107,6 +107,11 @@ static Result PharmacyService_validate_medicine(const Medicine *medicine) {
         return result;
     }
 
+    result = PharmacyService_validate_optional_text(medicine->category, "medicine category");
+    if (result.success == 0) {
+        return result;
+    }
+
     result = PharmacyService_validate_optional_text(medicine->department_id, "department id");
     if (result.success == 0) {
         return result;

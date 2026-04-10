@@ -140,6 +140,9 @@ static const MenuOption MENU_ADMIN_OPTIONS[] = {
     {3, MENU_ACTION_ADMIN_MEDICAL_RECORDS, "医疗记录管理/按时间范围查询", TUI_LOZENGE},
     {4, MENU_ACTION_ADMIN_WARD_BED_OVERVIEW, "病房与床位管理/查看床位状态", TUI_CIRCLE},
     {5, MENU_ACTION_ADMIN_MEDICINE_OVERVIEW, "药房与药品管理/库存不足提醒", TUI_FLASK},
+    {6, MENU_ACTION_ADMIN_STATS_REVENUE, "科室收入统计", TUI_STAR},
+    {7, MENU_ACTION_ADMIN_STATS_WORKLOAD, "医生工作量统计", TUI_LOZENGE},
+    {8, MENU_ACTION_ADMIN_STATS_BED_UTIL, "床位利用率统计", TUI_CIRCLE},
     {0, MENU_ACTION_BACK, "返回上级菜单", TUI_ARROW_R}
 };
 
@@ -163,6 +166,7 @@ static const MenuOption MENU_PATIENT_OPTIONS[] = {
     {6, MENU_ACTION_PATIENT_QUERY_ADMISSIONS, "个人住院历史", TUI_CIRCLE},
     {7, MENU_ACTION_PATIENT_QUERY_DISPENSE, "个人发药历史", TUI_FLASK},
     {8, MENU_ACTION_PATIENT_QUERY_MEDICINE_USAGE, "药品使用方法", TUI_DIAMOND},
+    {9, MENU_ACTION_PATIENT_QUERY_FEES, "费用查询", TUI_STAR},
     {0, MENU_ACTION_BACK, "返回上级菜单", TUI_ARROW_R}
 };
 
@@ -525,6 +529,12 @@ const char *MenuController_action_label(MenuAction action) {
             return "病房与床位总览";
         case MENU_ACTION_ADMIN_MEDICINE_OVERVIEW:
             return "药房与库存总览";
+        case MENU_ACTION_ADMIN_STATS_REVENUE:
+            return "科室收入统计";
+        case MENU_ACTION_ADMIN_STATS_WORKLOAD:
+            return "医生工作量统计";
+        case MENU_ACTION_ADMIN_STATS_BED_UTIL:
+            return "床位利用率统计";
         case MENU_ACTION_DOCTOR_QUERY_PATIENT_HISTORY:
             return "查询患者信息与历史";
         case MENU_ACTION_DOCTOR_PENDING_LIST:
@@ -551,6 +561,8 @@ const char *MenuController_action_label(MenuAction action) {
             return "个人发药历史";
         case MENU_ACTION_PATIENT_QUERY_MEDICINE_USAGE:
             return "药品使用方法";
+        case MENU_ACTION_PATIENT_QUERY_FEES:
+            return "费用查询";
         case MENU_ACTION_INPATIENT_ADMIT:
             return "入院登记";
         case MENU_ACTION_INPATIENT_DISCHARGE:

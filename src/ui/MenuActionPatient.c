@@ -16,7 +16,7 @@
 
 Result MenuAction_handle_patient(MenuApplication *app, MenuAction action, FILE *input, FILE *output) {
     MenuApplicationPromptContext context;
-    char output_buffer[2048];
+    char output_buffer[4096];
     char first_id[HIS_DOMAIN_ID_CAPACITY];
     char second_id[HIS_DOMAIN_ID_CAPACITY];
     char time_value[HIS_DOMAIN_TIME_CAPACITY];
@@ -153,6 +153,16 @@ Result MenuAction_handle_patient(MenuApplication *app, MenuAction action, FILE *
                 sizeof(output_buffer),
                 1
             );
+            MenuApplication_print_result(output, output_buffer, result.success);
+            return result;
+
+        case MENU_ACTION_PATIENT_QUERY_FEES:
+            result = MenuApplication_require_patient_session(app);
+            if (result.success == 0) {
+                return result;
+            }
+            tui_spinner_run(output, "正在查询费用...", 400);
+            result = MenuApplication_query_patient_fees(app, app->bound_patient_id, output_buffer, sizeof(output_buffer));
             MenuApplication_print_result(output, output_buffer, result.success);
             return result;
 

@@ -14,7 +14,7 @@
 
 Result MenuAction_handle_admin(MenuApplication *app, MenuAction action, FILE *input, FILE *output) {
     MenuApplicationPromptContext context;
-    char output_buffer[2048];
+    char output_buffer[4096];
     char first_id[HIS_DOMAIN_ID_CAPACITY];
     char second_id[HIS_DOMAIN_ID_CAPACITY];
     char text_value[HIS_DOMAIN_TEXT_CAPACITY];
@@ -329,6 +329,24 @@ Result MenuAction_handle_admin(MenuApplication *app, MenuAction action, FILE *in
             } else {
                 return Result_make_failure("invalid admin medicine action");
             }
+            MenuApplication_print_result(output, output_buffer, result.success);
+            return result;
+
+        case MENU_ACTION_ADMIN_STATS_REVENUE:
+            tui_spinner_run(output, "正在统计科室收入...", 500);
+            result = MenuApplication_stats_department_revenue(app, output_buffer, sizeof(output_buffer));
+            MenuApplication_print_result(output, output_buffer, result.success);
+            return result;
+
+        case MENU_ACTION_ADMIN_STATS_WORKLOAD:
+            tui_spinner_run(output, "正在统计医生工作量...", 500);
+            result = MenuApplication_stats_doctor_workload(app, output_buffer, sizeof(output_buffer));
+            MenuApplication_print_result(output, output_buffer, result.success);
+            return result;
+
+        case MENU_ACTION_ADMIN_STATS_BED_UTIL:
+            tui_spinner_run(output, "正在统计床位利用率...", 500);
+            result = MenuApplication_stats_bed_utilization(app, output_buffer, sizeof(output_buffer));
             MenuApplication_print_result(output, output_buffer, result.success);
             return result;
 

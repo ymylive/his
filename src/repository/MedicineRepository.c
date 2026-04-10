@@ -16,15 +16,18 @@
 
 #include "repository/RepositoryUtils.h"
 
-/** 药品记录的字段数量（含别名） */
-#define MEDICINE_REPOSITORY_FIELD_COUNT 7
+/** 药品记录的字段数量（含别名和分类） */
+#define MEDICINE_REPOSITORY_FIELD_COUNT 8
 
-/** 旧版药品记录的字段数量（不含别名，用于向后兼容） */
-#define MEDICINE_REPOSITORY_LEGACY_FIELD_COUNT 6
+/** 旧版药品记录的字段数量（含别名，不含分类，用于向后兼容） */
+#define MEDICINE_REPOSITORY_LEGACY_FIELD_COUNT_V2 7
+
+/** 旧版药品记录的字段数量（不含别名和分类，用于向后兼容） */
+#define MEDICINE_REPOSITORY_LEGACY_FIELD_COUNT_V1 6
 
 /** 药品数据文件的表头行 */
 static const char *MEDICINE_REPOSITORY_HEADER =
-    "medicine_id|name|alias|price|stock|department_id|low_stock_threshold";
+    "medicine_id|name|alias|category|price|stock|department_id|low_stock_threshold";
 
 /** 加载所有药品时使用的上下文结构体 */
 typedef struct MedicineRepositoryLoadContext {
@@ -69,6 +72,7 @@ static Result MedicineRepository_validate(const Medicine *medicine) {
     if (!RepositoryUtils_is_safe_field_text(medicine->medicine_id) ||
         !RepositoryUtils_is_safe_field_text(medicine->name) ||
         !RepositoryUtils_is_safe_field_text(medicine->alias) ||
+        !RepositoryUtils_is_safe_field_text(medicine->category) ||
         !RepositoryUtils_is_safe_field_text(medicine->department_id)) {
         return Result_make_failure("medicine field contains reserved character");
     }
@@ -112,9 +116,10 @@ static Result MedicineRepository_format_line(
     if (result.success == 0) return result;
     if (line == 0 || line_capacity == 0) return Result_make_failure("medicine line buffer missing");
 
-    written = snprintf(line, line_capacity, "%s|%s|%s|%.2f|%d|%s|%d",
-        medicine->medicine_id, medicine->name, medicine->alias, medicine->price,
-        medicine->stock, medicine->department_id, medicine->low_stock_threshold);
+    written = snprintf(line, line_capacity, "%s|%s|%s|%s|%.2f|%d|%s|%d",
+        medicine->medicine_id, medicine->name, medicine->alias, medicine->category,
+        medicine->price, medicine->stock, medicine->department_id,
+        medicine->low_stock_threshold);
     if (written < 0 || (size_t)written >= line_capacity) {
         return Result_make_failure("medicine line too long");
     }
@@ -135,9 +140,10 @@ static Result MedicineRepository_parse_line(const char *line, Medicine *medicine
     result = RepositoryUtils_split_pipe_line(mutable_line, fields, MEDICINE_REPOSITORY_FIELD_COUNT, &field_count);
     if (result.success == 0) return result;
 
-    /* 支持新格式(7字段,含alias)和旧格式(6字段,无alias) */
+    /* 支持新格式(8字段,含alias+category)、v2格式(7字段,含alias)和旧格式(6字段) */
     if (field_count != MEDICINE_REPOSITORY_FIELD_COUNT &&
-        field_count != MEDICINE_REPOSITORY_LEGACY_FIELD_COUNT) {
+        field_count != MEDICINE_REPOSITORY_LEGACY_FIELD_COUNT_V2 &&
+        field_count != MEDICINE_REPOSITORY_LEGACY_FIELD_COUNT_V1) {
         return Result_make_failure("medicine field count mismatch");
     }
 
@@ -146,8 +152,17 @@ static Result MedicineRepository_parse_line(const char *line, Medicine *medicine
     MedicineRepository_copy_string(medicine->name, sizeof(medicine->name), fields[1]);
 
     if (field_count == MEDICINE_REPOSITORY_FIELD_COUNT) {
-        /* 新格式: medicine_id|name|alias|price|stock|department_id|low_stock_threshold */
+        /* 新格式: medicine_id|name|alias|category|price|stock|department_id|low_stock_threshold */
         MedicineRepository_copy_string(medicine->alias, sizeof(medicine->alias), fields[2]);
+        MedicineRepository_copy_string(medicine->category, sizeof(medicine->category), fields[3]);
+        price_idx = 4;
+        stock_idx = 5;
+        dept_idx = 6;
+        threshold_idx = 7;
+    } else if (field_count == MEDICINE_REPOSITORY_LEGACY_FIELD_COUNT_V2) {
+        /* v2格式: medicine_id|name|alias|price|stock|department_id|low_stock_threshold */
+        MedicineRepository_copy_string(medicine->alias, sizeof(medicine->alias), fields[2]);
+        medicine->category[0] = '\0';
         price_idx = 3;
         stock_idx = 4;
         dept_idx = 5;
@@ -155,6 +170,7 @@ static Result MedicineRepository_parse_line(const char *line, Medicine *medicine
     } else {
         /* 旧格式: medicine_id|name|price|stock|department_id|low_stock_threshold */
         medicine->alias[0] = '\0';
+        medicine->category[0] = '\0';
         price_idx = 2;
         stock_idx = 3;
         dept_idx = 4;

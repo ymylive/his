@@ -777,6 +777,60 @@ Result MenuApplication_find_low_stock_medicines(
 );
 
 /**
+ * @brief 科室收入统计
+ * @param application 应用程序实例指针
+ * @param buffer      输出缓冲区
+ * @param capacity    缓冲区容量
+ * @return Result     成功或失败的结果
+ */
+Result MenuApplication_stats_department_revenue(
+    MenuApplication *application,
+    char *buffer,
+    size_t capacity
+);
+
+/**
+ * @brief 医生工作量统计
+ * @param application 应用程序实例指针
+ * @param buffer      输出缓冲区
+ * @param capacity    缓冲区容量
+ * @return Result     成功或失败的结果
+ */
+Result MenuApplication_stats_doctor_workload(
+    MenuApplication *application,
+    char *buffer,
+    size_t capacity
+);
+
+/**
+ * @brief 床位利用率统计
+ * @param application 应用程序实例指针
+ * @param buffer      输出缓冲区
+ * @param capacity    缓冲区容量
+ * @return Result     成功或失败的结果
+ */
+Result MenuApplication_stats_bed_utilization(
+    MenuApplication *application,
+    char *buffer,
+    size_t capacity
+);
+
+/**
+ * @brief 患者费用查询
+ * @param application 应用程序实例指针
+ * @param patient_id  患者编号
+ * @param buffer      输出缓冲区
+ * @param capacity    缓冲区容量
+ * @return Result     成功或失败的结果
+ */
+Result MenuApplication_query_patient_fees(
+    MenuApplication *application,
+    const char *patient_id,
+    char *buffer,
+    size_t capacity
+);
+
+/**
  * @brief 执行菜单操作
  *
  * 根据传入的菜单操作枚举，分派到具体的业务处理流程。

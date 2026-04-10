@@ -3133,24 +3133,23 @@ Result MenuApplication_prompt_select_medicine(
         }
 
         MenuApplication_copy_text(options[option_count].id, sizeof(options[option_count].id), medicine->medicine_id);
-        if (medicine->alias[0] != '\0') {
+        {
+            char alias_part[128] = "";
+            char category_part[128] = "";
+            if (medicine->alias[0] != '\0') {
+                snprintf(alias_part, sizeof(alias_part), " (别名: %s)", medicine->alias);
+            }
+            if (medicine->category[0] != '\0') {
+                snprintf(category_part, sizeof(category_part), " [%s]", medicine->category);
+            }
             snprintf(
                 options[option_count].label,
                 sizeof(options[option_count].label),
-                "%s | %s (别名: %s) | 库存=%d | 阈值=%d",
+                "%s | %s%s%s | 库存=%d | 阈值=%d",
                 medicine->medicine_id,
                 medicine->name,
-                medicine->alias,
-                medicine->stock,
-                medicine->low_stock_threshold
-            );
-        } else {
-            snprintf(
-                options[option_count].label,
-                sizeof(options[option_count].label),
-                "%s | %s | 库存=%d | 阈值=%d",
-                medicine->medicine_id,
-                medicine->name,
+                alias_part,
+                category_part,
                 medicine->stock,
                 medicine->low_stock_threshold
             );
@@ -3308,6 +3307,15 @@ Result MenuApplication_prompt_medicine_form(
         "药品别名/通用名(可留空): ",
         out_medicine->alias,
         sizeof(out_medicine->alias)
+    );
+    if (result.success == 0) {
+        return result;
+    }
+    result = MenuApplication_prompt_line(
+        context,
+        "药品分类(如 抗生素/解热镇痛, 可留空): ",
+        out_medicine->category,
+        sizeof(out_medicine->category)
     );
     if (result.success == 0) {
         return result;
@@ -3783,54 +3791,43 @@ Result MenuApplication_query_medicine_detail(
         return MenuApplication_write_failure(result.message, buffer, capacity);
     }
 
-    if (include_instruction_note != 0) {
+    {
+        char alias_part[128] = "";
+        char category_part[128] = "";
         if (medicine.alias[0] != '\0') {
+            snprintf(alias_part, sizeof(alias_part), " (别名: %s)", medicine.alias);
+        }
+        if (medicine.category[0] != '\0') {
+            snprintf(category_part, sizeof(category_part), " [%s]", medicine.category);
+        }
+
+        if (include_instruction_note != 0) {
             return MenuApplication_write_text(
                 buffer,
                 capacity,
-                "药品信息: %s | %s (别名: %s) | 单价=%.2f | 科室=%s | 当前系统未维护用法说明",
+                "药品信息: %s | %s%s%s | 单价=%.2f | 科室=%s | 当前系统未维护用法说明",
                 medicine.medicine_id,
                 medicine.name,
-                medicine.alias,
+                alias_part,
+                category_part,
                 medicine.price,
                 medicine.department_id
             );
         }
-        return MenuApplication_write_text(
-            buffer,
-            capacity,
-            "药品信息: %s | %s | 单价=%.2f | 科室=%s | 当前系统未维护用法说明",
-            medicine.medicine_id,
-            medicine.name,
-            medicine.price,
-            medicine.department_id
-        );
-    }
 
-    if (medicine.alias[0] != '\0') {
         return MenuApplication_write_text(
             buffer,
             capacity,
-            "药品信息: %s | %s (别名: %s) | 单价=%.2f | 库存=%d | 科室=%s",
+            "药品信息: %s | %s%s%s | 单价=%.2f | 库存=%d | 科室=%s",
             medicine.medicine_id,
             medicine.name,
-            medicine.alias,
+            alias_part,
+            category_part,
             medicine.price,
             medicine.stock,
             medicine.department_id
         );
     }
-
-    return MenuApplication_write_text(
-        buffer,
-        capacity,
-        "药品信息: %s | %s | 单价=%.2f | 库存=%d | 科室=%s",
-        medicine.medicine_id,
-        medicine.name,
-        medicine.price,
-        medicine.stock,
-        medicine.department_id
-    );
 }
 
 Result MenuApplication_discharge_check(
@@ -4451,6 +4448,509 @@ Result MenuApplication_browse_patient_history(
     return result;
 }
 
+/* ─── Statistics & Fee Inquiry Functions ──────────────────────────── */
+
+/**
+ * @brief 科室收入统计
+ *
+ * 加载全部发药记录，根据处方ID关联就诊记录找到科室，
+ * 累加各科室的药品收入（价格 x 数量）。
+ */
+Result MenuApplication_stats_department_revenue(
+    MenuApplication *app,
+    char *buffer,
+    size_t capacity
+) {
+    LinkedList dispense_records;
+    LinkedList departments;
+    const LinkedListNode *current = 0;
+    size_t used = 0;
+    Result result;
+
+    /* 每个科室的统计数据 */
+    #define STATS_MAX_DEPARTMENTS 64
+    struct {
+        char department_id[HIS_DOMAIN_ID_CAPACITY];
+        char department_name[HIS_DOMAIN_NAME_CAPACITY];
+        double total_revenue;
+        int dispense_count;
+    } dept_stats[STATS_MAX_DEPARTMENTS];
+    int dept_count = 0;
+    int i;
+
+    if (app == 0 || buffer == 0 || capacity == 0) {
+        return Result_make_failure("stats arguments missing");
+    }
+
+    /* 加载所有科室用于名称查找 */
+    LinkedList_init(&departments);
+    result = DepartmentRepository_load_all(
+        &app->doctor_service.department_repository,
+        &departments
+    );
+    if (result.success == 0) {
+        return MenuApplication_write_failure("无法加载科室数据", buffer, capacity);
+    }
+
+    memset(dept_stats, 0, sizeof(dept_stats));
+
+    /* 预填充科室列表 */
+    current = departments.head;
+    while (current != 0 && dept_count < STATS_MAX_DEPARTMENTS) {
+        const Department *dept = (const Department *)current->data;
+        strncpy(dept_stats[dept_count].department_id, dept->department_id, HIS_DOMAIN_ID_CAPACITY - 1);
+        strncpy(dept_stats[dept_count].department_name, dept->name, HIS_DOMAIN_NAME_CAPACITY - 1);
+        dept_stats[dept_count].total_revenue = 0.0;
+        dept_stats[dept_count].dispense_count = 0;
+        dept_count++;
+        current = current->next;
+    }
+    DepartmentRepository_clear_list(&departments);
+
+    /* 加载所有发药记录 */
+    LinkedList_init(&dispense_records);
+    result = DispenseRecordRepository_load_all(
+        &app->pharmacy_service.dispense_record_repository,
+        &dispense_records
+    );
+    if (result.success == 0) {
+        return MenuApplication_write_failure("无法加载发药记录", buffer, capacity);
+    }
+
+    /* 遍历发药记录，计算每个科室的收入 */
+    current = dispense_records.head;
+    while (current != 0) {
+        const DispenseRecord *dr = (const DispenseRecord *)current->data;
+        Medicine medicine;
+        VisitRecord visit;
+        const char *target_dept_id = 0;
+
+        /* 查找药品获取价格 */
+        result = MedicineRepository_find_by_medicine_id(
+            &app->pharmacy_service.medicine_repository,
+            dr->medicine_id,
+            &medicine
+        );
+        if (result.success == 0) {
+            current = current->next;
+            continue;
+        }
+
+        /* 通过 prescription_id（即 visit_id）找到就诊记录，获取科室 */
+        result = VisitRecordRepository_find_by_visit_id(
+            &app->medical_record_service.visit_repository,
+            dr->prescription_id,
+            &visit
+        );
+        if (result.success) {
+            target_dept_id = visit.department_id;
+        } else {
+            /* 如果找不到就诊记录，跳过 */
+            current = current->next;
+            continue;
+        }
+
+        /* 累加到对应科室 */
+        for (i = 0; i < dept_count; i++) {
+            if (strcmp(dept_stats[i].department_id, target_dept_id) == 0) {
+                dept_stats[i].total_revenue += medicine.price * dr->quantity;
+                dept_stats[i].dispense_count++;
+                break;
+            }
+        }
+
+        current = current->next;
+    }
+    DispenseRecordRepository_clear_list(&dispense_records);
+
+    /* 格式化输出 */
+    result = MenuApplication_write_text(
+        buffer, capacity,
+        TUI_STAR " 科室收入统计\n"
+        "%-12s | %-16s | %12s | %8s\n"
+        "-------------|------------------|--------------|----------",
+        "科室编号", "科室名称", "总收入(元)", "发药次数"
+    );
+    if (result.success == 0) return result;
+    used = strlen(buffer);
+
+    for (i = 0; i < dept_count; i++) {
+        result = MenuApplication_append_text(
+            buffer, capacity, &used,
+            "\n%-12s | %-16s | %12.2f | %8d",
+            dept_stats[i].department_id,
+            dept_stats[i].department_name,
+            dept_stats[i].total_revenue,
+            dept_stats[i].dispense_count
+        );
+        if (result.success == 0) return result;
+    }
+
+    return Result_make_success("department revenue stats ready");
+    #undef STATS_MAX_DEPARTMENTS
+}
+
+/**
+ * @brief 医生工作量统计
+ *
+ * 加载所有就诊记录和挂号记录，统计每位医生的就诊数、挂号数和检查数。
+ */
+Result MenuApplication_stats_doctor_workload(
+    MenuApplication *app,
+    char *buffer,
+    size_t capacity
+) {
+    LinkedList doctors;
+    LinkedList visits;
+    LinkedList registrations;
+    LinkedList examinations;
+    const LinkedListNode *current = 0;
+    size_t used = 0;
+    Result result;
+
+    #define STATS_MAX_DOCTORS 128
+    struct {
+        char doctor_id[HIS_DOMAIN_ID_CAPACITY];
+        char doctor_name[HIS_DOMAIN_NAME_CAPACITY];
+        int visit_count;
+        int registration_count;
+        int exam_count;
+    } doc_stats[STATS_MAX_DOCTORS];
+    int doc_count = 0;
+    int i;
+
+    if (app == 0 || buffer == 0 || capacity == 0) {
+        return Result_make_failure("stats arguments missing");
+    }
+
+    /* 加载所有医生 */
+    LinkedList_init(&doctors);
+    result = DoctorRepository_load_all(
+        &app->doctor_service.doctor_repository,
+        &doctors
+    );
+    if (result.success == 0) {
+        return MenuApplication_write_failure("无法加载医生数据", buffer, capacity);
+    }
+
+    memset(doc_stats, 0, sizeof(doc_stats));
+
+    /* 预填充医生列表 */
+    current = doctors.head;
+    while (current != 0 && doc_count < STATS_MAX_DOCTORS) {
+        const Doctor *doc = (const Doctor *)current->data;
+        strncpy(doc_stats[doc_count].doctor_id, doc->doctor_id, HIS_DOMAIN_ID_CAPACITY - 1);
+        strncpy(doc_stats[doc_count].doctor_name, doc->name, HIS_DOMAIN_NAME_CAPACITY - 1);
+        doc_count++;
+        current = current->next;
+    }
+    DoctorRepository_clear_list(&doctors);
+
+    /* 加载所有就诊记录，统计 visit_count */
+    LinkedList_init(&visits);
+    result = VisitRecordRepository_load_all(
+        &app->medical_record_service.visit_repository,
+        &visits
+    );
+    if (result.success) {
+        current = visits.head;
+        while (current != 0) {
+            const VisitRecord *v = (const VisitRecord *)current->data;
+            for (i = 0; i < doc_count; i++) {
+                if (strcmp(doc_stats[i].doctor_id, v->doctor_id) == 0) {
+                    doc_stats[i].visit_count++;
+                    break;
+                }
+            }
+            current = current->next;
+        }
+        VisitRecordRepository_clear_list(&visits);
+    }
+
+    /* 加载所有挂号记录，统计 registration_count */
+    LinkedList_init(&registrations);
+    result = RegistrationRepository_load_all(
+        &app->registration_repository,
+        &registrations
+    );
+    if (result.success) {
+        current = registrations.head;
+        while (current != 0) {
+            const Registration *r = (const Registration *)current->data;
+            for (i = 0; i < doc_count; i++) {
+                if (strcmp(doc_stats[i].doctor_id, r->doctor_id) == 0) {
+                    doc_stats[i].registration_count++;
+                    break;
+                }
+            }
+            current = current->next;
+        }
+        RegistrationRepository_clear_list(&registrations);
+    }
+
+    /* 加载所有检查记录，统计 exam_count */
+    LinkedList_init(&examinations);
+    result = ExaminationRecordRepository_load_all(
+        &app->medical_record_service.examination_repository,
+        &examinations
+    );
+    if (result.success) {
+        current = examinations.head;
+        while (current != 0) {
+            const ExaminationRecord *e = (const ExaminationRecord *)current->data;
+            for (i = 0; i < doc_count; i++) {
+                if (strcmp(doc_stats[i].doctor_id, e->doctor_id) == 0) {
+                    doc_stats[i].exam_count++;
+                    break;
+                }
+            }
+            current = current->next;
+        }
+        ExaminationRecordRepository_clear_list(&examinations);
+    }
+
+    /* 格式化输出 */
+    result = MenuApplication_write_text(
+        buffer, capacity,
+        TUI_STAR " 医生工作量统计\n"
+        "%-12s | %-12s | %8s | %8s | %8s\n"
+        "-------------|--------------|----------|----------|----------",
+        "医生工号", "医生姓名", "就诊数", "挂号数", "检查数"
+    );
+    if (result.success == 0) return result;
+    used = strlen(buffer);
+
+    for (i = 0; i < doc_count; i++) {
+        result = MenuApplication_append_text(
+            buffer, capacity, &used,
+            "\n%-12s | %-12s | %8d | %8d | %8d",
+            doc_stats[i].doctor_id,
+            doc_stats[i].doctor_name,
+            doc_stats[i].visit_count,
+            doc_stats[i].registration_count,
+            doc_stats[i].exam_count
+        );
+        if (result.success == 0) return result;
+    }
+
+    return Result_make_success("doctor workload stats ready");
+    #undef STATS_MAX_DOCTORS
+}
+
+/**
+ * @brief 床位利用率统计
+ *
+ * 加载所有病房和床位，统计每个病房的总床位、已占用数和利用率。
+ */
+Result MenuApplication_stats_bed_utilization(
+    MenuApplication *app,
+    char *buffer,
+    size_t capacity
+) {
+    LinkedList wards;
+    LinkedList beds;
+    const LinkedListNode *ward_node = 0;
+    const LinkedListNode *bed_node = 0;
+    size_t used = 0;
+    Result result;
+
+    if (app == 0 || buffer == 0 || capacity == 0) {
+        return Result_make_failure("stats arguments missing");
+    }
+
+    /* 加载所有病房 */
+    LinkedList_init(&wards);
+    result = WardRepository_load_all(
+        &app->bed_service.ward_repository,
+        &wards
+    );
+    if (result.success == 0) {
+        return MenuApplication_write_failure("无法加载病房数据", buffer, capacity);
+    }
+
+    /* 加载所有床位 */
+    LinkedList_init(&beds);
+    result = BedRepository_load_all(
+        &app->bed_service.bed_repository,
+        &beds
+    );
+    if (result.success == 0) {
+        WardRepository_clear_loaded_list(&wards);
+        return MenuApplication_write_failure("无法加载床位数据", buffer, capacity);
+    }
+
+    /* 格式化表头 */
+    result = MenuApplication_write_text(
+        buffer, capacity,
+        TUI_STAR " 床位利用率统计\n"
+        "%-12s | %-16s | %8s | %8s | %8s\n"
+        "-------------|------------------|----------|----------|----------",
+        "病房编号", "病房名称", "总床位", "已占用", "利用率"
+    );
+    if (result.success == 0) {
+        WardRepository_clear_loaded_list(&wards);
+        BedRepository_clear_loaded_list(&beds);
+        return result;
+    }
+    used = strlen(buffer);
+
+    /* 遍历每个病房，统计床位 */
+    ward_node = wards.head;
+    while (ward_node != 0) {
+        const Ward *ward = (const Ward *)ward_node->data;
+        int total_beds = 0;
+        int occupied_beds = 0;
+        double rate = 0.0;
+
+        /* 遍历所有床位统计该病房的数据 */
+        bed_node = beds.head;
+        while (bed_node != 0) {
+            const Bed *bed = (const Bed *)bed_node->data;
+            if (strcmp(bed->ward_id, ward->ward_id) == 0) {
+                total_beds++;
+                if (bed->status == BED_STATUS_OCCUPIED) {
+                    occupied_beds++;
+                }
+            }
+            bed_node = bed_node->next;
+        }
+
+        if (total_beds > 0) {
+            rate = (double)occupied_beds / (double)total_beds * 100.0;
+        }
+
+        result = MenuApplication_append_text(
+            buffer, capacity, &used,
+            "\n%-12s | %-16s | %8d | %8d | %7.1f%%",
+            ward->ward_id,
+            ward->name,
+            total_beds,
+            occupied_beds,
+            rate
+        );
+        if (result.success == 0) break;
+
+        ward_node = ward_node->next;
+    }
+
+    WardRepository_clear_loaded_list(&wards);
+    BedRepository_clear_loaded_list(&beds);
+    return Result_make_success("bed utilization stats ready");
+}
+
+/**
+ * @brief 患者费用查询
+ *
+ * 加载指定患者的所有发药记录，查找药品价格，计算每项费用和总费用。
+ */
+Result MenuApplication_query_patient_fees(
+    MenuApplication *app,
+    const char *patient_id,
+    char *buffer,
+    size_t capacity
+) {
+    LinkedList records;
+    const LinkedListNode *current = 0;
+    size_t used = 0;
+    double total_fee = 0.0;
+    int item_count = 0;
+    Result result;
+
+    if (app == 0 || patient_id == 0 || buffer == 0 || capacity == 0) {
+        return Result_make_failure("fee query arguments missing");
+    }
+
+    /* 加载该患者的发药记录 */
+    LinkedList_init(&records);
+    result = PharmacyService_find_dispense_records_by_patient_id(
+        &app->pharmacy_service,
+        patient_id,
+        &records
+    );
+    if (result.success == 0) {
+        return MenuApplication_write_failure("无法加载发药记录", buffer, capacity);
+    }
+
+    if (LinkedList_count(&records) == 0) {
+        PharmacyService_clear_dispense_record_results(&records);
+        return MenuApplication_write_text(
+            buffer, capacity,
+            TUI_STAR " 费用查询 - 患者: %s\n暂无费用记录",
+            patient_id
+        );
+    }
+
+    /* 表头 */
+    result = MenuApplication_write_text(
+        buffer, capacity,
+        TUI_STAR " 费用查询 - 患者: %s\n"
+        "%-12s | %-16s | %8s | %8s | %12s\n"
+        "-------------|------------------|----------|----------|--------------",
+        patient_id,
+        "发药编号", "药品名称", "单价", "数量", "小计(元)"
+    );
+    if (result.success == 0) {
+        PharmacyService_clear_dispense_record_results(&records);
+        return result;
+    }
+    used = strlen(buffer);
+
+    /* 遍历每条记录 */
+    current = records.head;
+    while (current != 0) {
+        const DispenseRecord *dr = (const DispenseRecord *)current->data;
+        Medicine medicine;
+        double item_fee = 0.0;
+
+        result = MedicineRepository_find_by_medicine_id(
+            &app->pharmacy_service.medicine_repository,
+            dr->medicine_id,
+            &medicine
+        );
+        if (result.success) {
+            item_fee = medicine.price * dr->quantity;
+            total_fee += item_fee;
+            item_count++;
+
+            result = MenuApplication_append_text(
+                buffer, capacity, &used,
+                "\n%-12s | %-16s | %8.2f | %8d | %12.2f",
+                dr->dispense_id,
+                medicine.name,
+                medicine.price,
+                dr->quantity,
+                item_fee
+            );
+        } else {
+            /* 找不到药品信息时用ID代替 */
+            result = MenuApplication_append_text(
+                buffer, capacity, &used,
+                "\n%-12s | %-16s | %8s | %8d | %12s",
+                dr->dispense_id,
+                dr->medicine_id,
+                "未知",
+                dr->quantity,
+                "未知"
+            );
+        }
+        if (result.success == 0) break;
+
+        current = current->next;
+    }
+
+    /* 总计 */
+    result = MenuApplication_append_text(
+        buffer, capacity, &used,
+        "\n-------------|------------------|----------|----------|----------"
+        "\n共 %d 项 | 合计费用: %.2f 元",
+        item_count,
+        total_fee
+    );
+
+    PharmacyService_clear_dispense_record_results(&records);
+    return Result_make_success("patient fees query ready");
+}
+
 Result MenuApplication_execute_action(
     MenuApplication *application,
     MenuAction action,
@@ -4467,6 +4967,9 @@ Result MenuApplication_execute_action(
         case MENU_ACTION_ADMIN_MEDICAL_RECORDS:
         case MENU_ACTION_ADMIN_WARD_BED_OVERVIEW:
         case MENU_ACTION_ADMIN_MEDICINE_OVERVIEW:
+        case MENU_ACTION_ADMIN_STATS_REVENUE:
+        case MENU_ACTION_ADMIN_STATS_WORKLOAD:
+        case MENU_ACTION_ADMIN_STATS_BED_UTIL:
             return MenuAction_handle_admin(application, action, input, output);
 
         case MENU_ACTION_DOCTOR_PENDING_LIST:
@@ -4484,6 +4987,7 @@ Result MenuApplication_execute_action(
         case MENU_ACTION_PATIENT_QUERY_ADMISSIONS:
         case MENU_ACTION_PATIENT_QUERY_DISPENSE:
         case MENU_ACTION_PATIENT_QUERY_MEDICINE_USAGE:
+        case MENU_ACTION_PATIENT_QUERY_FEES:
             return MenuAction_handle_patient(application, action, input, output);
 
         case MENU_ACTION_INPATIENT_QUERY_BED:

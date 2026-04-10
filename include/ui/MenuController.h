@@ -51,6 +51,9 @@ typedef enum MenuAction {
     MENU_ACTION_ADMIN_MEDICAL_RECORDS = 103,       /**< 医疗记录管理/按时间范围查询 */
     MENU_ACTION_ADMIN_WARD_BED_OVERVIEW = 104,     /**< 病房与床位管理 */
     MENU_ACTION_ADMIN_MEDICINE_OVERVIEW = 105,     /**< 药房与药品管理 */
+    MENU_ACTION_ADMIN_STATS_REVENUE = 206,        /**< 科室收入统计 */
+    MENU_ACTION_ADMIN_STATS_WORKLOAD = 207,       /**< 医生工作量统计 */
+    MENU_ACTION_ADMIN_STATS_BED_UTIL = 208,       /**< 床位利用率统计 */
 
     /* 医生操作 (3xx) */
     MENU_ACTION_DOCTOR_PENDING_LIST = 301,         /**< 待诊列表 */
@@ -68,6 +71,7 @@ typedef enum MenuAction {
     MENU_ACTION_PATIENT_QUERY_ADMISSIONS = 405,    /**< 个人住院历史 */
     MENU_ACTION_PATIENT_QUERY_DISPENSE = 406,      /**< 个人发药历史 */
     MENU_ACTION_PATIENT_QUERY_MEDICINE_USAGE = 407,/**< 药品使用方法查询 */
+    MENU_ACTION_PATIENT_QUERY_FEES = 409,         /**< 费用查询 */
 
     /* 住院管理员操作 (5xx) */
     MENU_ACTION_INPATIENT_ADMIT = 501,             /**< 入院登记 */
