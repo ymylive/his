@@ -292,6 +292,7 @@ static Result InpatientService_next_admission_sequence_from_list(
 ) {
     LinkedListNode *current = 0;
     int max_sequence = 0;
+    const size_t prefix_len = strlen(INPATIENT_SERVICE_ID_PREFIX);
 
     if (out_sequence == 0) {
         return Result_make_failure("admission sequence output missing");
@@ -301,7 +302,7 @@ static Result InpatientService_next_admission_sequence_from_list(
     current = admissions->head;
     while (current != 0) {
         const Admission *admission = (const Admission *)current->data;
-        const char *suffix = admission->admission_id + strlen(INPATIENT_SERVICE_ID_PREFIX);
+        const char *suffix = admission->admission_id + prefix_len;
         char *end_pointer = 0;
         long value = 0;
 
@@ -309,7 +310,7 @@ static Result InpatientService_next_admission_sequence_from_list(
         if (strncmp(
                 admission->admission_id,
                 INPATIENT_SERVICE_ID_PREFIX,
-                strlen(INPATIENT_SERVICE_ID_PREFIX)
+                prefix_len
             ) != 0) {
             return Result_make_failure("admission id format invalid");
         }
@@ -343,8 +344,6 @@ static Result InpatientService_next_admission_sequence(
     int *out_sequence
 ) {
     LinkedList admissions;
-    LinkedListNode *current = 0;
-    int max_sequence = 0;
     Result result;
 
     if (out_sequence == 0) {
@@ -356,39 +355,12 @@ static Result InpatientService_next_admission_sequence(
         return result;
     }
 
-    /* 遍历所有住院记录提取最大序列号 */
-    current = admissions.head;
-    while (current != 0) {
-        const Admission *admission = (const Admission *)current->data;
-        const char *suffix = admission->admission_id + strlen(INPATIENT_SERVICE_ID_PREFIX);
-        char *end_pointer = 0;
-        long value = 0;
-
-        if (strncmp(
-                admission->admission_id,
-                INPATIENT_SERVICE_ID_PREFIX,
-                strlen(INPATIENT_SERVICE_ID_PREFIX)
-            ) != 0) {
-            AdmissionRepository_clear_loaded_list(&admissions);
-            return Result_make_failure("admission id format invalid");
-        }
-
-        value = strtol(suffix, &end_pointer, 10);
-        if (end_pointer == suffix || end_pointer == 0 || *end_pointer != '\0' || value < 0) {
-            AdmissionRepository_clear_loaded_list(&admissions);
-            return Result_make_failure("admission id format invalid");
-        }
-
-        if ((int)value > max_sequence) {
-            max_sequence = (int)value;
-        }
-
-        current = current->next;
-    }
-
+    /* Delegate to the list-based sequence extraction */
+    result = InpatientService_next_admission_sequence_from_list(
+        &admissions, out_sequence
+    );
     AdmissionRepository_clear_loaded_list(&admissions);
-    *out_sequence = max_sequence + 1;
-    return Result_make_success("admission sequence ready");
+    return result;
 }
 
 /**

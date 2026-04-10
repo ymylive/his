@@ -39,6 +39,12 @@
 #include "common/InputHelper.h"
 #include "service/DepartmentService.h"
 
+/* ANSI cursor control sequences for interactive UI */
+#define TUI_CURSOR_UP_FMT    "\033[%dA\r"   /* Move cursor up N lines + carriage return */
+#define TUI_CURSOR_UP_ONLY   "\033[%dA"     /* Move cursor up N lines */
+#define TUI_CLEAR_LINE       "\033[K"        /* Clear to end of line */
+#define TUI_CLEAR_LINE_NL    "\033[K\n"      /* Clear to end of line + newline */
+
 /**
  * @brief 检查字符串是否为空白（NULL、空字符串或仅含空白字符）
  * @param text 待检查的字符串
@@ -2083,16 +2089,16 @@ static Result MenuApplication_prompt_select_option_interactive(
 
         /* Move cursor up to overwrite previous output */
         if (prev_lines > 0) {
-            fprintf(context->output, "\033[%dA\r", prev_lines);
+            fprintf(context->output, TUI_CURSOR_UP_FMT, prev_lines);
         }
 
         /* Line 1: title */
-        fprintf(context->output, TUI_OC_MUTED "%s" TUI_RESET "\033[K\n", title);
+        fprintf(context->output, TUI_OC_MUTED "%s" TUI_RESET TUI_CLEAR_LINE_NL, title);
         total_lines++;
 
         /* Line 2: search input */
         fprintf(context->output,
-                TUI_OC_ACCENT " > " TUI_RESET TUI_OC_TEXT "%s" TUI_RESET "\033[K\n",
+                TUI_OC_ACCENT " > " TUI_RESET TUI_OC_TEXT "%s" TUI_RESET TUI_CLEAR_LINE_NL,
                 query);
         total_lines++;
 
@@ -2101,11 +2107,11 @@ static Result MenuApplication_prompt_select_option_interactive(
             int idx = filtered_indices[scroll_offset + i];
             if (i == selected) {
                 fprintf(context->output,
-                        TUI_OC_BG_SELECT TUI_OC_ACCENT " > %s" TUI_RESET "\033[K\n",
+                        TUI_OC_BG_SELECT TUI_OC_ACCENT " > %s" TUI_RESET TUI_CLEAR_LINE_NL,
                         options[idx].label);
             } else {
                 fprintf(context->output,
-                        "   " TUI_OC_MUTED "%s" TUI_RESET "\033[K\n",
+                        "   " TUI_OC_MUTED "%s" TUI_RESET TUI_CLEAR_LINE_NL,
                         options[idx].label);
             }
             total_lines++;
@@ -2115,22 +2121,22 @@ static Result MenuApplication_prompt_select_option_interactive(
         if (filtered_count > max_visible) {
             int page_end = scroll_offset + visible;
             fprintf(context->output,
-                    TUI_OC_DIM "   [\xe7\xac\xac %d-%d \xe6\x9d\xa1 / \xe5\x85\xb1 %d \xe6\x9d\xa1]" TUI_RESET "\033[K\n",
+                    TUI_OC_DIM "   [\xe7\xac\xac %d-%d \xe6\x9d\xa1 / \xe5\x85\xb1 %d \xe6\x9d\xa1]" TUI_RESET TUI_CLEAR_LINE_NL,
                     scroll_offset + 1, page_end, filtered_count);
             total_lines++;
         }
 
         /* Hint line */
         fprintf(context->output,
-                TUI_OC_DIM "   \xe2\x86\x91\xe2\x86\x93 \xe5\xaf\xbc\xe8\x88\xaa  \xe2\x86\x90\xe2\x86\x92 \xe7\xbf\xbb\xe9\xa1\xb5  Enter \xe9\x80\x89\xe6\x8b\xa9  ESC \xe8\xbf\x94\xe5\x9b\x9e" TUI_RESET "\033[K\n");
+                TUI_OC_DIM "   \xe2\x86\x91\xe2\x86\x93 \xe5\xaf\xbc\xe8\x88\xaa  \xe2\x86\x90\xe2\x86\x92 \xe7\xbf\xbb\xe9\xa1\xb5  Enter \xe9\x80\x89\xe6\x8b\xa9  ESC \xe8\xbf\x94\xe5\x9b\x9e" TUI_RESET TUI_CLEAR_LINE_NL);
         total_lines++;
 
         /* Clear any leftover lines from previous render */
         if (prev_lines > total_lines) {
             for (i = 0; i < prev_lines - total_lines; i++) {
-                fprintf(context->output, "\033[K\n");
+                fprintf(context->output, TUI_CLEAR_LINE_NL);
             }
-            fprintf(context->output, "\033[%dA", prev_lines - total_lines);
+            fprintf(context->output, TUI_CURSOR_UP_ONLY, prev_lines - total_lines);
         }
 
         prev_lines = total_lines;
@@ -2272,16 +2278,16 @@ static Result MenuApplication_interactive_browse_tty(
 
         /* Move cursor up to overwrite previous output */
         if (prev_lines > 0) {
-            fprintf(context->output, "\033[%dA\r", prev_lines);
+            fprintf(context->output, TUI_CURSOR_UP_FMT, prev_lines);
         }
 
         /* Line 1: title */
-        fprintf(context->output, TUI_OC_MUTED "%s" TUI_RESET "\033[K\n", title);
+        fprintf(context->output, TUI_OC_MUTED "%s" TUI_RESET TUI_CLEAR_LINE_NL, title);
         total_lines++;
 
         /* Line 2: search input */
         fprintf(context->output,
-                TUI_OC_ACCENT " \xf0\x9f\x94\x8d \xe6\x90\x9c\xe7\xb4\xa2: " TUI_RESET TUI_OC_TEXT "%s" TUI_RESET "\033[K\n",
+                TUI_OC_ACCENT " \xf0\x9f\x94\x8d \xe6\x90\x9c\xe7\xb4\xa2: " TUI_RESET TUI_OC_TEXT "%s" TUI_RESET TUI_CLEAR_LINE_NL,
                 query);
         total_lines++;
 
@@ -2290,21 +2296,21 @@ static Result MenuApplication_interactive_browse_tty(
             int page_end = scroll_offset + visible;
             if (query_len > 0) {
                 fprintf(context->output,
-                        TUI_OC_DIM "   [\xe7\xac\xac %d-%d \xe6\x9d\xa1 / \xe5\x85\xb1 %d \xe6\x9d\xa1\xe7\xbb\x93\xe6\x9e\x9c, \xe5\xb7\xb2\xe8\xbf\x87\xe6\xbb\xa4 %d \xe6\x9d\xa1]" TUI_RESET "\033[K\n",
+                        TUI_OC_DIM "   [\xe7\xac\xac %d-%d \xe6\x9d\xa1 / \xe5\x85\xb1 %d \xe6\x9d\xa1\xe7\xbb\x93\xe6\x9e\x9c, \xe5\xb7\xb2\xe8\xbf\x87\xe6\xbb\xa4 %d \xe6\x9d\xa1]" TUI_RESET TUI_CLEAR_LINE_NL,
                         scroll_offset + 1, page_end, filtered_count, option_count - filtered_count);
             } else {
                 fprintf(context->output,
-                        TUI_OC_DIM "   [\xe7\xac\xac %d-%d \xe6\x9d\xa1 / \xe5\x85\xb1 %d \xe6\x9d\xa1\xe8\xae\xb0\xe5\xbd\x95]" TUI_RESET "\033[K\n",
+                        TUI_OC_DIM "   [\xe7\xac\xac %d-%d \xe6\x9d\xa1 / \xe5\x85\xb1 %d \xe6\x9d\xa1\xe8\xae\xb0\xe5\xbd\x95]" TUI_RESET TUI_CLEAR_LINE_NL,
                         scroll_offset + 1, page_end, filtered_count);
             }
         } else {
             if (query_len > 0) {
                 fprintf(context->output,
-                        TUI_OC_DIM "   \xe5\x85\xb1 %d \xe6\x9d\xa1\xe7\xbb\x93\xe6\x9e\x9c (\xe5\xb7\xb2\xe8\xbf\x87\xe6\xbb\xa4 %d \xe6\x9d\xa1)" TUI_RESET "\033[K\n",
+                        TUI_OC_DIM "   \xe5\x85\xb1 %d \xe6\x9d\xa1\xe7\xbb\x93\xe6\x9e\x9c (\xe5\xb7\xb2\xe8\xbf\x87\xe6\xbb\xa4 %d \xe6\x9d\xa1)" TUI_RESET TUI_CLEAR_LINE_NL,
                         filtered_count, option_count - filtered_count);
             } else {
                 fprintf(context->output,
-                        TUI_OC_DIM "   \xe5\x85\xb1 %d \xe6\x9d\xa1\xe8\xae\xb0\xe5\xbd\x95" TUI_RESET "\033[K\n",
+                        TUI_OC_DIM "   \xe5\x85\xb1 %d \xe6\x9d\xa1\xe8\xae\xb0\xe5\xbd\x95" TUI_RESET TUI_CLEAR_LINE_NL,
                         option_count);
             }
         }
@@ -2315,11 +2321,11 @@ static Result MenuApplication_interactive_browse_tty(
             int idx = filtered_indices[scroll_offset + i];
             if (i == selected) {
                 fprintf(context->output,
-                        TUI_OC_BG_SELECT TUI_OC_ACCENT " > %s" TUI_RESET "\033[K\n",
+                        TUI_OC_BG_SELECT TUI_OC_ACCENT " > %s" TUI_RESET TUI_CLEAR_LINE_NL,
                         options[idx].label);
             } else {
                 fprintf(context->output,
-                        "   " TUI_OC_MUTED "%s" TUI_RESET "\033[K\n",
+                        "   " TUI_OC_MUTED "%s" TUI_RESET TUI_CLEAR_LINE_NL,
                         options[idx].label);
             }
             total_lines++;
@@ -2327,15 +2333,15 @@ static Result MenuApplication_interactive_browse_tty(
 
         /* Hint line */
         fprintf(context->output,
-                TUI_OC_DIM "   \xe2\x86\x91\xe2\x86\x93 \xe5\xaf\xbc\xe8\x88\xaa  \xe2\x86\x90\xe2\x86\x92 \xe7\xbf\xbb\xe9\xa1\xb5  Enter \xe6\x9f\xa5\xe7\x9c\x8b  ESC \xe8\xbf\x94\xe5\x9b\x9e" TUI_RESET "\033[K\n");
+                TUI_OC_DIM "   \xe2\x86\x91\xe2\x86\x93 \xe5\xaf\xbc\xe8\x88\xaa  \xe2\x86\x90\xe2\x86\x92 \xe7\xbf\xbb\xe9\xa1\xb5  Enter \xe6\x9f\xa5\xe7\x9c\x8b  ESC \xe8\xbf\x94\xe5\x9b\x9e" TUI_RESET TUI_CLEAR_LINE_NL);
         total_lines++;
 
         /* Clear any leftover lines from previous render */
         if (prev_lines > total_lines) {
             for (i = 0; i < prev_lines - total_lines; i++) {
-                fprintf(context->output, "\033[K\n");
+                fprintf(context->output, TUI_CLEAR_LINE_NL);
             }
-            fprintf(context->output, "\033[%dA", prev_lines - total_lines);
+            fprintf(context->output, TUI_CURSOR_UP_ONLY, prev_lines - total_lines);
         }
 
         prev_lines = total_lines;

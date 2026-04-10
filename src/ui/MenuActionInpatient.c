@@ -34,27 +34,9 @@ Result MenuAction_handle_inpatient(MenuApplication *app, MenuAction action, FILE
 
     switch (action) {
         case MENU_ACTION_INPATIENT_QUERY_BED:
-        {
-            char selected_ward_id[HIS_DOMAIN_ID_CAPACITY] = {0};
-            result = MenuApplication_browse_ward_table(app, &context, selected_ward_id, sizeof(selected_ward_id));
-            if (result.success && selected_ward_id[0] != '\0') {
-                /* Browse beds in view-only mode (NULL out_id) so non-TTY tests still see bed data */
-                MenuApplication_browse_bed_table(app, &context, selected_ward_id, 0, 0);
-            }
-            return Result_make_success("browse complete");
-        }
-
         case MENU_ACTION_INPATIENT_LIST_WARDS:
-        {
-            char selected_ward_id[HIS_DOMAIN_ID_CAPACITY] = {0};
-            result = MenuApplication_browse_ward_table(app, &context, selected_ward_id, sizeof(selected_ward_id));
-            if (result.success && selected_ward_id[0] != '\0') {
-                MenuApplication_browse_bed_table(app, &context, selected_ward_id, 0, 0);
-            }
-            return Result_make_success("browse complete");
-        }
-
         case MENU_ACTION_INPATIENT_LIST_BEDS:
+            /* All three actions share the same ward->bed browse flow */
         {
             char selected_ward_id[HIS_DOMAIN_ID_CAPACITY] = {0};
             result = MenuApplication_browse_ward_table(app, &context, selected_ward_id, sizeof(selected_ward_id));

@@ -467,6 +467,7 @@ static Result MedicalRecordService_next_visit_sequence_from_list(
 ) {
     LinkedListNode *current = 0;
     int max_sequence = 0;
+    const size_t prefix_len = strlen(MEDICAL_RECORD_VISIT_ID_PREFIX);
 
     if (out_sequence == 0) {
         return Result_make_failure("visit sequence output missing");
@@ -476,14 +477,14 @@ static Result MedicalRecordService_next_visit_sequence_from_list(
     current = visits->head;
     while (current != 0) {
         const VisitRecord *record = (const VisitRecord *)current->data;
-        const char *suffix = record->visit_id + strlen(MEDICAL_RECORD_VISIT_ID_PREFIX);
+        const char *suffix = record->visit_id + prefix_len;
         char *end_pointer = 0;
         long value = 0;
 
         if (strncmp(
                 record->visit_id,
                 MEDICAL_RECORD_VISIT_ID_PREFIX,
-                strlen(MEDICAL_RECORD_VISIT_ID_PREFIX)
+                prefix_len
             ) != 0) {
             return Result_make_failure("visit id format invalid");
         }
@@ -517,8 +518,6 @@ static Result MedicalRecordService_next_visit_sequence(
     int *out_sequence
 ) {
     LinkedList visits;
-    LinkedListNode *current = 0;
-    int max_sequence = 0;
     Result result;
 
     if (out_sequence == 0) {
@@ -530,40 +529,10 @@ static Result MedicalRecordService_next_visit_sequence(
         return result;
     }
 
-    /* 遍历所有就诊记录提取最大序列号 */
-    current = visits.head;
-    while (current != 0) {
-        const VisitRecord *record = (const VisitRecord *)current->data;
-        const char *suffix = record->visit_id + strlen(MEDICAL_RECORD_VISIT_ID_PREFIX);
-        char *end_pointer = 0;
-        long value = 0;
-
-        if (strncmp(
-                record->visit_id,
-                MEDICAL_RECORD_VISIT_ID_PREFIX,
-                strlen(MEDICAL_RECORD_VISIT_ID_PREFIX)
-            ) != 0) {
-            VisitRecordRepository_clear_list(&visits);
-            return Result_make_failure("visit id format invalid");
-        }
-
-        errno = 0;
-        value = strtol(suffix, &end_pointer, 10);
-        if (errno != 0 || end_pointer == suffix || end_pointer == 0 || *end_pointer != '\0') {
-            VisitRecordRepository_clear_list(&visits);
-            return Result_make_failure("visit id format invalid");
-        }
-
-        if ((int)value > max_sequence) {
-            max_sequence = (int)value;
-        }
-
-        current = current->next;
-    }
-
+    /* Delegate to the list-based sequence extraction */
+    result = MedicalRecordService_next_visit_sequence_from_list(&visits, out_sequence);
     VisitRecordRepository_clear_list(&visits);
-    *out_sequence = max_sequence + 1;
-    return Result_make_success("visit sequence ready");
+    return result;
 }
 
 /**
@@ -579,6 +548,7 @@ static Result MedicalRecordService_next_examination_sequence_from_list(
 ) {
     LinkedListNode *current = 0;
     int max_sequence = 0;
+    const size_t prefix_len = strlen(MEDICAL_RECORD_EXAM_ID_PREFIX);
 
     if (out_sequence == 0) {
         return Result_make_failure("exam sequence output missing");
@@ -588,14 +558,14 @@ static Result MedicalRecordService_next_examination_sequence_from_list(
     current = examinations->head;
     while (current != 0) {
         const ExaminationRecord *record = (const ExaminationRecord *)current->data;
-        const char *suffix = record->examination_id + strlen(MEDICAL_RECORD_EXAM_ID_PREFIX);
+        const char *suffix = record->examination_id + prefix_len;
         char *end_pointer = 0;
         long value = 0;
 
         if (strncmp(
                 record->examination_id,
                 MEDICAL_RECORD_EXAM_ID_PREFIX,
-                strlen(MEDICAL_RECORD_EXAM_ID_PREFIX)
+                prefix_len
             ) != 0) {
             return Result_make_failure("exam id format invalid");
         }
@@ -629,8 +599,6 @@ static Result MedicalRecordService_next_examination_sequence(
     int *out_sequence
 ) {
     LinkedList examinations;
-    LinkedListNode *current = 0;
-    int max_sequence = 0;
     Result result;
 
     if (out_sequence == 0) {
@@ -642,40 +610,12 @@ static Result MedicalRecordService_next_examination_sequence(
         return result;
     }
 
-    /* 遍历所有检查记录提取最大序列号 */
-    current = examinations.head;
-    while (current != 0) {
-        const ExaminationRecord *record = (const ExaminationRecord *)current->data;
-        const char *suffix = record->examination_id + strlen(MEDICAL_RECORD_EXAM_ID_PREFIX);
-        char *end_pointer = 0;
-        long value = 0;
-
-        if (strncmp(
-                record->examination_id,
-                MEDICAL_RECORD_EXAM_ID_PREFIX,
-                strlen(MEDICAL_RECORD_EXAM_ID_PREFIX)
-            ) != 0) {
-            ExaminationRecordRepository_clear_list(&examinations);
-            return Result_make_failure("exam id format invalid");
-        }
-
-        errno = 0;
-        value = strtol(suffix, &end_pointer, 10);
-        if (errno != 0 || end_pointer == suffix || end_pointer == 0 || *end_pointer != '\0') {
-            ExaminationRecordRepository_clear_list(&examinations);
-            return Result_make_failure("exam id format invalid");
-        }
-
-        if ((int)value > max_sequence) {
-            max_sequence = (int)value;
-        }
-
-        current = current->next;
-    }
-
+    /* Delegate to the list-based sequence extraction */
+    result = MedicalRecordService_next_examination_sequence_from_list(
+        &examinations, out_sequence
+    );
     ExaminationRecordRepository_clear_list(&examinations);
-    *out_sequence = max_sequence + 1;
-    return Result_make_success("exam sequence ready");
+    return result;
 }
 
 /**

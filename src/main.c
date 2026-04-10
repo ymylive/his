@@ -396,5 +396,6 @@ int main(void) {
 
         /* 退出角色菜单循环后，执行登出操作 */
         MenuApplication_logout(&application);
+        secure_zero(user_id, sizeof(user_id));
     }
 }

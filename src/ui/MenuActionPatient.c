@@ -11,6 +11,7 @@
 #include "ui/MenuActionHandlers.h"
 
 #include <string.h>
+#include "repository/RepositoryUtils.h"
 #include "ui/TuiStyle.h"
 
 Result MenuAction_handle_patient(MenuApplication *app, MenuAction action, FILE *input, FILE *output) {
@@ -76,6 +77,10 @@ Result MenuAction_handle_patient(MenuApplication *app, MenuAction action, FILE *
             );
             if (result.success == 0) {
                 return result;
+            }
+            if (!RepositoryUtils_is_safe_field_text(time_value)) {
+                tui_print_error(output, "输入包含非法字符，请勿使用 | 等特殊符号");
+                return Result_make_failure("invalid input characters");
             }
             /* 创建挂号 */
             tui_spinner_run(output, "正在创建挂号...", 500);

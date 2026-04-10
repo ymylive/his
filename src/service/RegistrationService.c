@@ -414,6 +414,7 @@ static Result RegistrationService_next_sequence_from_list(
 ) {
     LinkedListNode *current = 0;
     int max_sequence = 0;
+    const size_t prefix_len = strlen(REGISTRATION_SERVICE_ID_PREFIX);
 
     if (out_sequence == 0) {
         return Result_make_failure("registration sequence output missing");
@@ -430,12 +431,12 @@ static Result RegistrationService_next_sequence_from_list(
         if (strncmp(
                 registration->registration_id,
                 REGISTRATION_SERVICE_ID_PREFIX,
-                strlen(REGISTRATION_SERVICE_ID_PREFIX)) != 0) {
+                prefix_len) != 0) {
             return Result_make_failure("registration id format invalid");
         }
 
         /* 提取前缀后的数字部分 */
-        suffix += strlen(REGISTRATION_SERVICE_ID_PREFIX);
+        suffix += prefix_len;
         if (!RegistrationService_has_text(suffix)) {
             return Result_make_failure("registration id format invalid");
         }
@@ -473,8 +474,6 @@ static Result RegistrationService_next_registration_sequence(
     int *out_sequence
 ) {
     LinkedList registrations;
-    LinkedListNode *current = 0;
-    int max_sequence = 0;
     Result result;
 
     if (out_sequence == 0) {
@@ -486,45 +485,10 @@ static Result RegistrationService_next_registration_sequence(
         return result;
     }
 
-    /* 遍历所有挂号记录提取最大序列号 */
-    current = registrations.head;
-    while (current != 0) {
-        const Registration *registration = (const Registration *)current->data;
-        const char *suffix = registration->registration_id;
-        char *end = 0;
-        long value = 0;
-
-        if (strncmp(
-                registration->registration_id,
-                REGISTRATION_SERVICE_ID_PREFIX,
-                strlen(REGISTRATION_SERVICE_ID_PREFIX)) != 0) {
-            RegistrationRepository_clear_list(&registrations);
-            return Result_make_failure("registration id format invalid");
-        }
-
-        suffix += strlen(REGISTRATION_SERVICE_ID_PREFIX);
-        if (!RegistrationService_has_text(suffix)) {
-            RegistrationRepository_clear_list(&registrations);
-            return Result_make_failure("registration id format invalid");
-        }
-
-        errno = 0;
-        value = strtol(suffix, &end, 10);
-        if (errno != 0 || end == suffix || end == 0 || *end != '\0' || value < 0) {
-            RegistrationRepository_clear_list(&registrations);
-            return Result_make_failure("registration id format invalid");
-        }
-
-        if ((int)value > max_sequence) {
-            max_sequence = (int)value;
-        }
-
-        current = current->next;
-    }
-
+    /* Delegate to the list-based sequence extraction */
+    result = RegistrationService_next_sequence_from_list(&registrations, out_sequence);
     RegistrationRepository_clear_list(&registrations);
-    *out_sequence = max_sequence + 1;
-    return Result_make_success("registration sequence ready");
+    return result;
 }
 
 /**

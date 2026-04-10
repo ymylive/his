@@ -345,6 +345,7 @@ int InputHelper_read_line(FILE *input, char *buffer, size_t capacity) {
 
                 if (ch == EOF) {
                     tcsetattr(input_fd, TCSANOW, &old_settings);
+                    memset(buffer, 0, capacity);  /* clear sensitive data before returning */
                     buffer[0] = '\0';
                     return 0;
                 }
@@ -424,7 +425,11 @@ int InputHelper_read_line(FILE *input, char *buffer, size_t capacity) {
                         utf8_len = 4;       /* 11110xxx: 4字节（emoji） */
                     }
 
-                    /* 检查缓冲区空间 */
+                    /* 检查缓冲区空间：ensures length + utf8_len <= capacity - 2,
+                     * so after writing utf8_len bytes the null terminator at
+                     * buffer[length + utf8_len] lands at most at index capacity - 2,
+                     * which is within bounds.  All continuation bytes in the loop
+                     * below are covered by this single pre-check. */
                     if (length + (size_t)utf8_len >= capacity - 1) {
                         /* 输入过长 */
                         tcsetattr(input_fd, TCSANOW, &old_settings);
@@ -440,6 +445,7 @@ int InputHelper_read_line(FILE *input, char *buffer, size_t capacity) {
                         int next = fgetc(input);
                         if (next == EOF) {
                             tcsetattr(input_fd, TCSANOW, &old_settings);
+                            memset(buffer, 0, capacity);  /* clear sensitive data before returning */
                             buffer[0] = '\0';
                             return 0;
                         }
