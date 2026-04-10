@@ -316,6 +316,22 @@ int main(void) {
                         continue;
                     }
 
+                    /* 从输出中提取系统生成的患者编号
+                     * 输出格式: "患者已添加: PAT0101 | ..."
+                     * 提取 ": " 后到 " |" 之间的 ID */
+                    {
+                        const char *id_start = strstr(reg_output, ": ");
+                        const char *id_end = 0;
+                        if (id_start) {
+                            id_start += 2; /* skip ": " */
+                            id_end = strstr(id_start, " |");
+                            if (id_end && (size_t)(id_end - id_start) < sizeof(new_patient.patient_id)) {
+                                memset(new_patient.patient_id, 0, sizeof(new_patient.patient_id));
+                                memcpy(new_patient.patient_id, id_start, (size_t)(id_end - id_start));
+                            }
+                        }
+                    }
+
                     /* 创建用户账号（用患者ID作为用户ID） */
                     result = AuthService_register_user(
                         &application.auth_service,
