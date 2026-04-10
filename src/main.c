@@ -32,6 +32,7 @@
 #include "common/InputHelper.h"
 #include "common/UpdateChecker.h"
 #include "ui/DemoData.h"
+#include "ui/MenuActionHandlers.h"
 #include "ui/MenuApplication.h"
 #include "ui/MenuController.h"
 #include "ui/TuiPanel.h"
@@ -231,6 +232,121 @@ int main(void) {
                 tui_print_warning(stdout, "角色未配置登录映射。");
                 tui_delay(1000);
                 continue;
+            }
+
+            /* 患者角色：提供登录/注册选择 */
+            if (role == MENU_ROLE_PATIENT) {
+                char choice[16];
+                int read_result = 0;
+
+                tui_print_section(stdout, TUI_HEART, "患者入口");
+                fprintf(stdout,
+                    "\n  " TUI_BOLD_YELLOW "[1]" TUI_RESET " 登录已有账号\n"
+                    "  " TUI_BOLD_YELLOW "[2]" TUI_RESET " 注册新账号\n\n");
+                tui_print_prompt(stdout, "请选择 (ESC返回): ");
+                read_result = InputHelper_read_line(stdin, choice, sizeof(choice));
+                if (read_result == 0) {
+                    tui_clear_screen();
+                    tui_animate_goodbye(stdout);
+                    tui_show_cursor(stdout);
+                    return 0;
+                }
+                if (read_result == -2) {
+                    continue; /* back to role selection */
+                }
+
+                if (strcmp(choice, "2") == 0) {
+                    /* ── 患者自助注册流程 ── */
+                    Patient new_patient;
+                    char reg_password[128];
+                    char reg_confirm[128];
+                    char reg_output[2048];
+                    MenuApplicationPromptContext reg_ctx;
+                    reg_ctx.input = stdin;
+                    reg_ctx.output = stdout;
+
+                    tui_print_section(stdout, TUI_SPARKLE, "患者注册");
+                    fprintf(stdout, "\n");
+
+                    /* 填写患者信息表单 */
+                    result = MenuApplication_prompt_patient_form(&reg_ctx, &new_patient, 0);
+                    if (result.success == 0) {
+                        if (InputHelper_is_esc_cancel(result.message)) {
+                            continue; /* back to role selection */
+                        }
+                        tui_animate_error(stdout, result.message);
+                        tui_delay(800);
+                        continue;
+                    }
+
+                    /* 设置密码 */
+                    tui_print_prompt(stdout, "设置登录密码: ");
+                    read_result = InputHelper_read_line(stdin, reg_password, sizeof(reg_password));
+                    if (read_result <= 0 || read_result == -2) {
+                        secure_zero(reg_password, sizeof(reg_password));
+                        continue;
+                    }
+
+                    tui_print_prompt(stdout, "确认登录密码: ");
+                    read_result = InputHelper_read_line(stdin, reg_confirm, sizeof(reg_confirm));
+                    if (read_result <= 0 || read_result == -2) {
+                        secure_zero(reg_password, sizeof(reg_password));
+                        secure_zero(reg_confirm, sizeof(reg_confirm));
+                        continue;
+                    }
+
+                    if (strcmp(reg_password, reg_confirm) != 0) {
+                        tui_animate_error(stdout, "两次输入的密码不一致");
+                        secure_zero(reg_password, sizeof(reg_password));
+                        secure_zero(reg_confirm, sizeof(reg_confirm));
+                        tui_delay(800);
+                        continue;
+                    }
+                    secure_zero(reg_confirm, sizeof(reg_confirm));
+
+                    /* 创建患者记录 */
+                    tui_spinner_run(stdout, "正在注册...", 500);
+                    result = MenuApplication_add_patient(
+                        &application, &new_patient,
+                        reg_output, sizeof(reg_output));
+                    if (result.success == 0) {
+                        tui_animate_error(stdout, result.message);
+                        secure_zero(reg_password, sizeof(reg_password));
+                        tui_delay(800);
+                        continue;
+                    }
+
+                    /* 创建用户账号（用患者ID作为用户ID） */
+                    result = AuthService_register_user(
+                        &application.auth_service,
+                        new_patient.patient_id,
+                        reg_password,
+                        USER_ROLE_PATIENT);
+                    secure_zero(reg_password, sizeof(reg_password));
+
+                    if (result.success == 0) {
+                        tui_animate_error(stdout, result.message);
+                        tui_delay(800);
+                        continue;
+                    }
+
+                    /* 注册成功提示 */
+                    fprintf(stdout, "\n");
+                    tui_animate_success(stdout, "注册成功！");
+                    fprintf(stdout, "\n");
+                    tui_print_kv_colored(stdout, "您的账号", new_patient.patient_id, TUI_BOLD_CYAN);
+                    tui_print_info(stdout, "请牢记您的账号和密码，使用此账号登录系统。");
+                    fprintf(stdout, "\n");
+                    tui_print_info(stdout, "按回车返回登录...");
+                    fflush(stdout);
+                    InputHelper_read_line(stdin, choice, sizeof(choice));
+                    continue; /* back to role selection so user can login */
+                }
+
+                if (strcmp(choice, "1") != 0) {
+                    continue; /* invalid choice, back to role selection */
+                }
+                /* choice == "1": fall through to normal login */
             }
 
             /* 登录循环：用户编号处按 ESC 返回角色选择，
