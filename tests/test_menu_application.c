@@ -977,6 +977,8 @@ static void test_execute_action_rejects_invalid_medicine_price(void) {
         "abc\n"
         "5\n"
         "DEP0001\n"
+        "100\n"
+        "DEP0001\n"
         "2\n",
         output,
         sizeof(output)

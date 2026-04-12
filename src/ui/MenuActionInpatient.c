@@ -80,23 +80,26 @@ Result MenuAction_handle_inpatient(MenuApplication *app, MenuAction action, FILE
             if (result.success == 0) {
                 return result;
             }
-            result = MenuApplication_prompt_line(
-                &context,
-                "入院时间: ",
-                time_value,
-                sizeof(time_value)
-            );
-            if (result.success == 0) {
-                return result;
-            }
-            result = MenuApplication_prompt_line(
-                &context,
-                "住院摘要: ",
-                long_text,
-                sizeof(long_text)
-            );
-            if (result.success == 0) {
-                return result;
+            {
+                FormPanel admit_panel;
+                memset(&admit_panel, 0, sizeof(admit_panel));
+                snprintf(admit_panel.title, sizeof(admit_panel.title), TUI_MEDICAL " \xe5\x85\xa5\xe9\x99\xa2\xe7\x99\xbb\xe8\xae\xb0");
+
+                snprintf(admit_panel.fields[0].label, FORM_LABEL_CAPACITY, "\xe5\x85\xa5\xe9\x99\xa2\xe6\x97\xb6\xe9\x97\xb4:");
+                admit_panel.fields[0].is_required = 1;
+
+                snprintf(admit_panel.fields[1].label, FORM_LABEL_CAPACITY, "\xe4\xbd\x8f\xe9\x99\xa2\xe6\x91\x98\xe8\xa6\x81:");
+                snprintf(admit_panel.fields[1].default_value, FORM_VALUE_CAPACITY, "observation");
+
+                admit_panel.field_count = 2;
+
+                result = MenuApplication_form_dispatch(&context, &admit_panel);
+                if (result.success == 0) {
+                    return result;
+                }
+
+                strncpy(time_value, admit_panel.fields[0].value, sizeof(time_value) - 1);
+                strncpy(long_text, admit_panel.fields[1].value, sizeof(long_text) - 1);
             }
             tui_spinner_run(output, "正在办理入院手续...", 600);
             result = MenuApplication_admit_patient(
@@ -314,23 +317,26 @@ Result MenuAction_handle_inpatient(MenuApplication *app, MenuAction action, FILE
                 }
                 strncpy(third_id, order_type_labels[type_index], sizeof(third_id) - 1);
             }
-            result = MenuApplication_prompt_line(
-                &context,
-                "医嘱内容: ",
-                long_text,
-                sizeof(long_text)
-            );
-            if (result.success == 0) {
-                return result;
-            }
-            result = MenuApplication_prompt_line(
-                &context,
-                "开具时间: ",
-                time_value,
-                sizeof(time_value)
-            );
-            if (result.success == 0) {
-                return result;
+            {
+                FormPanel order_panel;
+                memset(&order_panel, 0, sizeof(order_panel));
+                snprintf(order_panel.title, sizeof(order_panel.title), TUI_MEDICAL " \xe5\xbc\x80\xe5\x85\xb7\xe5\x8c\xbb\xe5\x98\xb1");
+
+                snprintf(order_panel.fields[0].label, FORM_LABEL_CAPACITY, "\xe5\x8c\xbb\xe5\x98\xb1\xe5\x86\x85\xe5\xae\xb9:");
+                order_panel.fields[0].is_required = 1;
+
+                snprintf(order_panel.fields[1].label, FORM_LABEL_CAPACITY, "\xe5\xbc\x80\xe5\x85\xb7\xe6\x97\xb6\xe9\x97\xb4:");
+                order_panel.fields[1].is_required = 1;
+
+                order_panel.field_count = 2;
+
+                result = MenuApplication_form_dispatch(&context, &order_panel);
+                if (result.success == 0) {
+                    return result;
+                }
+
+                strncpy(long_text, order_panel.fields[0].value, sizeof(long_text) - 1);
+                strncpy(time_value, order_panel.fields[1].value, sizeof(time_value) - 1);
             }
             tui_spinner_run(output, "正在创建医嘱...", 400);
             result = MenuApplication_create_inpatient_order(
@@ -371,23 +377,26 @@ Result MenuAction_handle_inpatient(MenuApplication *app, MenuAction action, FILE
 
         case MENU_ACTION_INPATIENT_EXECUTE_ORDER:
             tui_print_section(output, TUI_MEDICAL, "执行住院医嘱");
-            result = MenuApplication_prompt_line(
-                &context,
-                "医嘱编号: ",
-                first_id,
-                sizeof(first_id)
-            );
-            if (result.success == 0) {
-                return result;
-            }
-            result = MenuApplication_prompt_line(
-                &context,
-                "执行时间: ",
-                time_value,
-                sizeof(time_value)
-            );
-            if (result.success == 0) {
-                return result;
+            {
+                FormPanel exec_panel;
+                memset(&exec_panel, 0, sizeof(exec_panel));
+                snprintf(exec_panel.title, sizeof(exec_panel.title), TUI_MEDICAL " \xe6\x89\xa7\xe8\xa1\x8c\xe5\x8c\xbb\xe5\x98\xb1");
+
+                snprintf(exec_panel.fields[0].label, FORM_LABEL_CAPACITY, "\xe5\x8c\xbb\xe5\x98\xb1\xe7\xbc\x96\xe5\x8f\xb7:");
+                exec_panel.fields[0].is_required = 1;
+
+                snprintf(exec_panel.fields[1].label, FORM_LABEL_CAPACITY, "\xe6\x89\xa7\xe8\xa1\x8c\xe6\x97\xb6\xe9\x97\xb4:");
+                exec_panel.fields[1].is_required = 1;
+
+                exec_panel.field_count = 2;
+
+                result = MenuApplication_form_dispatch(&context, &exec_panel);
+                if (result.success == 0) {
+                    return result;
+                }
+
+                strncpy(first_id, exec_panel.fields[0].value, sizeof(first_id) - 1);
+                strncpy(time_value, exec_panel.fields[1].value, sizeof(time_value) - 1);
             }
             tui_spinner_run(output, "正在执行医嘱...", 400);
             result = MenuApplication_execute_inpatient_order(
@@ -402,23 +411,26 @@ Result MenuAction_handle_inpatient(MenuApplication *app, MenuAction action, FILE
 
         case MENU_ACTION_INPATIENT_CANCEL_ORDER:
             tui_print_section(output, TUI_MEDICAL, "取消住院医嘱");
-            result = MenuApplication_prompt_line(
-                &context,
-                "医嘱编号: ",
-                first_id,
-                sizeof(first_id)
-            );
-            if (result.success == 0) {
-                return result;
-            }
-            result = MenuApplication_prompt_line(
-                &context,
-                "取消时间: ",
-                time_value,
-                sizeof(time_value)
-            );
-            if (result.success == 0) {
-                return result;
+            {
+                FormPanel cancel_panel;
+                memset(&cancel_panel, 0, sizeof(cancel_panel));
+                snprintf(cancel_panel.title, sizeof(cancel_panel.title), TUI_MEDICAL " \xe5\x8f\x96\xe6\xb6\x88\xe5\x8c\xbb\xe5\x98\xb1");
+
+                snprintf(cancel_panel.fields[0].label, FORM_LABEL_CAPACITY, "\xe5\x8c\xbb\xe5\x98\xb1\xe7\xbc\x96\xe5\x8f\xb7:");
+                cancel_panel.fields[0].is_required = 1;
+
+                snprintf(cancel_panel.fields[1].label, FORM_LABEL_CAPACITY, "\xe5\x8f\x96\xe6\xb6\x88\xe6\x97\xb6\xe9\x97\xb4:");
+                cancel_panel.fields[1].is_required = 1;
+
+                cancel_panel.field_count = 2;
+
+                result = MenuApplication_form_dispatch(&context, &cancel_panel);
+                if (result.success == 0) {
+                    return result;
+                }
+
+                strncpy(first_id, cancel_panel.fields[0].value, sizeof(first_id) - 1);
+                strncpy(time_value, cancel_panel.fields[1].value, sizeof(time_value) - 1);
             }
             tui_spinner_run(output, "正在取消医嘱...", 400);
             result = MenuApplication_cancel_inpatient_order(
@@ -476,32 +488,30 @@ Result MenuAction_handle_inpatient(MenuApplication *app, MenuAction action, FILE
                 }
                 strncpy(third_id, type_labels[type_index], sizeof(third_id) - 1);
             }
-            result = MenuApplication_prompt_line(
-                &context,
-                "护士姓名: ",
-                second_id,
-                sizeof(second_id)
-            );
-            if (result.success == 0) {
-                return result;
-            }
-            result = MenuApplication_prompt_line(
-                &context,
-                "护理内容: ",
-                long_text,
-                sizeof(long_text)
-            );
-            if (result.success == 0) {
-                return result;
-            }
-            result = MenuApplication_prompt_line(
-                &context,
-                "记录时间: ",
-                time_value,
-                sizeof(time_value)
-            );
-            if (result.success == 0) {
-                return result;
+            {
+                FormPanel nurse_panel;
+                memset(&nurse_panel, 0, sizeof(nurse_panel));
+                snprintf(nurse_panel.title, sizeof(nurse_panel.title), TUI_MEDICAL " \xe6\x8a\xa4\xe7\x90\x86\xe8\xae\xb0\xe5\xbd\x95");
+
+                snprintf(nurse_panel.fields[0].label, FORM_LABEL_CAPACITY, "\xe6\x8a\xa4\xe5\xa3\xab\xe5\xa7\x93\xe5\x90\x8d:");
+                nurse_panel.fields[0].is_required = 1;
+
+                snprintf(nurse_panel.fields[1].label, FORM_LABEL_CAPACITY, "\xe6\x8a\xa4\xe7\x90\x86\xe5\x86\x85\xe5\xae\xb9:");
+                nurse_panel.fields[1].is_required = 1;
+
+                snprintf(nurse_panel.fields[2].label, FORM_LABEL_CAPACITY, "\xe8\xae\xb0\xe5\xbd\x95\xe6\x97\xb6\xe9\x97\xb4:");
+                nurse_panel.fields[2].is_required = 1;
+
+                nurse_panel.field_count = 3;
+
+                result = MenuApplication_form_dispatch(&context, &nurse_panel);
+                if (result.success == 0) {
+                    return result;
+                }
+
+                strncpy(second_id, nurse_panel.fields[0].value, sizeof(second_id) - 1);
+                strncpy(long_text, nurse_panel.fields[1].value, sizeof(long_text) - 1);
+                strncpy(time_value, nurse_panel.fields[2].value, sizeof(time_value) - 1);
             }
             tui_spinner_run(output, "正在记录护理...", 400);
             result = MenuApplication_create_nursing_record(

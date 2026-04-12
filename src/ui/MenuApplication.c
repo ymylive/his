@@ -45,6 +45,310 @@
 #define TUI_CLEAR_LINE       "\033[K"        /* Clear to end of line */
 #define TUI_CLEAR_LINE_NL    "\033[K\n"      /* Clear to end of line + newline */
 
+/* ═══════════════════════════════════════════════════════════════
+ *  Form Panel System - interactive multi-field form display
+ *  Types are defined in MenuActionHandlers.h
+ * ═══════════════════════════════════════════════════════════════ */
+
+/**
+ * @brief Render the form panel to output.
+ *
+ * Draws the box border, title, all fields with status indicators.
+ * For the current field, the cursor is left at the input position
+ * (no trailing newline). Returns the total number of complete lines
+ * rendered (excluding the partial current-field line).
+ */
+static int MenuApplication_form_render_panel(
+    FILE *output,
+    const FormPanel *panel
+) {
+    int i;
+    int lines = 0;
+    int box_width = 50;
+
+    /* Top border */
+    fprintf(output, "  " TUI_OC_DIM);
+    for (i = 0; i < box_width; i++) fprintf(output, TUI_DH);
+    fprintf(output, TUI_RESET TUI_CLEAR_LINE_NL);
+    lines++;
+
+    /* Title */
+    fprintf(output, "  " TUI_BOLD "  %s" TUI_RESET TUI_CLEAR_LINE_NL, panel->title);
+    lines++;
+
+    /* Separator */
+    fprintf(output, "  " TUI_OC_DIM);
+    for (i = 0; i < box_width; i++) fprintf(output, TUI_H);
+    fprintf(output, TUI_RESET TUI_CLEAR_LINE_NL);
+    lines++;
+
+    /* Fields */
+    for (i = 0; i < panel->field_count; i++) {
+        const FormField *f = &panel->fields[i];
+        const char *indicator = (i == panel->current_field)
+            ? TUI_BOLD_CYAN TUI_ARROW " " TUI_RESET
+            : "  ";
+
+        if (f->is_filled) {
+            /* Show filled value in green */
+            fprintf(output, "  %s" TUI_DIM "%-12s" TUI_RESET " " TUI_BOLD_GREEN "%s" TUI_RESET TUI_CLEAR_LINE_NL,
+                    indicator, f->label, f->value);
+            lines++;
+        } else if (i == panel->current_field) {
+            /* Current field - show prompt, leave cursor for input */
+            if (f->hint[0] != '\0') {
+                fprintf(output, "  %s" TUI_DIM "%-12s" TUI_RESET " " TUI_OC_MUTED "(%s)" TUI_RESET " ",
+                        indicator, f->label, f->hint);
+            } else {
+                fprintf(output, "  %s" TUI_DIM "%-12s" TUI_RESET " ", indicator, f->label);
+            }
+            /* No newline - cursor stays here for user input */
+        } else {
+            /* Pending field */
+            if (f->is_required) {
+                fprintf(output, "  %s" TUI_DIM "%-12s" TUI_RESET " " TUI_OC_MUTED "(\xe5\xbe\x85\xe5\xa1\xab\xe5\x86\x99)" TUI_RESET TUI_CLEAR_LINE_NL,
+                        indicator, f->label);
+            } else {
+                if (f->default_value[0] != '\0') {
+                    fprintf(output, "  %s" TUI_DIM "%-12s" TUI_RESET " " TUI_OC_DIM "(\xe5\x8f\xaf\xe7\x95\x99\xe7\xa9\xba, \xe9\xbb\x98\xe8\xae\xa4: %s)" TUI_RESET TUI_CLEAR_LINE_NL,
+                            indicator, f->label, f->default_value);
+                } else {
+                    fprintf(output, "  %s" TUI_DIM "%-12s" TUI_RESET " " TUI_OC_DIM "(\xe5\x8f\xaf\xe7\x95\x99\xe7\xa9\xba)" TUI_RESET TUI_CLEAR_LINE_NL,
+                            indicator, f->label);
+                }
+            }
+            lines++;
+        }
+    }
+
+    /* If we are past all fields (final render), add bottom section now */
+    if (panel->current_field < 0 || panel->current_field >= panel->field_count) {
+        /* Bottom border */
+        fprintf(output, "  " TUI_OC_DIM);
+        for (i = 0; i < box_width; i++) fprintf(output, TUI_H);
+        fprintf(output, TUI_RESET TUI_CLEAR_LINE_NL);
+        lines++;
+    }
+
+    return lines;
+}
+
+/**
+ * @brief Render the trailing section (bottom border + help text) after user input.
+ *
+ * Called after the user presses Enter on the current field, so the
+ * newline from their input is already on screen.
+ */
+static int MenuApplication_form_render_tail(FILE *output, int box_width) {
+    int i;
+    int lines = 0;
+
+    /* Bottom border */
+    fprintf(output, "  " TUI_OC_DIM);
+    for (i = 0; i < box_width; i++) fprintf(output, TUI_H);
+    fprintf(output, TUI_RESET TUI_CLEAR_LINE_NL);
+    lines++;
+
+    /* Help text */
+    fprintf(output, "  " TUI_OC_DIM "\xe5\x9b\x9e\xe8\xbd\xa6\xe8\xb7\xb3\xe8\xbf\x87\xe5\x8f\xaf\xe9\x80\x89\xe5\xad\x97\xe6\xae\xb5 | ESC\xe5\x8f\x96\xe6\xb6\x88" TUI_RESET TUI_CLEAR_LINE_NL);
+    lines++;
+
+    return lines;
+}
+
+/**
+ * @brief Run the form panel interactively (TTY mode).
+ *
+ * Renders the form, reads each field, redraws after each input.
+ * For non-TTY input, the caller should fall back to simple sequential prompts.
+ */
+static Result MenuApplication_form_run(
+    MenuApplicationPromptContext *context,
+    FormPanel *panel
+) {
+    int prev_lines = 0;
+    int tail_lines = 0;
+    char input_buffer[FORM_VALUE_CAPACITY];
+    int box_width = 50;
+
+    for (panel->current_field = 0; panel->current_field < panel->field_count; panel->current_field++) {
+        FormField *field = &panel->fields[panel->current_field];
+        int read_result;
+        int body_lines;
+
+        /* Move cursor up to redraw form */
+        if (prev_lines > 0) {
+            int total_up = prev_lines + tail_lines;
+            fprintf(context->output, TUI_CURSOR_UP_FMT, total_up);
+        }
+
+        /* Render form body - cursor ends at current field input position */
+        body_lines = MenuApplication_form_render_panel(context->output, panel);
+        fflush(context->output);
+
+        /* Read input */
+        memset(input_buffer, 0, sizeof(input_buffer));
+        read_result = InputHelper_read_line(context->input, input_buffer, sizeof(input_buffer));
+
+        if (read_result == 0) {
+            return Result_make_failure("input ended");
+        }
+        if (read_result == -2) {
+            return Result_make_failure(INPUT_HELPER_ESC_MESSAGE);
+        }
+
+        /* Render tail (bottom border + help) after the input line */
+        tail_lines = MenuApplication_form_render_tail(context->output, box_width);
+
+        /* Total lines for next cursor-up: body + 1 (input line) + tail */
+        prev_lines = body_lines + 1; /* body lines + the user's input line */
+
+        /* Trim input */
+        {
+            char *start = input_buffer;
+            char *end;
+            while (*start != '\0' && isspace((unsigned char)*start)) start++;
+            if (start != input_buffer && start[0] != '\0') {
+                memmove(input_buffer, start, strlen(start) + 1);
+            } else if (start != input_buffer) {
+                input_buffer[0] = '\0';
+            }
+            end = input_buffer + strlen(input_buffer);
+            while (end > input_buffer && isspace((unsigned char)*(end - 1))) end--;
+            *end = '\0';
+        }
+
+        /* Process input */
+        if (input_buffer[0] == '\0') {
+            /* Empty input - use default */
+            if (field->default_value[0] != '\0') {
+                strncpy(field->value, field->default_value, sizeof(field->value) - 1);
+                field->value[sizeof(field->value) - 1] = '\0';
+                field->is_filled = 1;
+            } else if (field->is_required) {
+                /* Required field can't be empty, re-prompt */
+                panel->current_field--;
+                continue;
+            } else {
+                strncpy(field->value, "\xe6\x97\xa0", sizeof(field->value) - 1);
+                field->value[sizeof(field->value) - 1] = '\0';
+                field->is_filled = 1;
+            }
+        } else {
+            strncpy(field->value, input_buffer, sizeof(field->value) - 1);
+            field->value[sizeof(field->value) - 1] = '\0';
+            field->is_filled = 1;
+        }
+    }
+
+    /* Final render showing all filled values */
+    {
+        int total_up = prev_lines + tail_lines;
+        if (total_up > 0) {
+            fprintf(context->output, TUI_CURSOR_UP_FMT, total_up);
+        }
+        panel->current_field = -1; /* no active field = all done */
+        MenuApplication_form_render_panel(context->output, panel);
+        fprintf(context->output, "\n");
+        fflush(context->output);
+    }
+
+    return Result_make_success("form completed");
+}
+
+/**
+ * @brief Run the form as simple sequential prompts (non-TTY fallback).
+ *
+ * This preserves the original line-by-line behavior for piped input
+ * (tests, scripts), without any cursor control or fancy rendering.
+ */
+static Result MenuApplication_form_run_simple(
+    MenuApplicationPromptContext *context,
+    FormPanel *panel
+) {
+    int i;
+    char input_buffer[FORM_VALUE_CAPACITY];
+
+    for (i = 0; i < panel->field_count; i++) {
+        FormField *field = &panel->fields[i];
+        int read_result;
+
+        /* Print prompt */
+        if (field->hint[0] != '\0') {
+            fprintf(context->output, "%s(%s): ", field->label, field->hint);
+        } else {
+            fprintf(context->output, "%s ", field->label);
+        }
+        fflush(context->output);
+
+        /* Read input */
+        memset(input_buffer, 0, sizeof(input_buffer));
+        read_result = InputHelper_read_line(context->input, input_buffer, sizeof(input_buffer));
+
+        if (read_result == 0) {
+            return Result_make_failure("input ended");
+        }
+        if (read_result == -2) {
+            return Result_make_failure(INPUT_HELPER_ESC_MESSAGE);
+        }
+
+        /* Trim input */
+        {
+            char *start = input_buffer;
+            char *end;
+            while (*start != '\0' && isspace((unsigned char)*start)) start++;
+            if (start != input_buffer && start[0] != '\0') {
+                memmove(input_buffer, start, strlen(start) + 1);
+            } else if (start != input_buffer) {
+                input_buffer[0] = '\0';
+            }
+            end = input_buffer + strlen(input_buffer);
+            while (end > input_buffer && isspace((unsigned char)*(end - 1))) end--;
+            *end = '\0';
+        }
+
+        /* Process input */
+        if (input_buffer[0] == '\0') {
+            if (field->default_value[0] != '\0') {
+                strncpy(field->value, field->default_value, sizeof(field->value) - 1);
+                field->value[sizeof(field->value) - 1] = '\0';
+                field->is_filled = 1;
+            } else if (field->is_required) {
+                i--; /* retry this field */
+                continue;
+            } else {
+                strncpy(field->value, "\xe6\x97\xa0", sizeof(field->value) - 1);
+                field->value[sizeof(field->value) - 1] = '\0';
+                field->is_filled = 1;
+            }
+        } else {
+            strncpy(field->value, input_buffer, sizeof(field->value) - 1);
+            field->value[sizeof(field->value) - 1] = '\0';
+            field->is_filled = 1;
+        }
+    }
+
+    return Result_make_success("form completed");
+}
+
+/**
+ * @brief Run a form panel, auto-detecting TTY vs pipe input.
+ *
+ * In TTY mode, displays the full interactive form panel with
+ * ANSI cursor control. In non-TTY mode (pipes, tests), falls
+ * back to simple sequential prompts.
+ */
+Result MenuApplication_form_dispatch(
+    MenuApplicationPromptContext *context,
+    FormPanel *panel
+) {
+    int input_fd = fileno(context->input);
+    if (input_fd >= 0 && MenuApp_isatty(input_fd)) {
+        return MenuApplication_form_run(context, panel);
+    }
+    return MenuApplication_form_run_simple(context, panel);
+}
+
 /**
  * @brief 检查字符串是否为空白（NULL、空字符串或仅含空白字符）
  * @param text 待检查的字符串
@@ -3394,93 +3698,94 @@ Result MenuApplication_prompt_patient_form(
     Patient *out_patient,
     int require_patient_id
 ) {
-    int gender = 0;
-    int age = 0;
-    int is_inpatient = 0;
+    FormPanel panel;
+    int idx = 0;
     Result result;
 
     if (out_patient == 0) {
         return Result_make_failure("patient form missing");
     }
 
+    memset(&panel, 0, sizeof(panel));
     memset(out_patient, 0, sizeof(*out_patient));
+    snprintf(panel.title, sizeof(panel.title), TUI_MEDICAL " \xe6\x82\xa3\xe8\x80\x85\xe4\xbf\xa1\xe6\x81\xaf\xe5\xbd\x95\xe5\x85\xa5");
+
     if (require_patient_id != 0) {
-        result = MenuApplication_prompt_line(
-            context,
-            "患者编号: ",
-            out_patient->patient_id,
-            sizeof(out_patient->patient_id)
-        );
-        if (result.success == 0) {
-            return result;
-        }
+        snprintf(panel.fields[idx].label, FORM_LABEL_CAPACITY, "\xe6\x82\xa3\xe8\x80\x85\xe7\xbc\x96\xe5\x8f\xb7:");
+        panel.fields[idx].is_required = 1;
+        idx++;
     }
-    result = MenuApplication_prompt_line(
-        context,
-        "姓名: ",
-        out_patient->name,
-        sizeof(out_patient->name)
-    );
+
+    snprintf(panel.fields[idx].label, FORM_LABEL_CAPACITY, "\xe5\xa7\x93\xe5\x90\x8d:");
+    panel.fields[idx].is_required = 1;
+    idx++;
+
+    snprintf(panel.fields[idx].label, FORM_LABEL_CAPACITY, "\xe6\x80\xa7\xe5\x88\xab:");
+    snprintf(panel.fields[idx].hint, FORM_HINT_CAPACITY, "0\xe6\x9c\xaa\xe7\x9f\xa5/1\xe7\x94\xb7/2\xe5\xa5\xb3");
+    snprintf(panel.fields[idx].default_value, FORM_VALUE_CAPACITY, "0");
+    idx++;
+
+    snprintf(panel.fields[idx].label, FORM_LABEL_CAPACITY, "\xe5\xb9\xb4\xe9\xbe\x84:");
+    panel.fields[idx].is_required = 1;
+    idx++;
+
+    snprintf(panel.fields[idx].label, FORM_LABEL_CAPACITY, "\xe8\x81\x94\xe7\xb3\xbb\xe6\x96\xb9\xe5\xbc\x8f:");
+    panel.fields[idx].is_required = 1;
+    idx++;
+
+    snprintf(panel.fields[idx].label, FORM_LABEL_CAPACITY, "\xe8\xba\xab\xe4\xbb\xbd\xe8\xaf\x81\xe5\x8f\xb7:");
+    panel.fields[idx].is_required = 1;
+    idx++;
+
+    snprintf(panel.fields[idx].label, FORM_LABEL_CAPACITY, "\xe8\xbf\x87\xe6\x95\x8f\xe5\x8f\xb2:");
+    snprintf(panel.fields[idx].default_value, FORM_VALUE_CAPACITY, "\xe6\x97\xa0");
+    idx++;
+
+    snprintf(panel.fields[idx].label, FORM_LABEL_CAPACITY, "\xe7\x97\x85\xe5\x8f\xb2:");
+    snprintf(panel.fields[idx].default_value, FORM_VALUE_CAPACITY, "\xe6\x97\xa0");
+    idx++;
+
+    snprintf(panel.fields[idx].label, FORM_LABEL_CAPACITY, "\xe6\x98\xaf\xe5\x90\xa6\xe4\xbd\x8f\xe9\x99\xa2:");
+    snprintf(panel.fields[idx].hint, FORM_HINT_CAPACITY, "0\xe5\x90\xa6/1\xe6\x98\xaf");
+    snprintf(panel.fields[idx].default_value, FORM_VALUE_CAPACITY, "0");
+    idx++;
+
+    snprintf(panel.fields[idx].label, FORM_LABEL_CAPACITY, "\xe5\xa4\x87\xe6\xb3\xa8:");
+    snprintf(panel.fields[idx].default_value, FORM_VALUE_CAPACITY, "\xe6\x97\xa0");
+    idx++;
+
+    panel.field_count = idx;
+
+    result = MenuApplication_form_dispatch(context, &panel);
     if (result.success == 0) {
         return result;
     }
-    result = MenuApplication_prompt_int(context, "性别(0未知/1男/2女): ", &gender);
-    if (result.success == 0) {
-        return result;
+
+    /* Parse form values into Patient struct */
+    idx = 0;
+    if (require_patient_id != 0) {
+        strncpy(out_patient->patient_id, panel.fields[idx].value, sizeof(out_patient->patient_id) - 1);
+        idx++;
     }
-    out_patient->gender = (PatientGender)gender;
-    result = MenuApplication_prompt_int(context, "年龄: ", &age);
-    if (result.success == 0) {
-        return result;
-    }
-    out_patient->age = age;
-    result = MenuApplication_prompt_line(
-        context,
-        "联系方式: ",
-        out_patient->contact,
-        sizeof(out_patient->contact)
-    );
-    if (result.success == 0) {
-        return result;
-    }
-    result = MenuApplication_prompt_line(
-        context,
-        "身份证号: ",
-        out_patient->id_card,
-        sizeof(out_patient->id_card)
-    );
-    if (result.success == 0) {
-        return result;
-    }
-    result = MenuApplication_prompt_line(
-        context,
-        "过敏史: ",
-        out_patient->allergy,
-        sizeof(out_patient->allergy)
-    );
-    if (result.success == 0) {
-        return result;
-    }
-    result = MenuApplication_prompt_line(
-        context,
-        "病史: ",
-        out_patient->medical_history,
-        sizeof(out_patient->medical_history)
-    );
-    if (result.success == 0) {
-        return result;
-    }
-    result = MenuApplication_prompt_int(context, "是否住院(0否/1是): ", &is_inpatient);
-    if (result.success == 0) {
-        return result;
-    }
-    out_patient->is_inpatient = is_inpatient;
-    return MenuApplication_prompt_line(
-        context,
-        "备注: ",
-        out_patient->remarks,
-        sizeof(out_patient->remarks)
-    );
+    strncpy(out_patient->name, panel.fields[idx].value, sizeof(out_patient->name) - 1);
+    idx++;
+    out_patient->gender = (PatientGender)atoi(panel.fields[idx].value);
+    idx++;
+    out_patient->age = atoi(panel.fields[idx].value);
+    idx++;
+    strncpy(out_patient->contact, panel.fields[idx].value, sizeof(out_patient->contact) - 1);
+    idx++;
+    strncpy(out_patient->id_card, panel.fields[idx].value, sizeof(out_patient->id_card) - 1);
+    idx++;
+    strncpy(out_patient->allergy, panel.fields[idx].value, sizeof(out_patient->allergy) - 1);
+    idx++;
+    strncpy(out_patient->medical_history, panel.fields[idx].value, sizeof(out_patient->medical_history) - 1);
+    idx++;
+    out_patient->is_inpatient = atoi(panel.fields[idx].value);
+    idx++;
+    strncpy(out_patient->remarks, panel.fields[idx].value, sizeof(out_patient->remarks) - 1);
+
+    return Result_make_success("patient form ready");
 }
 
 /** @brief 交互式采集药品信息表单（名称、单价、库存、阈值等） */
@@ -3489,89 +3794,90 @@ Result MenuApplication_prompt_medicine_form(
     Medicine *out_medicine,
     int require_medicine_id
 ) {
-    char price_buffer[64];
+    FormPanel panel;
+    int idx = 0;
     char *end_pointer = 0;
-    int stock = 0;
-    int threshold = 0;
     Result result;
 
     if (out_medicine == 0) {
         return Result_make_failure("medicine form missing");
     }
 
+    memset(&panel, 0, sizeof(panel));
     memset(out_medicine, 0, sizeof(*out_medicine));
+    snprintf(panel.title, sizeof(panel.title), TUI_FLASK " \xe8\x8d\xaf\xe5\x93\x81\xe4\xbf\xa1\xe6\x81\xaf\xe5\xbd\x95\xe5\x85\xa5");
+
     if (require_medicine_id != 0) {
-        result = MenuApplication_prompt_line(
-            context,
-            "药品编号: ",
-            out_medicine->medicine_id,
-            sizeof(out_medicine->medicine_id)
-        );
-        if (result.success == 0) {
-            return result;
-        }
+        snprintf(panel.fields[idx].label, FORM_LABEL_CAPACITY, "\xe8\x8d\xaf\xe5\x93\x81\xe7\xbc\x96\xe5\x8f\xb7:");
+        panel.fields[idx].is_required = 1;
+        idx++;
     }
-    result = MenuApplication_prompt_line(
-        context,
-        "药品名称: ",
-        out_medicine->name,
-        sizeof(out_medicine->name)
-    );
+
+    snprintf(panel.fields[idx].label, FORM_LABEL_CAPACITY, "\xe8\x8d\xaf\xe5\x93\x81\xe5\x90\x8d\xe7\xa7\xb0:");
+    panel.fields[idx].is_required = 1;
+    idx++;
+
+    snprintf(panel.fields[idx].label, FORM_LABEL_CAPACITY, "\xe8\x8d\xaf\xe5\x93\x81\xe5\x88\xab\xe5\x90\x8d:");
+    snprintf(panel.fields[idx].default_value, FORM_VALUE_CAPACITY, "\xe6\x97\xa0");
+    idx++;
+
+    snprintf(panel.fields[idx].label, FORM_LABEL_CAPACITY, "\xe8\x8d\xaf\xe5\x93\x81\xe5\x88\x86\xe7\xb1\xbb:");
+    snprintf(panel.fields[idx].default_value, FORM_VALUE_CAPACITY, "\xe6\x97\xa0");
+    idx++;
+
+    snprintf(panel.fields[idx].label, FORM_LABEL_CAPACITY, "\xe5\x8d\x95\xe4\xbb\xb7:");
+    snprintf(panel.fields[idx].hint, FORM_HINT_CAPACITY, "\xe5\x85\x83");
+    panel.fields[idx].is_required = 1;
+    idx++;
+
+    snprintf(panel.fields[idx].label, FORM_LABEL_CAPACITY, "\xe5\xba\x93\xe5\xad\x98:");
+    panel.fields[idx].is_required = 1;
+    idx++;
+
+    snprintf(panel.fields[idx].label, FORM_LABEL_CAPACITY, "\xe7\xa7\x91\xe5\xae\xa4\xe7\xbc\x96\xe5\x8f\xb7:");
+    panel.fields[idx].is_required = 1;
+    idx++;
+
+    snprintf(panel.fields[idx].label, FORM_LABEL_CAPACITY, "\xe5\xba\x93\xe5\xad\x98\xe9\xa2\x84\xe8\xad\xa6:");
+    panel.fields[idx].is_required = 1;
+    idx++;
+
+    panel.field_count = idx;
+
+    result = MenuApplication_form_dispatch(context, &panel);
     if (result.success == 0) {
         return result;
     }
-    result = MenuApplication_prompt_line(
-        context,
-        "药品别名/通用名(可留空): ",
-        out_medicine->alias,
-        sizeof(out_medicine->alias)
-    );
-    if (result.success == 0) {
-        return result;
+
+    /* Parse form values into Medicine struct */
+    idx = 0;
+    if (require_medicine_id != 0) {
+        strncpy(out_medicine->medicine_id, panel.fields[idx].value, sizeof(out_medicine->medicine_id) - 1);
+        idx++;
     }
-    result = MenuApplication_prompt_line(
-        context,
-        "药品分类(如 抗生素/解热镇痛, 可留空): ",
-        out_medicine->category,
-        sizeof(out_medicine->category)
-    );
-    if (result.success == 0) {
-        return result;
-    }
-    result = MenuApplication_prompt_line(context, "单价: ", price_buffer, sizeof(price_buffer));
-    if (result.success == 0) {
-        return result;
-    }
-    out_medicine->price = strtod(price_buffer, &end_pointer);
-    if (end_pointer == price_buffer || end_pointer == 0) {
+    strncpy(out_medicine->name, panel.fields[idx].value, sizeof(out_medicine->name) - 1);
+    idx++;
+    strncpy(out_medicine->alias, panel.fields[idx].value, sizeof(out_medicine->alias) - 1);
+    idx++;
+    strncpy(out_medicine->category, panel.fields[idx].value, sizeof(out_medicine->category) - 1);
+    idx++;
+    out_medicine->price = strtod(panel.fields[idx].value, &end_pointer);
+    if (end_pointer == panel.fields[idx].value || end_pointer == 0) {
         return Result_make_failure("medicine price invalid");
     }
     while (*end_pointer != '\0') {
         if (!isspace((unsigned char)*end_pointer)) {
             return Result_make_failure("medicine price invalid");
         }
-
         end_pointer++;
     }
-    result = MenuApplication_prompt_int(context, "库存: ", &stock);
-    if (result.success == 0) {
-        return result;
-    }
-    out_medicine->stock = stock;
-    result = MenuApplication_prompt_line(
-        context,
-        "所属科室编号: ",
-        out_medicine->department_id,
-        sizeof(out_medicine->department_id)
-    );
-    if (result.success == 0) {
-        return result;
-    }
-    result = MenuApplication_prompt_int(context, "库存预警阈值: ", &threshold);
-    if (result.success == 0) {
-        return result;
-    }
-    out_medicine->low_stock_threshold = threshold;
+    idx++;
+    out_medicine->stock = atoi(panel.fields[idx].value);
+    idx++;
+    strncpy(out_medicine->department_id, panel.fields[idx].value, sizeof(out_medicine->department_id) - 1);
+    idx++;
+    out_medicine->low_stock_threshold = atoi(panel.fields[idx].value);
+
     return Result_make_success("medicine form ready");
 }
 
@@ -3581,43 +3887,56 @@ Result MenuApplication_prompt_department_form(
     Department *out_department,
     int require_department_id
 ) {
+    FormPanel panel;
+    int idx = 0;
+    Result result;
+
     if (out_department == 0) {
         return Result_make_failure("department form missing");
     }
 
+    memset(&panel, 0, sizeof(panel));
     memset(out_department, 0, sizeof(*out_department));
+    snprintf(panel.title, sizeof(panel.title), TUI_GEAR " \xe7\xa7\x91\xe5\xae\xa4\xe4\xbf\xa1\xe6\x81\xaf\xe5\xbd\x95\xe5\x85\xa5");
+
     if (require_department_id != 0) {
-        if (MenuApplication_prompt_line(
-                context,
-                "科室编号: ",
-                out_department->department_id,
-                sizeof(out_department->department_id)
-            ).success == 0) {
-            return Result_make_failure("input ended");
-        }
+        snprintf(panel.fields[idx].label, FORM_LABEL_CAPACITY, "\xe7\xa7\x91\xe5\xae\xa4\xe7\xbc\x96\xe5\x8f\xb7:");
+        panel.fields[idx].is_required = 1;
+        idx++;
     }
-    if (MenuApplication_prompt_line(
-            context,
-            "科室名称: ",
-            out_department->name,
-            sizeof(out_department->name)
-        ).success == 0) {
-        return Result_make_failure("input ended");
+
+    snprintf(panel.fields[idx].label, FORM_LABEL_CAPACITY, "\xe7\xa7\x91\xe5\xae\xa4\xe5\x90\x8d\xe7\xa7\xb0:");
+    panel.fields[idx].is_required = 1;
+    idx++;
+
+    snprintf(panel.fields[idx].label, FORM_LABEL_CAPACITY, "\xe7\xa7\x91\xe5\xae\xa4\xe4\xbd\x8d\xe7\xbd\xae:");
+    panel.fields[idx].is_required = 1;
+    idx++;
+
+    snprintf(panel.fields[idx].label, FORM_LABEL_CAPACITY, "\xe7\xa7\x91\xe5\xae\xa4\xe6\x8f\x8f\xe8\xbf\xb0:");
+    snprintf(panel.fields[idx].default_value, FORM_VALUE_CAPACITY, "\xe6\x97\xa0");
+    idx++;
+
+    panel.field_count = idx;
+
+    result = MenuApplication_form_dispatch(context, &panel);
+    if (result.success == 0) {
+        return result;
     }
-    if (MenuApplication_prompt_line(
-            context,
-            "科室位置: ",
-            out_department->location,
-            sizeof(out_department->location)
-        ).success == 0) {
-        return Result_make_failure("input ended");
+
+    /* Parse form values into Department struct */
+    idx = 0;
+    if (require_department_id != 0) {
+        strncpy(out_department->department_id, panel.fields[idx].value, sizeof(out_department->department_id) - 1);
+        idx++;
     }
-    return MenuApplication_prompt_line(
-        context,
-        "科室描述: ",
-        out_department->description,
-        sizeof(out_department->description)
-    );
+    strncpy(out_department->name, panel.fields[idx].value, sizeof(out_department->name) - 1);
+    idx++;
+    strncpy(out_department->location, panel.fields[idx].value, sizeof(out_department->location) - 1);
+    idx++;
+    strncpy(out_department->description, panel.fields[idx].value, sizeof(out_department->description) - 1);
+
+    return Result_make_success("department form ready");
 }
 
 /** @brief 交互式采集医生信息表单（姓名、职称、科室、排班等） */
@@ -3626,66 +3945,68 @@ Result MenuApplication_prompt_doctor_form(
     Doctor *out_doctor,
     int require_doctor_id
 ) {
-    int status = 0;
+    FormPanel panel;
+    int idx = 0;
     Result result;
 
     if (out_doctor == 0) {
         return Result_make_failure("doctor form missing");
     }
 
+    memset(&panel, 0, sizeof(panel));
     memset(out_doctor, 0, sizeof(*out_doctor));
+    snprintf(panel.title, sizeof(panel.title), TUI_MEDICAL " \xe5\x8c\xbb\xe7\x94\x9f\xe4\xbf\xa1\xe6\x81\xaf\xe5\xbd\x95\xe5\x85\xa5");
+
     if (require_doctor_id != 0) {
-        result = MenuApplication_prompt_line(
-            context,
-            "医生工号: ",
-            out_doctor->doctor_id,
-            sizeof(out_doctor->doctor_id)
-        );
-        if (result.success == 0) {
-            return result;
-        }
+        snprintf(panel.fields[idx].label, FORM_LABEL_CAPACITY, "\xe5\x8c\xbb\xe7\x94\x9f\xe5\xb7\xa5\xe5\x8f\xb7:");
+        panel.fields[idx].is_required = 1;
+        idx++;
     }
-    result = MenuApplication_prompt_line(
-        context,
-        "姓名: ",
-        out_doctor->name,
-        sizeof(out_doctor->name)
-    );
+
+    snprintf(panel.fields[idx].label, FORM_LABEL_CAPACITY, "\xe5\xa7\x93\xe5\x90\x8d:");
+    panel.fields[idx].is_required = 1;
+    idx++;
+
+    snprintf(panel.fields[idx].label, FORM_LABEL_CAPACITY, "\xe8\x81\x8c\xe7\xa7\xb0:");
+    panel.fields[idx].is_required = 1;
+    idx++;
+
+    snprintf(panel.fields[idx].label, FORM_LABEL_CAPACITY, "\xe7\xa7\x91\xe5\xae\xa4\xe7\xbc\x96\xe5\x8f\xb7:");
+    panel.fields[idx].is_required = 1;
+    idx++;
+
+    snprintf(panel.fields[idx].label, FORM_LABEL_CAPACITY, "\xe5\x87\xba\xe8\xaf\x8a\xe5\xae\x89\xe6\x8e\x92:");
+    panel.fields[idx].is_required = 1;
+    idx++;
+
+    snprintf(panel.fields[idx].label, FORM_LABEL_CAPACITY, "\xe7\x8a\xb6\xe6\x80\x81:");
+    snprintf(panel.fields[idx].hint, FORM_HINT_CAPACITY, "0\xe5\x81\x9c\xe7\x94\xa8/1\xe5\x90\xaf\xe7\x94\xa8");
+    snprintf(panel.fields[idx].default_value, FORM_VALUE_CAPACITY, "1");
+    idx++;
+
+    panel.field_count = idx;
+
+    result = MenuApplication_form_dispatch(context, &panel);
     if (result.success == 0) {
         return result;
     }
-    result = MenuApplication_prompt_line(
-        context,
-        "职称: ",
-        out_doctor->title,
-        sizeof(out_doctor->title)
-    );
-    if (result.success == 0) {
-        return result;
+
+    /* Parse form values into Doctor struct */
+    idx = 0;
+    if (require_doctor_id != 0) {
+        strncpy(out_doctor->doctor_id, panel.fields[idx].value, sizeof(out_doctor->doctor_id) - 1);
+        idx++;
     }
-    result = MenuApplication_prompt_line(
-        context,
-        "所属科室编号: ",
-        out_doctor->department_id,
-        sizeof(out_doctor->department_id)
-    );
-    if (result.success == 0) {
-        return result;
-    }
-    result = MenuApplication_prompt_line(
-        context,
-        "出诊安排: ",
-        out_doctor->schedule,
-        sizeof(out_doctor->schedule)
-    );
-    if (result.success == 0) {
-        return result;
-    }
-    result = MenuApplication_prompt_int(context, "状态(0停用/1启用): ", &status);
-    if (result.success == 0) {
-        return result;
-    }
-    out_doctor->status = (DoctorStatus)status;
+    strncpy(out_doctor->name, panel.fields[idx].value, sizeof(out_doctor->name) - 1);
+    idx++;
+    strncpy(out_doctor->title, panel.fields[idx].value, sizeof(out_doctor->title) - 1);
+    idx++;
+    strncpy(out_doctor->department_id, panel.fields[idx].value, sizeof(out_doctor->department_id) - 1);
+    idx++;
+    strncpy(out_doctor->schedule, panel.fields[idx].value, sizeof(out_doctor->schedule) - 1);
+    idx++;
+    out_doctor->status = (DoctorStatus)atoi(panel.fields[idx].value);
+
     return Result_make_success("doctor form ready");
 }
 

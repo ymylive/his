@@ -163,6 +163,37 @@ Result MenuApplication_prompt_select_medicine(
     size_t out_medicine_id_capacity
 );
 
+/* ─── Form Panel System ───────────────────────────────────────────── */
+
+#define FORM_MAX_FIELDS    16
+#define FORM_LABEL_CAPACITY 32
+#define FORM_VALUE_CAPACITY 256
+#define FORM_HINT_CAPACITY  64
+
+typedef struct FormField {
+    char label[FORM_LABEL_CAPACITY];
+    char value[FORM_VALUE_CAPACITY];
+    char hint[FORM_HINT_CAPACITY];
+    char default_value[FORM_VALUE_CAPACITY];
+    int is_required;
+    int is_filled;
+} FormField;
+
+typedef struct FormPanel {
+    char title[64];
+    FormField fields[FORM_MAX_FIELDS];
+    int field_count;
+    int current_field;
+} FormPanel;
+
+/**
+ * @brief Run a form panel, auto-detecting TTY vs pipe input.
+ */
+Result MenuApplication_form_dispatch(
+    MenuApplicationPromptContext *context,
+    FormPanel *panel
+);
+
 /* ─── Form helpers ─────────────────────────────────────────────────── */
 
 Result MenuApplication_prompt_patient_form(
