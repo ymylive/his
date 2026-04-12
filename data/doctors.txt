@@ -1,11 +1,21 @@
 doctor_id|name|title|department_id|schedule|status
-DOC0001|AliceLin|Attending|DEP0001|Mon-Fri AM|1
-DOC0002|BrianZhou|Associate|DEP0002|Mon-Fri PM|1
-DOC0003|CathyHe|Attending|DEP0003|Tue-Sat AM|1
-DOC0004|DavidLiu|Chief|DEP0004|Mon-Sun|1
-DOC0005|EvaSun|Attending|DEP0002|Mon-Wed|1
-DOC0006|FrankGuo|Attending|DEP0003|Thu-Sun|1
-DOC0007|GraceQiao|Resident|DEP0001|Mon-Fri|1
-DOC0008|HenryXu|Chief|DEP0005|Mon-Thu AM|1
-DOC0009|IrisTang|Associate|DEP0006|Tue-Fri PM|1
-DOC0010|JasonMo|Attending|DEP0004|Wed-Sun PM|1
+DOC0001|林晓琳|主治医师|DEP0001|Mon-Fri AM|1
+DOC0002|周博远|副主任医师|DEP0002|Mon-Fri PM|1
+DOC0003|何婉清|主治医师|DEP0003|Tue-Sat AM|1
+DOC0004|刘大卫|主任医师|DEP0004|Mon-Sun|1
+DOC0005|孙依婷|主治医师|DEP0002|Mon-Wed|1
+DOC0006|郭峰|主治医师|DEP0003|Thu-Sun|1
+DOC0007|乔雅|住院医师|DEP0001|Mon-Fri|1
+DOC0008|徐恒|主任医师|DEP0005|Mon-Thu AM|1
+DOC0009|唐艾琳|副主任医师|DEP0006|Tue-Fri PM|1
+DOC0010|莫杰森|主治医师|DEP0004|Wed-Sun PM|1
+DOC0011|张明辉|主治医师|DEP0007|Mon-Fri AM|1
+DOC0012|王丽萍|副主任医师|DEP0007|Tue-Sat PM|1
+DOC0013|赵志强|住院医师|DEP0008|Mon-Fri|1
+DOC0014|孙晓燕|主任医师|DEP0008|Mon-Thu AM|1
+DOC0015|钱国栋|主治医师|DEP0001|Wed-Sun AM|1
+DOC0016|周慧敏|副主任医师|DEP0002|Mon-Fri PM|1
+DOC0017|吴建国|主治医师|DEP0003|Tue-Sat AM|1
+DOC0018|郑美华|住院医师|DEP0004|Mon-Fri|1
+DOC0019|冯文杰|主治医师|DEP0005|Mon-Wed PM|1
+DOC0020|陈秀英|副主任医师|DEP0006|Thu-Sun AM|1

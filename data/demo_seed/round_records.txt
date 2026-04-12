@@ -1,33 +1,33 @@
 round_id|admission_id|doctor_id|findings|plan|rounded_at
-RND000001|ADM0001|DOC0001|patient breathing stable with mild wheezing|continue oxygen therapy and monitor SpO2 every 4h|2026-03-26 16:00
-RND000002|ADM0001|DOC0001|wheezing improved after nebulizer treatment|taper nebulizer to twice daily and reassess|2026-03-27 08:30
-RND000003|ADM0001|DOC0015|SpO2 maintained above 95 percent overnight|continue current regimen and plan discharge evaluation|2026-03-27 16:00
-RND000004|ADM0004|DOC0008|right leg immobilized and pain controlled at NRS 3|maintain bed rest and adjust pain medication dosage|2026-03-28 08:30
-RND000005|ADM0004|DOC0008|swelling reduced and X-ray shows stable alignment|begin gentle range-of-motion exercises tomorrow|2026-03-29 08:30
-RND000006|ADM0006|DOC0001|COPD patient on 2L oxygen with stable vitals|continue bronchodilator therapy and pulmonary rehab|2026-03-28 16:00
-RND000007|ADM0006|DOC0015|mild productive cough noted but no fever|add mucolytic agent and increase fluid intake|2026-03-29 08:30
-RND000008|ADM0007|DOC0004|BP 150/90 and heart rate 88 on cardiac monitor|increase antihypertensive dose and recheck in 6h|2026-03-29 16:00
-RND000009|ADM0007|DOC0010|BP improved to 135/82 after medication adjustment|maintain current dosing and monitor overnight|2026-03-30 08:30
-RND000010|ADM0009|DOC0001|COPD exacerbation with persistent dyspnea|add IV corticosteroid course and increase O2 to 3L|2026-03-31 16:00
-RND000011|ADM0009|DOC0015|dyspnea improving and ABG results normalized|step down to oral steroids and wean oxygen gradually|2026-04-01 08:30
-RND000012|ADM0010|DOC0001|chronic bronchitis flare with productive cough|start antibiotic course and continue chest physiotherapy|2026-03-31 16:00
-RND000013|ADM0010|DOC0007|fever resolved and sputum culture pending|continue antibiotics and encourage ambulation|2026-04-01 08:30
-RND000014|ADM0013|DOC0002|post-lithotripsy patient reports mild flank pain|IV fluids for stone fragment passage and strain urine|2026-04-01 16:00
-RND000015|ADM0013|DOC0005|stone fragments passing and pain well managed|continue hydration and schedule follow-up imaging|2026-04-02 08:30
-RND000016|ADM0015|DOC0003|pediatric patient febrile at 38.5C with mild lethargy|blood cultures drawn and start empiric antibiotics|2026-04-01 16:00
-RND000017|ADM0015|DOC0006|fever down to 37.8C and child more alert|continue antibiotics and monitor every 6h|2026-04-02 08:30
-RND000018|ADM0016|DOC0004|coronary disease stable but mild chest discomfort|adjust nitrate dosing and add statin therapy|2026-04-02 16:00
-RND000019|ADM0016|DOC0010|chest discomfort resolved after medication change|plan stress test for tomorrow morning|2026-04-03 08:30
-RND000020|ADM0017|DOC0004|atrial fibrillation rate controlled at 78 bpm|continue rate control and initiate anticoagulation|2026-04-02 16:00
-RND000021|ADM0017|DOC0018|INR at 1.8 and no bleeding signs|increase warfarin dose slightly and recheck INR|2026-04-03 08:30
-RND000022|ADM0019|DOC0008|osteoporosis patient with stable pain after infusion|continue calcium and vitamin D supplementation|2026-04-02 16:00
-RND000023|ADM0019|DOC0019|bone density scan scheduled and mobility improving|plan physical therapy consultation|2026-04-03 08:30
-RND000024|ADM0020|DOC0001|emphysema patient on 2L O2 with mild exercise desaturation|increase bronchodilator frequency and add pulmonary rehab|2026-04-03 16:00
-RND000025|ADM0020|DOC0015|exercise tolerance improved after therapy adjustment|continue current plan and assess for home oxygen need|2026-04-04 08:30
-RND000026|ADM0022|DOC0003|pediatric asthma patient with intermittent wheezing|step up inhaled corticosteroid dose and add spacer|2026-04-03 16:00
-RND000027|ADM0022|DOC0006|wheezing frequency decreased and peak flow improved|continue stepped-up therapy and plan discharge teaching|2026-04-04 08:30
-RND000028|ADM0023|DOC0004|cerebral infarction patient with stable neurological exam|continue antiplatelet therapy and start occupational therapy|2026-04-04 16:00
-RND000029|ADM0023|DOC0010|speech therapy assessment completed with mild aphasia|add speech therapy sessions and monitor recovery|2026-04-05 08:30
-RND000030|ADM0024|DOC0008|rheumatoid arthritis with morning stiffness improving|adjust DMARD dosing and continue physical therapy|2026-04-04 16:00
-RND000031|ADM0024|DOC0019|joint swelling reduced and CRP trending down|maintain current medications and plan follow-up labs|2026-04-05 08:30
-RND000032|ADM0025|DOC0001|asthma acute episode controlled with IV steroids|taper to oral steroids and reassess peak flow|2026-04-04 16:00
+RND000001|ADM0001|DOC0001|患者呼吸平稳 伴轻度喘息|继续氧疗 每4小时监测血氧饱和度|2026-03-26 16:00
+RND000002|ADM0001|DOC0001|雾化治疗后喘息改善|雾化减至每日两次 重新评估|2026-03-27 08:30
+RND000003|ADM0001|DOC0015|夜间血氧饱和度维持95%以上|继续当前方案 计划出院评估|2026-03-27 16:00
+RND000004|ADM0004|DOC0008|右腿已固定 疼痛控制在NRS 3分|维持卧床休息 调整止痛药剂量|2026-03-28 08:30
+RND000005|ADM0004|DOC0008|肿胀消退 X线显示对位稳定|明日开始轻度关节活动训练|2026-03-29 08:30
+RND000006|ADM0006|DOC0001|慢阻肺患者 2L吸氧 生命体征平稳|继续支气管扩张剂治疗和肺康复|2026-03-28 16:00
+RND000007|ADM0006|DOC0015|轻度湿性咳嗽 无发热|加用祛痰药 增加液体摄入|2026-03-29 08:30
+RND000008|ADM0007|DOC0004|血压150/90 心率88次/分 心电监护中|增加降压药剂量 6小时后复查|2026-03-29 16:00
+RND000009|ADM0007|DOC0010|调整用药后血压改善至135/82|维持当前剂量 夜间监测|2026-03-30 08:30
+RND000010|ADM0009|DOC0001|慢阻肺急性加重 持续呼吸困难|加用静脉激素 氧流量增至3L|2026-03-31 16:00
+RND000011|ADM0009|DOC0015|呼吸困难改善 血气分析恢复正常|改为口服激素 逐步减少吸氧|2026-04-01 08:30
+RND000012|ADM0010|DOC0001|慢性支气管炎急性发作 咳痰|开始抗生素疗程 继续胸部理疗|2026-03-31 16:00
+RND000013|ADM0010|DOC0007|热退 痰培养待回|继续抗生素 鼓励下床活动|2026-04-01 08:30
+RND000014|ADM0013|DOC0002|碎石术后患者 诉轻度腰痛|静脉补液促进碎石排出 留尿过滤|2026-04-01 16:00
+RND000015|ADM0013|DOC0005|碎石排出中 疼痛控制良好|继续补液 安排随访影像检查|2026-04-02 08:30
+RND000016|ADM0015|DOC0003|患儿体温38.5°C 轻度倦怠|已抽血培养 开始经验性抗生素治疗|2026-04-01 16:00
+RND000017|ADM0015|DOC0006|体温降至37.8°C 患儿精神好转|继续抗生素 每6小时监测|2026-04-02 08:30
+RND000018|ADM0016|DOC0004|冠心病病情稳定 轻度胸闷|调整硝酸酯剂量 加用他汀类药物|2026-04-02 16:00
+RND000019|ADM0016|DOC0010|调药后胸闷缓解|计划明晨行运动负荷试验|2026-04-03 08:30
+RND000020|ADM0017|DOC0004|房颤心室率控制在78次/分|继续控制心率 启动抗凝治疗|2026-04-02 16:00
+RND000021|ADM0017|DOC0018|INR 1.8 无出血征象|略增华法林剂量 复查INR|2026-04-03 08:30
+RND000022|ADM0019|DOC0008|骨质疏松患者 输液后疼痛稳定|继续补充钙剂和维生素D|2026-04-02 16:00
+RND000023|ADM0019|DOC0019|骨密度检查已预约 活动能力改善|计划康复科会诊|2026-04-03 08:30
+RND000024|ADM0020|DOC0001|肺气肿患者 2L吸氧 轻度活动后血氧下降|增加支气管扩张剂频次 加肺康复|2026-04-03 16:00
+RND000025|ADM0020|DOC0015|调整治疗后运动耐量改善|继续当前方案 评估家庭氧疗需求|2026-04-04 08:30
+RND000026|ADM0022|DOC0003|小儿哮喘患者 间歇性喘息|增加吸入激素剂量 加用储雾罐|2026-04-03 16:00
+RND000027|ADM0022|DOC0006|喘息频率下降 峰流速改善|继续升级治疗 计划出院宣教|2026-04-04 08:30
+RND000028|ADM0023|DOC0004|脑梗死患者 神经系统查体稳定|继续抗血小板治疗 开始作业治疗|2026-04-04 16:00
+RND000029|ADM0023|DOC0010|言语治疗评估完成 轻度失语|增加言语治疗 监测恢复情况|2026-04-05 08:30
+RND000030|ADM0024|DOC0008|类风湿关节炎 晨僵改善|调整DMARDs剂量 继续物理治疗|2026-04-04 16:00
+RND000031|ADM0024|DOC0019|关节肿胀减轻 CRP呈下降趋势|维持当前用药 安排随访化验|2026-04-05 08:30
+RND000032|ADM0025|DOC0001|哮喘急性发作 静脉激素控制后|逐步改为口服激素 重新评估峰流速|2026-04-04 16:00
