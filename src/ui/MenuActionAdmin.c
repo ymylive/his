@@ -10,6 +10,7 @@
 #include "ui/MenuActionHandlers.h"
 
 #include <string.h>
+#include "service/PatientService.h"
 #include "ui/TuiStyle.h"
 
 Result MenuAction_handle_admin(MenuApplication *app, MenuAction action, FILE *input, FILE *output) {
@@ -74,6 +75,40 @@ Result MenuAction_handle_admin(MenuApplication *app, MenuAction action, FILE *in
                     sizeof(output_buffer)
                 );
             } else if (strcmp(first_id, "2") == 0) {
+                /* 先选择要修改的患者，加载现有数据 */
+                result = MenuApplication_prompt_select_patient(
+                    app,
+                    &context,
+                    "\xe6\x82\xa3\xe8\x80\x85\xe6\x90\x9c\xe7\xb4\xa2\xe5\x85\xb3\xe9\x94\xae\xe5\xad\x97/\xe7\xbc\x96\xe5\x8f\xb7(\xe5\x9b\x9e\xe8\xbd\xa6\xe5\x88\x97\xe5\x87\xba\xe5\x85\xa8\xe9\x83\xa8): ",
+                    second_id,
+                    sizeof(second_id)
+                );
+                if (result.success == 0) {
+                    return result;
+                }
+                /* 加载现有患者数据到patient结构体 */
+                {
+                    Patient existing;
+                    memset(&existing, 0, sizeof(existing));
+                    result = MenuApplication_query_patient(
+                        app,
+                        second_id,
+                        output_buffer,
+                        sizeof(output_buffer)
+                    );
+                    /* 通过PatientService加载完整数据 */
+                    result = PatientService_find_patient_by_id(
+                        &app->patient_service,
+                        second_id,
+                        &existing
+                    );
+                    if (result.success == 0) {
+                        MenuApplication_print_result(output, "\xe6\x82\xa3\xe8\x80\x85\xe4\xb8\x8d\xe5\xad\x98\xe5\x9c\xa8", 0);
+                        return result;
+                    }
+                    /* 复制到patient，表单会检测name非空进入编辑模式 */
+                    patient = existing;
+                }
                 result = MenuApplication_prompt_patient_form(&context, &patient, 1);
                 if (result.success == 0) {
                     return result;

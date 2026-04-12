@@ -3777,58 +3777,106 @@ Result MenuApplication_prompt_patient_form(
 ) {
     FormPanel panel;
     int idx = 0;
+    int is_edit;
     Result result;
 
     if (out_patient == 0) {
         return Result_make_failure("patient form missing");
     }
 
+    /* 判断是新建还是编辑：如果 out_patient->name 非空则为编辑模式 */
+    is_edit = (out_patient->name[0] != '\0') ? 1 : 0;
+
     memset(&panel, 0, sizeof(panel));
-    memset(out_patient, 0, sizeof(*out_patient));
-    snprintf(panel.title, sizeof(panel.title), TUI_MEDICAL " \xe6\x82\xa3\xe8\x80\x85\xe4\xbf\xa1\xe6\x81\xaf\xe5\xbd\x95\xe5\x85\xa5");
+    if (!is_edit) {
+        memset(out_patient, 0, sizeof(*out_patient));
+        snprintf(panel.title, sizeof(panel.title), TUI_MEDICAL " \xe6\x82\xa3\xe8\x80\x85\xe4\xbf\xa1\xe6\x81\xaf\xe5\xbd\x95\xe5\x85\xa5");
+    } else {
+        snprintf(panel.title, sizeof(panel.title), TUI_MEDICAL " \xe4\xbf\xae\xe6\x94\xb9\xe6\x82\xa3\xe8\x80\x85\xe4\xbf\xa1\xe6\x81\xaf");
+    }
 
     if (require_patient_id != 0) {
         snprintf(panel.fields[idx].label, FORM_LABEL_CAPACITY, "\xe6\x82\xa3\xe8\x80\x85\xe7\xbc\x96\xe5\x8f\xb7:");
         panel.fields[idx].is_required = 1;
+        if (is_edit && out_patient->patient_id[0]) {
+            strncpy(panel.fields[idx].value, out_patient->patient_id, FORM_VALUE_CAPACITY - 1);
+            panel.fields[idx].is_filled = 1;
+        }
         idx++;
     }
 
     snprintf(panel.fields[idx].label, FORM_LABEL_CAPACITY, "\xe5\xa7\x93\xe5\x90\x8d:");
     panel.fields[idx].is_required = 1;
+    if (is_edit && out_patient->name[0]) {
+        strncpy(panel.fields[idx].value, out_patient->name, FORM_VALUE_CAPACITY - 1);
+        panel.fields[idx].is_filled = 1;
+    }
     idx++;
 
     snprintf(panel.fields[idx].label, FORM_LABEL_CAPACITY, "\xe6\x80\xa7\xe5\x88\xab:");
     snprintf(panel.fields[idx].hint, FORM_HINT_CAPACITY, "0\xe6\x9c\xaa\xe7\x9f\xa5/1\xe7\x94\xb7/2\xe5\xa5\xb3");
     snprintf(panel.fields[idx].default_value, FORM_VALUE_CAPACITY, "0");
+    if (is_edit) {
+        snprintf(panel.fields[idx].value, FORM_VALUE_CAPACITY, "%d", (int)out_patient->gender);
+        panel.fields[idx].is_filled = 1;
+    }
     idx++;
 
     snprintf(panel.fields[idx].label, FORM_LABEL_CAPACITY, "\xe5\xb9\xb4\xe9\xbe\x84:");
     panel.fields[idx].is_required = 1;
+    if (is_edit) {
+        snprintf(panel.fields[idx].value, FORM_VALUE_CAPACITY, "%d", out_patient->age);
+        panel.fields[idx].is_filled = 1;
+    }
     idx++;
 
     snprintf(panel.fields[idx].label, FORM_LABEL_CAPACITY, "\xe8\x81\x94\xe7\xb3\xbb\xe6\x96\xb9\xe5\xbc\x8f:");
     panel.fields[idx].is_required = 1;
+    if (is_edit && out_patient->contact[0]) {
+        strncpy(panel.fields[idx].value, out_patient->contact, FORM_VALUE_CAPACITY - 1);
+        panel.fields[idx].is_filled = 1;
+    }
     idx++;
 
     snprintf(panel.fields[idx].label, FORM_LABEL_CAPACITY, "\xe8\xba\xab\xe4\xbb\xbd\xe8\xaf\x81\xe5\x8f\xb7:");
     panel.fields[idx].is_required = 1;
+    if (is_edit && out_patient->id_card[0]) {
+        strncpy(panel.fields[idx].value, out_patient->id_card, FORM_VALUE_CAPACITY - 1);
+        panel.fields[idx].is_filled = 1;
+    }
     idx++;
 
     snprintf(panel.fields[idx].label, FORM_LABEL_CAPACITY, "\xe8\xbf\x87\xe6\x95\x8f\xe5\x8f\xb2:");
     snprintf(panel.fields[idx].default_value, FORM_VALUE_CAPACITY, "\xe6\x97\xa0");
+    if (is_edit && out_patient->allergy[0]) {
+        strncpy(panel.fields[idx].value, out_patient->allergy, FORM_VALUE_CAPACITY - 1);
+        panel.fields[idx].is_filled = 1;
+    }
     idx++;
 
     snprintf(panel.fields[idx].label, FORM_LABEL_CAPACITY, "\xe7\x97\x85\xe5\x8f\xb2:");
     snprintf(panel.fields[idx].default_value, FORM_VALUE_CAPACITY, "\xe6\x97\xa0");
+    if (is_edit && out_patient->medical_history[0]) {
+        strncpy(panel.fields[idx].value, out_patient->medical_history, FORM_VALUE_CAPACITY - 1);
+        panel.fields[idx].is_filled = 1;
+    }
     idx++;
 
     snprintf(panel.fields[idx].label, FORM_LABEL_CAPACITY, "\xe6\x98\xaf\xe5\x90\xa6\xe4\xbd\x8f\xe9\x99\xa2:");
     snprintf(panel.fields[idx].hint, FORM_HINT_CAPACITY, "0\xe5\x90\xa6/1\xe6\x98\xaf");
     snprintf(panel.fields[idx].default_value, FORM_VALUE_CAPACITY, "0");
+    if (is_edit) {
+        snprintf(panel.fields[idx].value, FORM_VALUE_CAPACITY, "%d", out_patient->is_inpatient);
+        panel.fields[idx].is_filled = 1;
+    }
     idx++;
 
     snprintf(panel.fields[idx].label, FORM_LABEL_CAPACITY, "\xe5\xa4\x87\xe6\xb3\xa8:");
     snprintf(panel.fields[idx].default_value, FORM_VALUE_CAPACITY, "\xe6\x97\xa0");
+    if (is_edit && out_patient->remarks[0]) {
+        strncpy(panel.fields[idx].value, out_patient->remarks, FORM_VALUE_CAPACITY - 1);
+        panel.fields[idx].is_filled = 1;
+    }
     idx++;
 
     panel.field_count = idx;
