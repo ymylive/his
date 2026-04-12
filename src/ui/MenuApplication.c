@@ -58,9 +58,21 @@
  * (no trailing newline). Returns the total number of complete lines
  * rendered (excluding the partial current-field line).
  */
-static int MenuApplication_form_render_panel(
+/**
+ * @brief 表单渲染：绘制完整表单面板（导航模式，无输入光标）
+ *
+ * 显示所有字段的当前状态，选中字段用 ▶ 标识。
+ * 所有行都以换行结尾，返回总行数。
+ *
+ * @param output        输出流
+ * @param panel         表单面板
+ * @param editing_field 当前正在编辑的字段索引（-1=非编辑状态）
+ * @return 渲染的总行数
+ */
+static int MenuApplication_form_render_full(
     FILE *output,
-    const FormPanel *panel
+    const FormPanel *panel,
+    int editing_field
 ) {
     int i;
     int lines = 0;
@@ -85,63 +97,55 @@ static int MenuApplication_form_render_panel(
     /* Fields */
     for (i = 0; i < panel->field_count; i++) {
         const FormField *f = &panel->fields[i];
-        const char *indicator = (i == panel->current_field)
+        int is_selected = (i == panel->current_field);
+        const char *arrow = is_selected
             ? TUI_BOLD_CYAN TUI_ARROW " " TUI_RESET
             : "  ";
 
-        if (f->is_filled) {
-            /* Show filled value in green */
-            fprintf(output, "  %s" TUI_DIM "%-12s" TUI_RESET " " TUI_BOLD_GREEN "%s" TUI_RESET TUI_CLEAR_LINE_NL,
-                    indicator, f->label, f->value);
-            lines++;
-        } else if (i == panel->current_field) {
-            /* Current field - show prompt, leave cursor for input */
+        if (i == editing_field) {
+            /* 编辑模式：显示标签后留空等待输入，不加换行 */
             if (f->hint[0] != '\0') {
                 fprintf(output, "  %s" TUI_DIM "%-12s" TUI_RESET " " TUI_OC_MUTED "(%s)" TUI_RESET " ",
-                        indicator, f->label, f->hint);
+                        arrow, f->label, f->hint);
             } else {
-                fprintf(output, "  %s" TUI_DIM "%-12s" TUI_RESET " ", indicator, f->label);
+                fprintf(output, "  %s" TUI_DIM "%-12s" TUI_RESET " ", arrow, f->label);
             }
-            /* No newline - cursor stays here for user input */
+            /* 不加换行 — 光标停在此处等待用户输入 */
+        } else if (f->is_filled) {
+            fprintf(output, "  %s" TUI_DIM "%-12s" TUI_RESET " " TUI_BOLD_GREEN "%s" TUI_RESET TUI_CLEAR_LINE_NL,
+                    arrow, f->label, f->value);
+            lines++;
         } else {
-            /* Pending field */
+            /* 未填写 */
             if (f->is_required) {
                 fprintf(output, "  %s" TUI_DIM "%-12s" TUI_RESET " " TUI_OC_MUTED "(\xe5\xbe\x85\xe5\xa1\xab\xe5\x86\x99)" TUI_RESET TUI_CLEAR_LINE_NL,
-                        indicator, f->label);
+                        arrow, f->label);
+            } else if (f->default_value[0] != '\0') {
+                fprintf(output, "  %s" TUI_DIM "%-12s" TUI_RESET " " TUI_OC_DIM "(\xe5\x8f\xaf\xe7\x95\x99\xe7\xa9\xba, \xe9\xbb\x98\xe8\xae\xa4: %s)" TUI_RESET TUI_CLEAR_LINE_NL,
+                        arrow, f->label, f->default_value);
             } else {
-                if (f->default_value[0] != '\0') {
-                    fprintf(output, "  %s" TUI_DIM "%-12s" TUI_RESET " " TUI_OC_DIM "(\xe5\x8f\xaf\xe7\x95\x99\xe7\xa9\xba, \xe9\xbb\x98\xe8\xae\xa4: %s)" TUI_RESET TUI_CLEAR_LINE_NL,
-                            indicator, f->label, f->default_value);
-                } else {
-                    fprintf(output, "  %s" TUI_DIM "%-12s" TUI_RESET " " TUI_OC_DIM "(\xe5\x8f\xaf\xe7\x95\x99\xe7\xa9\xba)" TUI_RESET TUI_CLEAR_LINE_NL,
-                            indicator, f->label);
-                }
+                fprintf(output, "  %s" TUI_DIM "%-12s" TUI_RESET " " TUI_OC_DIM "(\xe5\x8f\xaf\xe7\x95\x99\xe7\xa9\xba)" TUI_RESET TUI_CLEAR_LINE_NL,
+                        arrow, f->label);
             }
             lines++;
         }
     }
 
-    /* If we are past all fields (final render), add bottom section now */
-    if (panel->current_field < 0 || panel->current_field >= panel->field_count) {
-        /* Bottom border */
+    /* 确认提交按钮行 */
+    if (editing_field < 0) {
+        int is_submit = (panel->current_field == panel->field_count);
+        const char *submit_arrow = is_submit
+            ? TUI_BOLD_CYAN TUI_ARROW " " TUI_RESET
+            : "  ";
         fprintf(output, "  " TUI_OC_DIM);
         for (i = 0; i < box_width; i++) fprintf(output, TUI_H);
         fprintf(output, TUI_RESET TUI_CLEAR_LINE_NL);
         lines++;
+
+        fprintf(output, "  %s" TUI_BOLD_GREEN "[ \xe2\x9c\x93 \xe7\xa1\xae\xe8\xae\xa4\xe6\x8f\x90\xe4\xba\xa4 ]" TUI_RESET TUI_CLEAR_LINE_NL,
+                submit_arrow);
+        lines++;
     }
-
-    return lines;
-}
-
-/**
- * @brief Render the trailing section (bottom border + help text) after user input.
- *
- * Called after the user presses Enter on the current field, so the
- * newline from their input is already on screen.
- */
-static int MenuApplication_form_render_tail(FILE *output, int box_width) {
-    int i;
-    int lines = 0;
 
     /* Bottom border */
     fprintf(output, "  " TUI_OC_DIM);
@@ -150,110 +154,183 @@ static int MenuApplication_form_render_tail(FILE *output, int box_width) {
     lines++;
 
     /* Help text */
-    fprintf(output, "  " TUI_OC_DIM "\xe5\x9b\x9e\xe8\xbd\xa6\xe8\xb7\xb3\xe8\xbf\x87\xe5\x8f\xaf\xe9\x80\x89\xe5\xad\x97\xe6\xae\xb5 | ESC\xe5\x8f\x96\xe6\xb6\x88" TUI_RESET TUI_CLEAR_LINE_NL);
+    if (editing_field >= 0) {
+        fprintf(output, "  " TUI_OC_DIM "\xe8\xbe\x93\xe5\x85\xa5\xe5\x86\x85\xe5\xae\xb9\xe5\x90\x8e\xe5\x9b\x9e\xe8\xbd\xa6\xe7\xa1\xae\xe8\xae\xa4 | \xe7\x9b\xb4\xe6\x8e\xa5\xe5\x9b\x9e\xe8\xbd\xa6\xe4\xbd\xbf\xe7\x94\xa8\xe9\xbb\x98\xe8\xae\xa4\xe5\x80\xbc | ESC\xe5\x8f\x96\xe6\xb6\x88" TUI_RESET TUI_CLEAR_LINE_NL);
+    } else {
+        fprintf(output, "  " TUI_OC_DIM "\xe2\x86\x91\xe2\x86\x93\xe9\x80\x89\xe6\x8b\xa9\xe5\xad\x97\xe6\xae\xb5 | Enter\xe7\xbc\x96\xe8\xbe\x91/\xe6\x8f\x90\xe4\xba\xa4 | ESC\xe5\x8f\x96\xe6\xb6\x88" TUI_RESET TUI_CLEAR_LINE_NL);
+    }
     lines++;
 
     return lines;
 }
 
 /**
- * @brief Run the form panel interactively (TTY mode).
+ * @brief 表单交互式运行（TTY模式）
  *
- * Renders the form, reads each field, redraws after each input.
- * For non-TTY input, the caller should fall back to simple sequential prompts.
+ * 交互模型：
+ * 1. 导航模式：↑↓方向键选择字段，Enter进入编辑，ESC取消表单
+ * 2. 编辑模式：输入文本，Enter确认并返回导航模式
+ * 3. 移动到底部"确认提交"并按Enter提交表单
  */
 static Result MenuApplication_form_run(
     MenuApplicationPromptContext *context,
     FormPanel *panel
 ) {
+    int total_items;  /* field_count + 1 (submit button) */
     int prev_lines = 0;
-    int tail_lines = 0;
-    char input_buffer[FORM_VALUE_CAPACITY];
-    int box_width = 50;
 
-    for (panel->current_field = 0; panel->current_field < panel->field_count; panel->current_field++) {
-        FormField *field = &panel->fields[panel->current_field];
-        int read_result;
-        int body_lines;
+    total_items = panel->field_count + 1;
+    panel->current_field = 0;
 
-        /* Move cursor up to redraw form */
+    for (;;) {
+        InputEvent event;
+
+        /* 回退光标并重绘 */
         if (prev_lines > 0) {
-            int total_up = prev_lines + tail_lines;
-            fprintf(context->output, TUI_CURSOR_UP_FMT, total_up);
+            fprintf(context->output, TUI_CURSOR_UP_FMT, prev_lines);
         }
-
-        /* Render form body - cursor ends at current field input position */
-        body_lines = MenuApplication_form_render_panel(context->output, panel);
+        prev_lines = MenuApplication_form_render_full(context->output, panel, -1);
         fflush(context->output);
 
-        /* Read input */
-        memset(input_buffer, 0, sizeof(input_buffer));
-        read_result = InputHelper_read_line(context->input, input_buffer, sizeof(input_buffer));
+        /* 导航模式：读取按键 */
+        event = InputHelper_read_key(context->input);
 
-        if (read_result == 0) {
-            return Result_make_failure("input ended");
-        }
-        if (read_result == -2) {
-            return Result_make_failure(INPUT_HELPER_ESC_MESSAGE);
-        }
+        switch (event.key) {
+            case INPUT_KEY_UP:
+                if (panel->current_field > 0) {
+                    panel->current_field--;
+                }
+                break;
 
-        /* Render tail (bottom border + help) after the input line */
-        tail_lines = MenuApplication_form_render_tail(context->output, box_width);
+            case INPUT_KEY_DOWN:
+                if (panel->current_field < total_items - 1) {
+                    panel->current_field++;
+                }
+                break;
 
-        /* Total lines for next cursor-up: body + 1 (input line) + tail */
-        prev_lines = body_lines + 1; /* body lines + the user's input line */
+            case INPUT_KEY_ESC:
+                /* 清除表单显示 */
+                fprintf(context->output, "\n");
+                fflush(context->output);
+                return Result_make_failure(INPUT_HELPER_ESC_MESSAGE);
 
-        /* Trim input */
-        {
-            char *start = input_buffer;
-            char *end;
-            while (*start != '\0' && isspace((unsigned char)*start)) start++;
-            if (start != input_buffer && start[0] != '\0') {
-                memmove(input_buffer, start, strlen(start) + 1);
-            } else if (start != input_buffer) {
-                input_buffer[0] = '\0';
-            }
-            end = input_buffer + strlen(input_buffer);
-            while (end > input_buffer && isspace((unsigned char)*(end - 1))) end--;
-            *end = '\0';
-        }
+            case INPUT_KEY_ENTER:
+                if (panel->current_field == panel->field_count) {
+                    /* 确认提交：检查必填字段 */
+                    int i;
+                    int missing = 0;
+                    for (i = 0; i < panel->field_count; i++) {
+                        if (panel->fields[i].is_required && !panel->fields[i].is_filled) {
+                            /* 跳转到第一个未填必填字段 */
+                            panel->current_field = i;
+                            missing = 1;
+                            break;
+                        }
+                    }
+                    if (missing) {
+                        break; /* 回到循环重绘，高亮缺失字段 */
+                    }
+                    /* 所有必填字段已填，对未填可选字段填入默认值 */
+                    for (i = 0; i < panel->field_count; i++) {
+                        if (!panel->fields[i].is_filled) {
+                            if (panel->fields[i].default_value[0] != '\0') {
+                                strncpy(panel->fields[i].value, panel->fields[i].default_value,
+                                        sizeof(panel->fields[i].value) - 1);
+                            } else {
+                                strncpy(panel->fields[i].value, "\xe6\x97\xa0",
+                                        sizeof(panel->fields[i].value) - 1);
+                            }
+                            panel->fields[i].value[sizeof(panel->fields[i].value) - 1] = '\0';
+                            panel->fields[i].is_filled = 1;
+                        }
+                    }
+                    /* 最终渲染 */
+                    if (prev_lines > 0) {
+                        fprintf(context->output, TUI_CURSOR_UP_FMT, prev_lines);
+                    }
+                    panel->current_field = -1;
+                    prev_lines = MenuApplication_form_render_full(context->output, panel, -1);
+                    fprintf(context->output, "\n");
+                    fflush(context->output);
+                    return Result_make_success("form completed");
+                } else {
+                    /* 进入编辑模式 */
+                    FormField *field = &panel->fields[panel->current_field];
+                    char input_buffer[FORM_VALUE_CAPACITY];
+                    int read_result;
 
-        /* Process input */
-        if (input_buffer[0] == '\0') {
-            /* Empty input - use default */
-            if (field->default_value[0] != '\0') {
-                strncpy(field->value, field->default_value, sizeof(field->value) - 1);
-                field->value[sizeof(field->value) - 1] = '\0';
-                field->is_filled = 1;
-            } else if (field->is_required) {
-                /* Required field can't be empty, re-prompt */
-                panel->current_field--;
-                continue;
-            } else {
-                strncpy(field->value, "\xe6\x97\xa0", sizeof(field->value) - 1);
-                field->value[sizeof(field->value) - 1] = '\0';
-                field->is_filled = 1;
-            }
-        } else {
-            strncpy(field->value, input_buffer, sizeof(field->value) - 1);
-            field->value[sizeof(field->value) - 1] = '\0';
-            field->is_filled = 1;
+                    /* 重绘表单，当前字段显示为编辑状态 */
+                    if (prev_lines > 0) {
+                        fprintf(context->output, TUI_CURSOR_UP_FMT, prev_lines);
+                    }
+                    prev_lines = MenuApplication_form_render_full(
+                        context->output, panel, panel->current_field);
+                    fflush(context->output);
+
+                    /* 读取用户输入 */
+                    memset(input_buffer, 0, sizeof(input_buffer));
+                    read_result = InputHelper_read_line(
+                        context->input, input_buffer, sizeof(input_buffer));
+
+                    if (read_result == 0) {
+                        return Result_make_failure("input ended");
+                    }
+                    if (read_result == -2) {
+                        /* ESC在编辑模式 = 取消本次编辑，回到导航 */
+                        prev_lines++; /* 编辑行的换行 */
+                        break;
+                    }
+
+                    /* 编辑行产生了一个换行，计入行数 */
+                    prev_lines++;
+
+                    /* Trim */
+                    {
+                        char *start = input_buffer;
+                        char *end;
+                        while (*start && isspace((unsigned char)*start)) start++;
+                        if (start != input_buffer && *start) {
+                            memmove(input_buffer, start, strlen(start) + 1);
+                        } else if (start != input_buffer) {
+                            input_buffer[0] = '\0';
+                        }
+                        end = input_buffer + strlen(input_buffer);
+                        while (end > input_buffer && isspace((unsigned char)*(end - 1))) end--;
+                        *end = '\0';
+                    }
+
+                    /* 处理输入 */
+                    if (input_buffer[0] == '\0') {
+                        if (field->default_value[0] != '\0') {
+                            strncpy(field->value, field->default_value,
+                                    sizeof(field->value) - 1);
+                            field->value[sizeof(field->value) - 1] = '\0';
+                            field->is_filled = 1;
+                        } else if (!field->is_required) {
+                            strncpy(field->value, "\xe6\x97\xa0",
+                                    sizeof(field->value) - 1);
+                            field->value[sizeof(field->value) - 1] = '\0';
+                            field->is_filled = 1;
+                        }
+                        /* 必填字段留空：不标记已填，用户可重新编辑 */
+                    } else {
+                        strncpy(field->value, input_buffer,
+                                sizeof(field->value) - 1);
+                        field->value[sizeof(field->value) - 1] = '\0';
+                        field->is_filled = 1;
+                    }
+
+                    /* 自动移动到下一个字段 */
+                    if (panel->current_field < total_items - 1) {
+                        panel->current_field++;
+                    }
+                }
+                break;
+
+            default:
+                break;
         }
     }
-
-    /* Final render showing all filled values */
-    {
-        int total_up = prev_lines + tail_lines;
-        if (total_up > 0) {
-            fprintf(context->output, TUI_CURSOR_UP_FMT, total_up);
-        }
-        panel->current_field = -1; /* no active field = all done */
-        MenuApplication_form_render_panel(context->output, panel);
-        fprintf(context->output, "\n");
-        fflush(context->output);
-    }
-
-    return Result_make_success("form completed");
 }
 
 /**
