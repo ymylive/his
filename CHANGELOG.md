@@ -4,6 +4,17 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## [6.2.0] - 2026-04-12
+
+### Changed
+
+- **表单交互升级** — 方向键导航 + Enter编辑模式
+  - ↑↓方向键自由选择字段，Enter进入编辑，Enter确认
+  - 底部 [✓ 确认提交] 按钮提交表单
+  - 必填字段未填时自动跳转提示
+  - 修复方向键误触发ESC取消的问题
+- **Linux兼容性修复** — 添加 _POSIX_C_SOURCE 解决16个测试SEGFAULT
+
 ## [6.1.0] - 2026-04-12
 
 ### Added
