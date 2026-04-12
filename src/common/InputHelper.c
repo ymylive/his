@@ -351,18 +351,45 @@ int InputHelper_read_line(FILE *input, char *buffer, size_t capacity) {
                 }
 
                 if (ch == INPUT_ESC_CHAR) {
-                    /* ESC: 排空转义序列尾部字节，然后返回取消 */
-                    struct termios drain = raw_settings;
-                    drain.c_cc[VMIN] = 0;
-                    drain.c_cc[VTIME] = 1; /* 100ms */
-                    tcsetattr(input_fd, TCSANOW, &drain);
-                    while (fgetc(input) != EOF) { /* drain */ }
+                    /* ESC 检测：区分独立 ESC 键和方向键等转义序列
+                     * 方向键产生 ESC [ A/B/C/D，若直接返回取消
+                     * 会导致用户按方向键时表单被误取消 */
+                    int next_ch;
+                    struct termios peek = raw_settings;
+                    peek.c_cc[VMIN] = 0;
+                    peek.c_cc[VTIME] = 1; /* 100ms 超时区分独立ESC和转义序列 */
+                    tcsetattr(input_fd, TCSANOW, &peek);
+                    next_ch = fgetc(input);
                     clearerr(input);
+                    tcsetattr(input_fd, TCSANOW, &raw_settings);
+
+                    if (next_ch == '[') {
+                        /* 转义序列：方向键等，读取并忽略第三字节 */
+                        int code = fgetc(input);
+                        (void)code; /* 忽略方向键，不取消也不输入 */
+                        continue;
+                    } else if (next_ch != EOF) {
+                        /* 非转义序列的后续字符，放回 */
+                        ungetc(next_ch, input);
+                    }
+                    /* 独立 ESC 键：执行取消 */
                     tcsetattr(input_fd, TCSANOW, &old_settings);
                     /* 清除已输入的内容显示 */
                     while (length > 0) {
-                        fputs("\b \b", stdout);
-                        length--;
+                        /* 正确处理 UTF-8 多字节回删的显示宽度 */
+                        size_t char_start = length;
+                        size_t byte_count;
+                        while (char_start > 0 && ((unsigned char)buffer[char_start - 1] & 0xC0) == 0x80) {
+                            char_start--;
+                        }
+                        if (char_start > 0) char_start--;
+                        byte_count = length - char_start;
+                        length = char_start;
+                        if (byte_count == 1) {
+                            fputs("\b \b", stdout);
+                        } else {
+                            fputs("\b\b  \b\b", stdout);
+                        }
                     }
                     fflush(stdout);
                     buffer[0] = '\0';
