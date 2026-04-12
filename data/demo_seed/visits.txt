@@ -15,3 +15,25 @@ VIS0013|REG0018|PAT0019|DOC0004|DEP0004|night cough|copd exacerbation|admit for 
 VIS0014|REG0020|PAT0024|DOC0009|DEP0006|lumbar pain|lumbar muscle strain|pain control and medicine review|0|0|1|2026-03-28 14:45
 VIS0015|REG0023|PAT0027|DOC0008|DEP0005|chest tightness and dizziness|hypertensive heart disease|admit for cardiac monitoring|1|1|1|2026-03-29 09:50
 VIS0016|REG0027|PAT0001|DOC0008|DEP0005|occasional palpitation|sinus tachycardia|ecg monitoring and follow-up|1|0|1|2026-03-29 14:30
+VIS0017|REG0041|PAT0031|DOC0001|DEP0001|persistent cough|acute bronchitis|antibiotics and cough suppressant|1|0|1|2026-03-31 09:00
+VIS0018|REG0042|PAT0032|DOC0007|DEP0001|dizziness and fatigue|iron deficiency anemia|blood test and iron supplement|1|0|1|2026-03-31 09:30
+VIS0019|REG0044|PAT0036|DOC0007|DEP0001|sore throat and fever|acute pharyngitis|gargle and antipyretic|1|0|1|2026-03-31 10:30
+VIS0020|REG0045|PAT0038|DOC0001|DEP0001|itchy skin rash|contact dermatitis|topical cream and antihistamine|0|0|1|2026-03-31 11:00
+VIS0021|REG0047|PAT0043|DOC0001|DEP0001|stomach pain after meals|functional dyspepsia|dietary advice and antacid|0|0|1|2026-04-01 09:00
+VIS0022|REG0049|PAT0046|DOC0001|DEP0001|neck lump|thyroid nodule|ultrasound referral|1|0|0|2026-04-01 10:00
+VIS0023|REG0050|PAT0047|DOC0007|DEP0001|frequent urination|urinary tract infection|urine test and antibiotics|1|0|1|2026-04-01 10:30
+VIS0024|REG0052|PAT0049|DOC0007|DEP0001|right upper abdominal discomfort|fatty liver|liver function test and lifestyle change|1|0|0|2026-04-01 11:30
+VIS0025|REG0054|PAT0052|DOC0007|DEP0001|low back pain|lumbar strain|rest and pain relief|0|0|1|2026-04-02 09:30
+VIS0026|REG0055|PAT0033|DOC0008|DEP0005|chest discomfort|hypertensive crisis|admit for bp control|1|1|1|2026-03-31 09:00
+VIS0027|REG0056|PAT0039|DOC0008|DEP0005|worsening chest pain|unstable angina|admit for cardiac monitoring|1|1|1|2026-04-01 09:00
+VIS0028|REG0057|PAT0040|DOC0009|DEP0006|chronic low back pain|lumbar disc herniation|admit for traction therapy|0|1|1|2026-04-01 10:30
+VIS0029|REG0058|PAT0037|DOC0002|DEP0002|epigastric pain and vomiting|gastric ulcer perforation|emergency surgery|1|1|0|2026-03-31 14:30
+VIS0030|REG0059|PAT0054|DOC0005|DEP0002|right lower abdominal pain|acute appendicitis|laparoscopic appendectomy|1|1|0|2026-04-01 14:30
+VIS0031|REG0060|PAT0029|DOC0003|DEP0003|recurrent cough and wheeze|pediatric bronchitis|nebulizer and admit|1|1|1|2026-04-01 09:00
+VIS0032|REG0031|PAT0021|DOC0007|DEP0001|insomnia and anxiety|generalized anxiety disorder|counseling and low-dose anxiolytic|0|0|1|2026-03-30 09:00
+VIS0033|REG0032|PAT0013|DOC0010|DEP0004|worsening dyspnea|asthma exacerbation|nebulizer and steroid|1|0|1|2026-03-30 09:30
+VIS0034|REG0033|PAT0012|DOC0005|DEP0002|follow-up abdominal pain|cholecystitis|schedule cholecystectomy|1|0|1|2026-03-30 10:00
+VIS0035|REG0034|PAT0015|DOC0003|DEP0003|recurrent sore throat|tonsillitis|antibiotics and follow-up|1|0|1|2026-03-30 10:30
+VIS0036|REG0035|PAT0016|DOC0008|DEP0005|palpitation at rest|premature ventricular contractions|holter monitor and beta blocker|1|0|1|2026-03-30 11:00
+VIS0037|REG0036|PAT0018|DOC0009|DEP0006|worsening shoulder pain|frozen shoulder|physical therapy and nsaid|0|0|1|2026-03-30 11:30
+VIS0038|REG0037|PAT0009|DOC0001|DEP0001|thyroid follow-up|stable thyroiditis|continue medication|0|0|1|2026-03-30 12:00

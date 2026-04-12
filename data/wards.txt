@@ -1,6 +1,9 @@
-ward_id|name|department_id|location|capacity|occupied_beds|status
-WRD0001|RespWardA|DEP0004|Ward Tower 2F|4|2|0
-WRD0002|SurgeryWardA|DEP0002|Ward Tower 3F|4|0|0
-WRD0003|PediatricWardA|DEP0003|Ward Tower 4F|3|0|0
-WRD0004|CardioWardA|DEP0005|Ward Tower 5F|4|1|0
-WRD0005|OrthoWardA|DEP0006|Ward Tower 6F|4|1|0
+ward_id|name|department_id|location|capacity|occupied_beds|status|ward_type|daily_fee
+WRD0001|RespWardA|DEP0004|Ward Tower 2F|4|2|0|0|50.00
+WRD0002|SurgeryWardA|DEP0002|Ward Tower 3F|4|0|0|1|120.00
+WRD0003|PediatricWardA|DEP0003|Ward Tower 4F|3|0|0|0|50.00
+WRD0004|CardioWardA|DEP0005|Ward Tower 5F|4|1|0|2|300.00
+WRD0005|OrthoWardA|DEP0006|Ward Tower 6F|4|1|0|1|120.00
+WRD0006|NeuroWardA|DEP0007|Ward Tower 7F|4|0|0|2|300.00
+WRD0007|DermaWardA|DEP0008|Ward Tower 8F|3|0|0|0|50.00
+WRD0008|GeneralWardA|DEP0001|Ward Tower 1F|4|0|0|0|50.00

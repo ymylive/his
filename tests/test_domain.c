@@ -39,7 +39,9 @@ static void test_registration_status_flow(void) {
         "2026-03-20",
         REG_STATUS_PENDING,
         "",
-        ""
+        "",
+        REG_TYPE_STANDARD,
+        5.00
     };
     /* 创建另一个待诊状态的挂号记录（用于测试取消流程） */
     Registration cancelled = {
@@ -50,7 +52,9 @@ static void test_registration_status_flow(void) {
         "2026-03-20",
         REG_STATUS_PENDING,
         "",
-        ""
+        "",
+        REG_TYPE_SPECIALIST,
+        20.00
     };
 
     /* 待诊 -> 已诊断 */
@@ -148,6 +152,7 @@ static void test_domain_entities_exist(void) {
         "CT",
         EXAM_STATUS_COMPLETED,
         "Normal",
+        150.00,
         "2026-03-20T09:30",
         "2026-03-20T10:00"
     };

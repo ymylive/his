@@ -54,6 +54,10 @@ typedef enum MenuAction {
     MENU_ACTION_ADMIN_STATS_REVENUE = 206,        /**< 科室收入统计 */
     MENU_ACTION_ADMIN_STATS_WORKLOAD = 207,       /**< 医生工作量统计 */
     MENU_ACTION_ADMIN_STATS_BED_UTIL = 208,       /**< 床位利用率统计 */
+    MENU_ACTION_ADMIN_STATS_MEDICINE = 209,        /**< 药品消耗排行 */
+    MENU_ACTION_ADMIN_STATS_PATIENT_FLOW = 210,    /**< 患者流量统计 */
+    MENU_ACTION_ADMIN_STATS_DEPT_PERFORMANCE = 211, /**< 科室综合绩效 */
+    MENU_ACTION_ADMIN_STATS_ADMISSION_TURNOVER = 212, /**< 住院周转率 */
 
     /* 医生操作 (3xx) */
     MENU_ACTION_DOCTOR_PENDING_LIST = 301,         /**< 待诊列表 */
@@ -61,6 +65,8 @@ typedef enum MenuAction {
     MENU_ACTION_DOCTOR_VISIT_RECORD = 303,         /**< 诊疗记录/诊断结果/医生建议 */
     MENU_ACTION_DOCTOR_PRESCRIPTION_STOCK = 304,   /**< 处方与发药/查询药品库存 */
     MENU_ACTION_DOCTOR_EXAM_RECORD = 305,          /**< 检查记录/检查结果 */
+    MENU_ACTION_DOCTOR_ROUND_CREATE = 306,         /**< 查房记录 */
+    MENU_ACTION_DOCTOR_ROUND_QUERY = 307,          /**< 查看查房记录 */
 
     /* 患者操作 (4xx) */
     MENU_ACTION_PATIENT_BASIC_INFO = 401,          /**< 基本信息 */
@@ -82,6 +88,12 @@ typedef enum MenuAction {
     MENU_ACTION_INPATIENT_LIST_BEDS = 506,         /**< 查看床位状态 */
     MENU_ACTION_INPATIENT_TRANSFER_BED = 507,      /**< 床位调整/转床 */
     MENU_ACTION_INPATIENT_DISCHARGE_CHECK = 508,   /**< 出院前检查 */
+    MENU_ACTION_INPATIENT_CREATE_ORDER = 509,      /**< 开具医嘱 */
+    MENU_ACTION_INPATIENT_QUERY_ORDERS = 510,      /**< 查看医嘱 */
+    MENU_ACTION_INPATIENT_EXECUTE_ORDER = 511,     /**< 执行医嘱 */
+    MENU_ACTION_INPATIENT_CANCEL_ORDER = 512,      /**< 取消医嘱 */
+    MENU_ACTION_INPATIENT_NURSING_CREATE = 513,    /**< 记录护理 */
+    MENU_ACTION_INPATIENT_NURSING_QUERY = 514,     /**< 查看护理记录 */
 
     /* 药房人员操作 (7xx) */
     MENU_ACTION_PHARMACY_ADD_MEDICINE = 701,       /**< 添加药品 */

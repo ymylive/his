@@ -350,6 +350,30 @@ Result MenuAction_handle_admin(MenuApplication *app, MenuAction action, FILE *in
             MenuApplication_print_result(output, output_buffer, result.success);
             return result;
 
+        case MENU_ACTION_ADMIN_STATS_MEDICINE:
+            tui_spinner_run(output, "正在统计药品消耗...", 500);
+            result = MenuApplication_stats_medicine_consumption(app, output_buffer, sizeof(output_buffer));
+            MenuApplication_print_result(output, output_buffer, result.success);
+            return result;
+
+        case MENU_ACTION_ADMIN_STATS_PATIENT_FLOW:
+            tui_spinner_run(output, "正在统计患者流量...", 500);
+            result = MenuApplication_stats_patient_flow(app, output_buffer, sizeof(output_buffer));
+            MenuApplication_print_result(output, output_buffer, result.success);
+            return result;
+
+        case MENU_ACTION_ADMIN_STATS_DEPT_PERFORMANCE:
+            tui_spinner_run(output, "正在统计科室绩效...", 500);
+            result = MenuApplication_stats_dept_performance(app, output_buffer, sizeof(output_buffer));
+            MenuApplication_print_result(output, output_buffer, result.success);
+            return result;
+
+        case MENU_ACTION_ADMIN_STATS_ADMISSION_TURNOVER:
+            tui_spinner_run(output, "正在统计住院周转率...", 500);
+            result = MenuApplication_stats_admission_turnover(app, output_buffer, sizeof(output_buffer));
+            MenuApplication_print_result(output, output_buffer, result.success);
+            return result;
+
         default:
             return Result_make_failure("unknown admin action");
     }

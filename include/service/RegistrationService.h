@@ -57,13 +57,15 @@ Result RegistrationService_init(
  * 验证患者、医生和科室是否存在且状态有效，自动生成挂号ID，
  * 初始状态为待诊（PENDING）。
  *
- * @param service           指向挂号服务结构体
- * @param patient_id        患者ID
- * @param doctor_id         医生ID
- * @param department_id     科室ID
- * @param registered_at     挂号时间字符串
- * @param out_registration  输出参数，创建成功时存放挂号信息
- * @return Result           操作结果，success=1 表示创建成功
+ * @param service            指向挂号服务结构体
+ * @param patient_id         患者ID
+ * @param doctor_id          医生ID
+ * @param department_id      科室ID
+ * @param registered_at      挂号时间字符串
+ * @param registration_type  挂号类型（普通号/专家号/急诊号）
+ * @param registration_fee   挂号费(元)
+ * @param out_registration   输出参数，创建成功时存放挂号信息
+ * @return Result            操作结果，success=1 表示创建成功
  */
 Result RegistrationService_create(
     RegistrationService *service,
@@ -71,6 +73,8 @@ Result RegistrationService_create(
     const char *doctor_id,
     const char *department_id,
     const char *registered_at,
+    RegistrationType registration_type,
+    double registration_fee,
     Registration *out_registration
 );
 

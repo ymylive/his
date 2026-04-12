@@ -5,3 +5,5 @@ DEP0003|Pediatrics|Outpatient F3|Pediatric clinic
 DEP0004|Respiratory|Ward Tower F2|Respiratory medicine
 DEP0005|Cardiology|Outpatient F4|Cardiac assessment
 DEP0006|Orthopedics|Outpatient F5|Bone and joint clinic
+DEP0007|Neurology|Outpatient F6|Neurological disorders and treatment
+DEP0008|Dermatology|Outpatient F7|Skin disease diagnosis and treatment

@@ -391,6 +391,16 @@ static const char *MenuApplication_registration_status_label(RegistrationStatus 
     }
 }
 
+/** @brief 将挂号类型枚举转换为中文标签 */
+static const char *MenuApplication_registration_type_label(int type) {
+    switch (type) {
+        case 0: return "普通号";
+        case 1: return "专家号";
+        case 2: return "急诊号";
+        default: return "未知";
+    }
+}
+
 /** @brief 将床位状态枚举转换为中文标签 */
 static const char *MenuApplication_bed_status_label(BedStatus status) {
     switch (status) {
@@ -412,6 +422,20 @@ static const char *MenuApplication_ward_status_label(WardStatus status) {
             return "启用";
         case WARD_STATUS_CLOSED:
             return "停用";
+        default:
+            return "未知";
+    }
+}
+
+/** @brief 将病房类型枚举转换为中文标签 */
+static const char *MenuApplication_ward_type_label(WardType ward_type) {
+    switch (ward_type) {
+        case WARD_TYPE_STANDARD:
+            return "普通";
+        case WARD_TYPE_DOUBLE:
+            return "双人";
+        case WARD_TYPE_VIP:
+            return "VIP";
         default:
             return "未知";
     }
@@ -538,6 +562,10 @@ Result MenuApplication_init(MenuApplication *application, const MenuApplicationP
     if (result.success == 0) {
         return result;
     }
+    result = MenuApplication_validate_required_text(paths->prescription_path, "prescription path");
+    if (result.success == 0) {
+        return result;
+    }
 
     result = AuthService_init(
         &application->auth_service,
@@ -618,12 +646,52 @@ Result MenuApplication_init(MenuApplication *application, const MenuApplicationP
         paths->medicine_path,
         paths->dispense_record_path
     );
-    if (result.success == 1) {
-        MenuApplication_clear_authenticated_user_state(application);
-        MenuApplication_clear_patient_session_state(application);
+    if (result.success == 0) {
+        return result;
     }
 
-    return result;
+    result = PrescriptionService_init(
+        &application->prescription_service,
+        paths->prescription_path
+    );
+    if (result.success == 0) {
+        return result;
+    }
+
+    if (paths->inpatient_order_path != 0 && paths->inpatient_order_path[0] != '\0') {
+        result = InpatientOrderService_init(
+            &application->inpatient_order_service,
+            paths->inpatient_order_path
+        );
+        if (result.success == 0) {
+            return result;
+        }
+    }
+
+    if (paths->nursing_record_path != 0 && paths->nursing_record_path[0] != '\0') {
+        result = NursingRecordService_init(
+            &application->nursing_record_service,
+            paths->nursing_record_path
+        );
+        if (result.success == 0) {
+            return result;
+        }
+    }
+
+    if (paths->round_record_path != 0 && paths->round_record_path[0] != '\0') {
+        result = RoundRecordService_init(
+            &application->round_record_service,
+            paths->round_record_path
+        );
+        if (result.success == 0) {
+            return result;
+        }
+    }
+
+    MenuApplication_clear_authenticated_user_state(application);
+    MenuApplication_clear_patient_session_state(application);
+
+    return Result_make_success("application initialized");
 }
 
 Result MenuApplication_login(
@@ -815,6 +883,8 @@ Result MenuApplication_create_registration(
     const char *doctor_id,
     const char *department_id,
     const char *registered_at,
+    RegistrationType registration_type,
+    double registration_fee,
     char *buffer,
     size_t capacity
 ) {
@@ -825,6 +895,8 @@ Result MenuApplication_create_registration(
         doctor_id,
         department_id,
         registered_at,
+        registration_type,
+        registration_fee,
         &registration
     );
 
@@ -835,13 +907,15 @@ Result MenuApplication_create_registration(
     return MenuApplication_write_text(
         buffer,
         capacity,
-        "挂号已创建: %s | 患者=%s | 医生=%s | 科室=%s | 时间=%s | 状态=%s",
+        "挂号已创建: %s | 患者=%s | 医生=%s | 科室=%s | 时间=%s | 状态=%s | 类型=%s | 费用=%.2f元",
         registration.registration_id,
         registration.patient_id,
         registration.doctor_id,
         registration.department_id,
         registration.registered_at,
-        MenuApplication_registration_status_label(registration.status)
+        MenuApplication_registration_status_label(registration.status),
+        MenuApplication_registration_type_label(registration.registration_type),
+        registration.registration_fee
     );
 }
 
@@ -850,6 +924,8 @@ Result MenuApplication_create_self_registration(
     const char *doctor_id,
     const char *department_id,
     const char *registered_at,
+    RegistrationType registration_type,
+    double registration_fee,
     Registration *out_registration
 ) {
     Result result = MenuApplication_require_patient_session(application);
@@ -868,6 +944,8 @@ Result MenuApplication_create_self_registration(
         doctor_id,
         department_id,
         registered_at,
+        registration_type,
+        registration_fee,
         out_registration
     );
 }
@@ -892,13 +970,15 @@ Result MenuApplication_query_registration(
     return MenuApplication_write_text(
         buffer,
         capacity,
-        "挂号信息: %s | 患者=%s | 医生=%s | 科室=%s | 状态=%s | 挂号时间=%s",
+        "挂号信息: %s | 患者=%s | 医生=%s | 科室=%s | 状态=%s | 挂号时间=%s | 类型=%s | 费用=%.2f元",
         registration.registration_id,
         registration.patient_id,
         registration.doctor_id,
         registration.department_id,
         MenuApplication_registration_status_label(registration.status),
-        registration.registered_at
+        registration.registered_at,
+        MenuApplication_registration_type_label(registration.registration_type),
+        registration.registration_fee
     );
 }
 
@@ -976,12 +1056,14 @@ Result MenuApplication_query_registrations_by_patient(
             buffer,
             capacity,
             &used,
-            "\n%s | 患者=%s | 医生=%s | 科室=%s | 状态=%s",
+            "\n%s | 患者=%s | 医生=%s | 科室=%s | 状态=%s | 类型=%s | 费用=%.2f元",
             registration->registration_id,
             registration->patient_id,
             registration->doctor_id,
             registration->department_id,
-            MenuApplication_registration_status_label(registration->status)
+            MenuApplication_registration_status_label(registration->status),
+            MenuApplication_registration_type_label(registration->registration_type),
+            registration->registration_fee
         );
         if (result.success == 0) {
             RegistrationRepository_clear_list(&registrations);
@@ -1043,11 +1125,13 @@ Result MenuApplication_query_pending_registrations_by_doctor(
             buffer,
             capacity,
             &used,
-            "\n%s | 患者=%s | 科室=%s | 时间=%s",
+            "\n%s | 患者=%s | 科室=%s | 时间=%s | 类型=%s | 费用=%.2f元",
             registration->registration_id,
             registration->patient_id,
             registration->department_id,
-            registration->registered_at
+            registration->registered_at,
+            MenuApplication_registration_type_label(registration->registration_type),
+            registration->registration_fee
         );
         if (result.success == 0) {
             RegistrationRepository_clear_list(&registrations);
@@ -1182,6 +1266,7 @@ Result MenuApplication_create_examination_record(
     const char *visit_id,
     const char *exam_item,
     const char *exam_type,
+    double exam_fee,
     const char *requested_at,
     char *buffer,
     size_t capacity
@@ -1192,6 +1277,7 @@ Result MenuApplication_create_examination_record(
         visit_id,
         exam_item,
         exam_type,
+        exam_fee,
         requested_at,
         &record
     );
@@ -1203,11 +1289,12 @@ Result MenuApplication_create_examination_record(
     return MenuApplication_write_text(
         buffer,
         capacity,
-        "检查记录已创建: %s | 就诊=%s | 项目=%s | 类型=%s",
+        "检查记录已创建: %s | 就诊=%s | 项目=%s | 类型=%s | 费用=%.2f元",
         record.examination_id,
         record.visit_id,
         record.exam_item,
-        record.exam_type
+        record.exam_type,
+        record.exam_fee
     );
 }
 
@@ -1277,13 +1364,15 @@ Result MenuApplication_list_wards(
             buffer,
             capacity,
             &used,
-            "\n%s | %s | 科室=%s | 位置=%s | 床位=%d/%d | 状态=%s",
+            "\n%s | %s | 科室=%s | 位置=%s | 床位=%d/%d | 类型=%s | 日费=%.2f | 状态=%s",
             ward->ward_id,
             ward->name,
             ward->department_id,
             ward->location,
             ward->occupied_beds,
             ward->capacity,
+            MenuApplication_ward_type_label(ward->ward_type),
+            ward->daily_fee,
             MenuApplication_ward_status_label(ward->status)
         );
         if (result.success == 0) {
@@ -1631,6 +1720,128 @@ Result MenuApplication_dispense_medicine(
         record.quantity,
         stock
     );
+}
+
+Result MenuApplication_create_prescription(
+    MenuApplication *application,
+    const Prescription *prescription,
+    char *buffer,
+    size_t capacity
+) {
+    VisitRecord visit;
+    Medicine medicine;
+    Result result;
+
+    if (application == 0 || prescription == 0) {
+        return MenuApplication_write_failure("arguments missing", buffer, capacity);
+    }
+
+    /* 校验就诊记录是否存在 */
+    result = VisitRecordRepository_find_by_visit_id(
+        &application->medical_record_service.visit_repository,
+        prescription->visit_id,
+        &visit
+    );
+    if (result.success == 0) {
+        return MenuApplication_write_failure("visit not found", buffer, capacity);
+    }
+
+    /* 校验药品是否存在 */
+    result = MedicineRepository_find_by_medicine_id(
+        &application->pharmacy_service.medicine_repository,
+        prescription->medicine_id,
+        &medicine
+    );
+    if (result.success == 0) {
+        return MenuApplication_write_failure("medicine not found", buffer, capacity);
+    }
+
+    /* 检查药品库存 */
+    if (medicine.stock < prescription->quantity) {
+        return MenuApplication_write_failure("medicine stock insufficient", buffer, capacity);
+    }
+
+    /* 创建处方 */
+    result = PrescriptionService_create_prescription(
+        &application->prescription_service,
+        prescription
+    );
+    if (result.success == 0) {
+        return MenuApplication_write_failure(result.message, buffer, capacity);
+    }
+
+    return MenuApplication_write_text(
+        buffer,
+        capacity,
+        "处方创建成功: 处方ID=%s | 就诊ID=%s | 药品ID=%s | 数量=%d | 用法=%s",
+        prescription->prescription_id,
+        prescription->visit_id,
+        prescription->medicine_id,
+        prescription->quantity,
+        prescription->usage
+    );
+}
+
+Result MenuApplication_query_prescriptions_by_visit(
+    MenuApplication *application,
+    const char *visit_id,
+    char *buffer,
+    size_t capacity
+) {
+    LinkedList prescriptions;
+    const LinkedListNode *current = 0;
+    size_t used = 0;
+    Result result;
+
+    if (application == 0) {
+        return MenuApplication_write_failure("arguments missing", buffer, capacity);
+    }
+
+    LinkedList_init(&prescriptions);
+    result = PrescriptionService_find_by_visit_id(
+        &application->prescription_service,
+        visit_id,
+        &prescriptions
+    );
+    if (result.success == 0) {
+        return MenuApplication_write_failure(result.message, buffer, capacity);
+    }
+
+    result = MenuApplication_write_text(
+        buffer,
+        capacity,
+        "就诊处方列表(%zu)",
+        LinkedList_count(&prescriptions)
+    );
+    if (result.success == 0) {
+        PrescriptionService_clear_results(&prescriptions);
+        return result;
+    }
+
+    used = strlen(buffer);
+    current = prescriptions.head;
+    while (current != 0) {
+        const Prescription *p = (const Prescription *)current->data;
+
+        result = MenuApplication_append_text(
+            buffer,
+            capacity,
+            &used,
+            "\n%s | 药品=%s | 数量=%d | 用法=%s",
+            p->prescription_id,
+            p->medicine_id,
+            p->quantity,
+            p->usage
+        );
+        if (result.success == 0) {
+            break;
+        }
+
+        current = current->next;
+    }
+
+    PrescriptionService_clear_results(&prescriptions);
+    return Result_make_success("prescriptions listed");
 }
 
 Result MenuApplication_query_medicine_stock(
@@ -2764,13 +2975,15 @@ Result MenuApplication_prompt_select_registration(
         snprintf(
             options[option_count].label,
             sizeof(options[option_count].label),
-            "%s | 患者=%s | 医生=%s | 科室=%s | 时间=%s | 状态=%s",
+            "%s | 患者=%s | 医生=%s | 科室=%s | 时间=%s | 状态=%s | 类型=%s | 费用=%.2f元",
             registration->registration_id,
             registration->patient_id,
             registration->doctor_id,
             registration->department_id,
             registration->registered_at,
-            MenuApplication_registration_status_label(registration->status)
+            MenuApplication_registration_status_label(registration->status),
+            MenuApplication_registration_type_label(registration->registration_type),
+            registration->registration_fee
         );
         option_count++;
         current = current->next;
@@ -2900,11 +3113,12 @@ Result MenuApplication_prompt_select_examination(
         snprintf(
             options[option_count].label,
             sizeof(options[option_count].label),
-            "%s | 就诊=%s | 患者=%s | 项目=%s | 状态=%s",
+            "%s | 就诊=%s | 患者=%s | 项目=%s | 费用=%.2f元 | 状态=%s",
             record->examination_id,
             record->visit_id,
             record->patient_id,
             record->exam_item,
+            record->exam_fee,
             record->status == EXAM_STATUS_COMPLETED ? "已完成" : "待完成"
         );
         option_count++;
@@ -3878,12 +4092,14 @@ void MenuApplication_print_ward_table(MenuApplication *application, FILE *out) {
     }
 
     tui_print_section(out, TUI_CIRCLE, "\xe7\x97\x85\xe6\x88\xbf\xe5\x88\x97\xe8\xa1\xa8");
-    TuiTable_init(&table, 5);
+    TuiTable_init(&table, 7);
     TuiTable_set_header(&table, 0, "\xe7\xbc\x96\xe5\x8f\xb7", 8);
     TuiTable_set_header(&table, 1, "\xe5\x90\x8d\xe7\xa7\xb0", 12);
     TuiTable_set_header(&table, 2, "\xe4\xbd\x8d\xe7\xbd\xae", 10);
     TuiTable_set_header(&table, 3, "\xe5\x8d\xa0\xe7\x94\xa8/\xe5\xae\xb9\xe9\x87\x8f", 10);
-    TuiTable_set_header(&table, 4, "\xe7\x8a\xb6\xe6\x80\x81", 6);
+    TuiTable_set_header(&table, 4, "\xe7\xb1\xbb\xe5\x9e\x8b", 6);
+    TuiTable_set_header(&table, 5, "\xe6\x97\xa5\xe8\xb4\xb9(\xe5\x85\x83)", 10);
+    TuiTable_set_header(&table, 6, "\xe7\x8a\xb6\xe6\x80\x81", 6);
     TuiTable_print_top(&table, out);
     TuiTable_print_header_row(&table, out);
     TuiTable_print_separator(&table, out);
@@ -3892,18 +4108,22 @@ void MenuApplication_print_ward_table(MenuApplication *application, FILE *out) {
     while (current != 0) {
         const Ward *ward = (const Ward *)current->data;
         char occ[32];
-        const char *vals[5];
-        const char *colors[5] = {TUI_CYAN, 0, TUI_DIM, 0, 0};
+        char fee_str[32];
+        const char *vals[7];
+        const char *colors[7] = {TUI_CYAN, 0, TUI_DIM, 0, 0, 0, 0};
         snprintf(occ, sizeof(occ), "%d/%d", ward->occupied_beds, ward->capacity);
+        snprintf(fee_str, sizeof(fee_str), "%.2f", ward->daily_fee);
         vals[0] = ward->ward_id;
         vals[1] = ward->name;
         vals[2] = ward->location;
         vals[3] = occ;
-        vals[4] = ward->status == WARD_STATUS_ACTIVE
+        vals[4] = MenuApplication_ward_type_label(ward->ward_type);
+        vals[5] = fee_str;
+        vals[6] = ward->status == WARD_STATUS_ACTIVE
             ? "\xe2\x9c\x93 \xe5\x90\xaf\xe7\x94\xa8"
             : "\xe2\x9c\x97 \xe5\x81\x9c\xe7\x94\xa8";
-        colors[4] = ward->status == WARD_STATUS_ACTIVE ? TUI_GREEN : TUI_RED;
-        TuiTable_print_row_colored(&table, out, vals, colors, 5);
+        colors[6] = ward->status == WARD_STATUS_ACTIVE ? TUI_GREEN : TUI_RED;
+        TuiTable_print_row_colored(&table, out, vals, colors, 7);
         current = current->next;
     }
     TuiTable_print_bottom(&table, out);
@@ -4096,12 +4316,14 @@ Result MenuApplication_browse_ward_table(
         snprintf(
             options[option_count].label,
             sizeof(options[option_count].label),
-            "%s | %s | %s | %d/%d | %s",
+            "%s | %s | %s | %d/%d | %s | %.2f\xe5\x85\x83/\xe6\x97\xa5 | %s",
             ward->ward_id,
             ward->name,
             ward->location,
             ward->occupied_beds,
             ward->capacity,
+            MenuApplication_ward_type_label(ward->ward_type),
+            ward->daily_fee,
             ward->status == WARD_STATUS_ACTIVE ? "\xe2\x9c\x93 \xe5\x90\xaf\xe7\x94\xa8" : "\xe2\x9c\x97 \xe5\x81\x9c\xe7\x94\xa8"
         );
         option_count++;
@@ -4338,12 +4560,14 @@ Result MenuApplication_browse_patient_history(
         snprintf(
             options[option_count].label,
             sizeof(options[option_count].label),
-            "[\xe6\x8c\x82\xe5\x8f\xb7] %s | \xe5\x8c\xbb\xe7\x94\x9f=%s | \xe7\xa7\x91\xe5\xae\xa4=%s | %s | %s",
+            "[\xe6\x8c\x82\xe5\x8f\xb7] %s | \xe5\x8c\xbb\xe7\x94\x9f=%s | \xe7\xa7\x91\xe5\xae\xa4=%s | %s | %s | %s | %.2f\xe5\x85\x83",
             r->registration_id,
             r->doctor_id,
             r->department_id,
             MenuApplication_registration_status_label(r->status),
-            r->registered_at
+            r->registered_at,
+            MenuApplication_registration_type_label(r->registration_type),
+            r->registration_fee
         );
         option_count++;
         current = current->next;
@@ -4374,9 +4598,10 @@ Result MenuApplication_browse_patient_history(
         snprintf(
             options[option_count].label,
             sizeof(options[option_count].label),
-            "[\xe6\xa3\x80\xe6\x9f\xa5] %s | %s | %s | %s",
+            "[\xe6\xa3\x80\xe6\x9f\xa5] %s | %s | %.2f\xe5\x85\x83 | %s | %s",
             e->examination_id,
             e->exam_item,
+            e->exam_fee,
             e->status == EXAM_STATUS_COMPLETED ? "\xe5\xb7\xb2\xe5\xae\x8c\xe6\x88\x90" : "\xe5\xbe\x85\xe6\xa3\x80\xe6\x9f\xa5",
             e->requested_at
         );
@@ -4843,9 +5068,705 @@ Result MenuApplication_stats_bed_utilization(
 }
 
 /**
+ * @brief 药品消耗排行
+ *
+ * 加载全部发药记录和药品信息，统计每种药品的发药总量和总收入，
+ * 按收入降序排列，展示 TOP 排行和条形图。
+ */
+Result MenuApplication_stats_medicine_consumption(
+    MenuApplication *app,
+    char *buffer,
+    size_t capacity
+) {
+    LinkedList dispense_records;
+    LinkedList medicines;
+    const LinkedListNode *current = 0;
+    size_t used = 0;
+    Result result;
+    int i, j;
+
+    #define STATS_MAX_MEDICINES 128
+    struct {
+        char medicine_id[HIS_DOMAIN_ID_CAPACITY];
+        char medicine_name[HIS_DOMAIN_NAME_CAPACITY];
+        int total_quantity;
+        double total_revenue;
+    } med_stats[STATS_MAX_MEDICINES];
+    int med_count = 0;
+    double max_revenue = 0.0;
+    double grand_total = 0.0;
+
+    if (app == 0 || buffer == 0 || capacity == 0) {
+        return Result_make_failure("stats arguments missing");
+    }
+
+    /* 加载所有药品用于名称查找 */
+    LinkedList_init(&medicines);
+    result = MedicineRepository_load_all(
+        &app->pharmacy_service.medicine_repository,
+        &medicines
+    );
+    if (result.success == 0) {
+        return MenuApplication_write_failure("无法加载药品数据", buffer, capacity);
+    }
+
+    memset(med_stats, 0, sizeof(med_stats));
+
+    /* 预填充药品列表 */
+    current = medicines.head;
+    while (current != 0 && med_count < STATS_MAX_MEDICINES) {
+        const Medicine *med = (const Medicine *)current->data;
+        strncpy(med_stats[med_count].medicine_id, med->medicine_id, HIS_DOMAIN_ID_CAPACITY - 1);
+        strncpy(med_stats[med_count].medicine_name, med->name, HIS_DOMAIN_NAME_CAPACITY - 1);
+        med_stats[med_count].total_quantity = 0;
+        med_stats[med_count].total_revenue = 0.0;
+        med_count++;
+        current = current->next;
+    }
+    MedicineRepository_clear_list(&medicines);
+
+    /* 加载所有发药记录 */
+    LinkedList_init(&dispense_records);
+    result = DispenseRecordRepository_load_all(
+        &app->pharmacy_service.dispense_record_repository,
+        &dispense_records
+    );
+    if (result.success == 0) {
+        return MenuApplication_write_failure("无法加载发药记录", buffer, capacity);
+    }
+
+    /* 遍历发药记录，累计每种药品的数量和收入 */
+    current = dispense_records.head;
+    while (current != 0) {
+        const DispenseRecord *dr = (const DispenseRecord *)current->data;
+        Medicine medicine;
+
+        result = MedicineRepository_find_by_medicine_id(
+            &app->pharmacy_service.medicine_repository,
+            dr->medicine_id,
+            &medicine
+        );
+        if (result.success) {
+            for (i = 0; i < med_count; i++) {
+                if (strcmp(med_stats[i].medicine_id, dr->medicine_id) == 0) {
+                    med_stats[i].total_quantity += dr->quantity;
+                    med_stats[i].total_revenue += medicine.price * dr->quantity;
+                    break;
+                }
+            }
+        }
+        current = current->next;
+    }
+    DispenseRecordRepository_clear_list(&dispense_records);
+
+    /* 按收入降序排序（简单冒泡） */
+    for (i = 0; i < med_count - 1; i++) {
+        for (j = 0; j < med_count - 1 - i; j++) {
+            if (med_stats[j].total_revenue < med_stats[j + 1].total_revenue) {
+                char tmp_id[HIS_DOMAIN_ID_CAPACITY];
+                char tmp_name[HIS_DOMAIN_NAME_CAPACITY];
+                int tmp_qty;
+                double tmp_rev;
+
+                strncpy(tmp_id, med_stats[j].medicine_id, HIS_DOMAIN_ID_CAPACITY);
+                strncpy(tmp_name, med_stats[j].medicine_name, HIS_DOMAIN_NAME_CAPACITY);
+                tmp_qty = med_stats[j].total_quantity;
+                tmp_rev = med_stats[j].total_revenue;
+
+                strncpy(med_stats[j].medicine_id, med_stats[j + 1].medicine_id, HIS_DOMAIN_ID_CAPACITY);
+                strncpy(med_stats[j].medicine_name, med_stats[j + 1].medicine_name, HIS_DOMAIN_NAME_CAPACITY);
+                med_stats[j].total_quantity = med_stats[j + 1].total_quantity;
+                med_stats[j].total_revenue = med_stats[j + 1].total_revenue;
+
+                strncpy(med_stats[j + 1].medicine_id, tmp_id, HIS_DOMAIN_ID_CAPACITY);
+                strncpy(med_stats[j + 1].medicine_name, tmp_name, HIS_DOMAIN_NAME_CAPACITY);
+                med_stats[j + 1].total_quantity = tmp_qty;
+                med_stats[j + 1].total_revenue = tmp_rev;
+            }
+        }
+    }
+
+    /* 找到最大收入和总收入 */
+    for (i = 0; i < med_count; i++) {
+        grand_total += med_stats[i].total_revenue;
+        if (med_stats[i].total_revenue > max_revenue) {
+            max_revenue = med_stats[i].total_revenue;
+        }
+    }
+
+    /* 格式化输出 */
+    result = MenuApplication_write_text(
+        buffer, capacity,
+        TUI_STAR " 药品消耗排行\n"
+        TUI_DH TUI_DH TUI_DH TUI_DH TUI_DH TUI_DH TUI_DH TUI_DH TUI_DH TUI_DH
+        TUI_DH TUI_DH TUI_DH TUI_DH TUI_DH TUI_DH TUI_DH TUI_DH TUI_DH TUI_DH
+        TUI_DH TUI_DH TUI_DH TUI_DH TUI_DH TUI_DH TUI_DH TUI_DH TUI_DH TUI_DH "\n"
+        "%3s " TUI_DV " %-16s " TUI_DV " %6s " TUI_DV " %10s " TUI_DV " %-20s\n"
+        TUI_DH TUI_DH TUI_DH TUI_DH TUI_DH TUI_DH TUI_DH TUI_DH TUI_DH TUI_DH
+        TUI_DH TUI_DH TUI_DH TUI_DH TUI_DH TUI_DH TUI_DH TUI_DH TUI_DH TUI_DH
+        TUI_DH TUI_DH TUI_DH TUI_DH TUI_DH TUI_DH TUI_DH TUI_DH TUI_DH TUI_DH,
+        " # ", "药品名称", "数量", "总金额", "消耗占比"
+    );
+    if (result.success == 0) return result;
+    used = strlen(buffer);
+
+    for (i = 0; i < med_count && i < 10; i++) {
+        char bar[64];
+        int bar_len = 12;
+        int filled = 0;
+        int k;
+        double pct = 0.0;
+
+        if (grand_total > 0.0) {
+            pct = med_stats[i].total_revenue / grand_total * 100.0;
+        }
+        if (max_revenue > 0.0) {
+            filled = (int)(med_stats[i].total_revenue / max_revenue * bar_len);
+        }
+        if (filled > bar_len) filled = bar_len;
+
+        bar[0] = '\0';
+        for (k = 0; k < filled; k++) {
+            strncat(bar, TUI_BLOCK_FULL, sizeof(bar) - strlen(bar) - 1);
+        }
+        for (k = filled; k < bar_len; k++) {
+            strncat(bar, TUI_BLOCK_LIGHT, sizeof(bar) - strlen(bar) - 1);
+        }
+
+        result = MenuApplication_append_text(
+            buffer, capacity, &used,
+            "\n%3d " TUI_DV " %-16s " TUI_DV " %6d " TUI_DV " %10.2f " TUI_DV " %s %4.1f%%",
+            i + 1,
+            med_stats[i].medicine_name,
+            med_stats[i].total_quantity,
+            med_stats[i].total_revenue,
+            bar,
+            pct
+        );
+        if (result.success == 0) return result;
+    }
+
+    result = MenuApplication_append_text(
+        buffer, capacity, &used,
+        "\n" TUI_DH TUI_DH TUI_DH TUI_DH TUI_DH TUI_DH TUI_DH TUI_DH TUI_DH TUI_DH
+        TUI_DH TUI_DH TUI_DH TUI_DH TUI_DH TUI_DH TUI_DH TUI_DH TUI_DH TUI_DH
+        TUI_DH TUI_DH TUI_DH TUI_DH TUI_DH TUI_DH TUI_DH TUI_DH TUI_DH TUI_DH
+        "\n" TUI_BULLET " 药品总数: %d    总消耗金额: %.2f 元",
+        med_count,
+        grand_total
+    );
+
+    return Result_make_success("medicine consumption stats ready");
+    #undef STATS_MAX_MEDICINES
+}
+
+/**
+ * @brief 患者流量统计
+ *
+ * 加载所有挂号记录，按科室统计挂号数量，按状态统计分布，计算取消率。
+ */
+Result MenuApplication_stats_patient_flow(
+    MenuApplication *app,
+    char *buffer,
+    size_t capacity
+) {
+    LinkedList registrations;
+    LinkedList departments;
+    const LinkedListNode *current = 0;
+    size_t used = 0;
+    Result result;
+    int i;
+
+    #define STATS_FLOW_MAX_DEPTS 64
+    struct {
+        char department_id[HIS_DOMAIN_ID_CAPACITY];
+        char department_name[HIS_DOMAIN_NAME_CAPACITY];
+        int pending_count;
+        int diagnosed_count;
+        int cancelled_count;
+        int total_count;
+    } dept_flow[STATS_FLOW_MAX_DEPTS];
+    int dept_count = 0;
+    int total_pending = 0;
+    int total_diagnosed = 0;
+    int total_cancelled = 0;
+    int total_all = 0;
+
+    if (app == 0 || buffer == 0 || capacity == 0) {
+        return Result_make_failure("stats arguments missing");
+    }
+
+    /* 加载所有科室 */
+    LinkedList_init(&departments);
+    result = DepartmentRepository_load_all(
+        &app->doctor_service.department_repository,
+        &departments
+    );
+    if (result.success == 0) {
+        return MenuApplication_write_failure("无法加载科室数据", buffer, capacity);
+    }
+
+    memset(dept_flow, 0, sizeof(dept_flow));
+
+    current = departments.head;
+    while (current != 0 && dept_count < STATS_FLOW_MAX_DEPTS) {
+        const Department *dept = (const Department *)current->data;
+        strncpy(dept_flow[dept_count].department_id, dept->department_id, HIS_DOMAIN_ID_CAPACITY - 1);
+        strncpy(dept_flow[dept_count].department_name, dept->name, HIS_DOMAIN_NAME_CAPACITY - 1);
+        dept_count++;
+        current = current->next;
+    }
+    DepartmentRepository_clear_list(&departments);
+
+    /* 加载所有挂号记录 */
+    LinkedList_init(&registrations);
+    result = RegistrationRepository_load_all(
+        &app->registration_repository,
+        &registrations
+    );
+    if (result.success == 0) {
+        return MenuApplication_write_failure("无法加载挂号记录", buffer, capacity);
+    }
+
+    /* 统计 */
+    current = registrations.head;
+    while (current != 0) {
+        const Registration *r = (const Registration *)current->data;
+        for (i = 0; i < dept_count; i++) {
+            if (strcmp(dept_flow[i].department_id, r->department_id) == 0) {
+                dept_flow[i].total_count++;
+                if (r->status == REG_STATUS_PENDING) {
+                    dept_flow[i].pending_count++;
+                } else if (r->status == REG_STATUS_DIAGNOSED) {
+                    dept_flow[i].diagnosed_count++;
+                } else if (r->status == REG_STATUS_CANCELLED) {
+                    dept_flow[i].cancelled_count++;
+                }
+                break;
+            }
+        }
+        current = current->next;
+    }
+    RegistrationRepository_clear_list(&registrations);
+
+    /* 汇总 */
+    for (i = 0; i < dept_count; i++) {
+        total_pending += dept_flow[i].pending_count;
+        total_diagnosed += dept_flow[i].diagnosed_count;
+        total_cancelled += dept_flow[i].cancelled_count;
+        total_all += dept_flow[i].total_count;
+    }
+
+    /* 格式化输出 */
+    result = MenuApplication_write_text(
+        buffer, capacity,
+        TUI_STAR " 患者流量统计\n"
+        TUI_DH TUI_DH TUI_DH TUI_DH TUI_DH TUI_DH TUI_DH TUI_DH TUI_DH TUI_DH
+        TUI_DH TUI_DH TUI_DH TUI_DH TUI_DH TUI_DH TUI_DH TUI_DH TUI_DH TUI_DH
+        TUI_DH TUI_DH TUI_DH TUI_DH TUI_DH TUI_DH TUI_DH TUI_DH TUI_DH TUI_DH "\n"
+        TUI_BULLET " 总挂号数: %d    待诊: %d    已就诊: %d    已取消: %d\n"
+        TUI_BULLET " 取消率: %.1f%%\n"
+        TUI_DH TUI_DH TUI_DH TUI_DH TUI_DH TUI_DH TUI_DH TUI_DH TUI_DH TUI_DH
+        TUI_DH TUI_DH TUI_DH TUI_DH TUI_DH TUI_DH TUI_DH TUI_DH TUI_DH TUI_DH
+        TUI_DH TUI_DH TUI_DH TUI_DH TUI_DH TUI_DH TUI_DH TUI_DH TUI_DH TUI_DH "\n"
+        "%-12s " TUI_DV " %-14s " TUI_DV " %6s " TUI_DV " %6s " TUI_DV " %6s " TUI_DV " %6s " TUI_DV " %8s\n"
+        "-------------|----------------|--------|--------|--------|--------|---------",
+        total_all, total_pending, total_diagnosed, total_cancelled,
+        total_all > 0 ? (double)total_cancelled / total_all * 100.0 : 0.0,
+        "科室编号", "科室名称", "总计", "待诊", "已诊", "取消", "取消率"
+    );
+    if (result.success == 0) return result;
+    used = strlen(buffer);
+
+    for (i = 0; i < dept_count; i++) {
+        double cancel_rate = 0.0;
+        if (dept_flow[i].total_count > 0) {
+            cancel_rate = (double)dept_flow[i].cancelled_count / dept_flow[i].total_count * 100.0;
+        }
+        result = MenuApplication_append_text(
+            buffer, capacity, &used,
+            "\n%-12s " TUI_DV " %-14s " TUI_DV " %6d " TUI_DV " %6d " TUI_DV " %6d " TUI_DV " %6d " TUI_DV " %7.1f%%",
+            dept_flow[i].department_id,
+            dept_flow[i].department_name,
+            dept_flow[i].total_count,
+            dept_flow[i].pending_count,
+            dept_flow[i].diagnosed_count,
+            dept_flow[i].cancelled_count,
+            cancel_rate
+        );
+        if (result.success == 0) return result;
+    }
+
+    return Result_make_success("patient flow stats ready");
+    #undef STATS_FLOW_MAX_DEPTS
+}
+
+/**
+ * @brief 科室综合绩效
+ *
+ * 综合收入、患者数、医生数，计算人均患者数，展示科室对比。
+ */
+Result MenuApplication_stats_dept_performance(
+    MenuApplication *app,
+    char *buffer,
+    size_t capacity
+) {
+    LinkedList departments;
+    LinkedList doctors;
+    LinkedList registrations;
+    LinkedList dispense_records;
+    const LinkedListNode *current = 0;
+    size_t used = 0;
+    Result result;
+    int i;
+
+    #define STATS_PERF_MAX_DEPTS 64
+    struct {
+        char department_id[HIS_DOMAIN_ID_CAPACITY];
+        char department_name[HIS_DOMAIN_NAME_CAPACITY];
+        double revenue;
+        int patient_count;
+        int doctor_count;
+    } perf[STATS_PERF_MAX_DEPTS];
+    int dept_count = 0;
+
+    if (app == 0 || buffer == 0 || capacity == 0) {
+        return Result_make_failure("stats arguments missing");
+    }
+
+    /* 加载科室 */
+    LinkedList_init(&departments);
+    result = DepartmentRepository_load_all(
+        &app->doctor_service.department_repository,
+        &departments
+    );
+    if (result.success == 0) {
+        return MenuApplication_write_failure("无法加载科室数据", buffer, capacity);
+    }
+
+    memset(perf, 0, sizeof(perf));
+
+    current = departments.head;
+    while (current != 0 && dept_count < STATS_PERF_MAX_DEPTS) {
+        const Department *dept = (const Department *)current->data;
+        strncpy(perf[dept_count].department_id, dept->department_id, HIS_DOMAIN_ID_CAPACITY - 1);
+        strncpy(perf[dept_count].department_name, dept->name, HIS_DOMAIN_NAME_CAPACITY - 1);
+        dept_count++;
+        current = current->next;
+    }
+    DepartmentRepository_clear_list(&departments);
+
+    /* 统计医生数 */
+    LinkedList_init(&doctors);
+    result = DoctorRepository_load_all(
+        &app->doctor_service.doctor_repository,
+        &doctors
+    );
+    if (result.success) {
+        current = doctors.head;
+        while (current != 0) {
+            const Doctor *doc = (const Doctor *)current->data;
+            for (i = 0; i < dept_count; i++) {
+                if (strcmp(perf[i].department_id, doc->department_id) == 0) {
+                    perf[i].doctor_count++;
+                    break;
+                }
+            }
+            current = current->next;
+        }
+        DoctorRepository_clear_list(&doctors);
+    }
+
+    /* 统计患者数（通过挂号记录） */
+    LinkedList_init(&registrations);
+    result = RegistrationRepository_load_all(
+        &app->registration_repository,
+        &registrations
+    );
+    if (result.success) {
+        current = registrations.head;
+        while (current != 0) {
+            const Registration *r = (const Registration *)current->data;
+            for (i = 0; i < dept_count; i++) {
+                if (strcmp(perf[i].department_id, r->department_id) == 0) {
+                    perf[i].patient_count++;
+                    break;
+                }
+            }
+            current = current->next;
+        }
+        RegistrationRepository_clear_list(&registrations);
+    }
+
+    /* 统计收入（通过发药记录） */
+    LinkedList_init(&dispense_records);
+    result = DispenseRecordRepository_load_all(
+        &app->pharmacy_service.dispense_record_repository,
+        &dispense_records
+    );
+    if (result.success) {
+        current = dispense_records.head;
+        while (current != 0) {
+            const DispenseRecord *dr = (const DispenseRecord *)current->data;
+            Medicine medicine;
+            VisitRecord visit;
+
+            result = MedicineRepository_find_by_medicine_id(
+                &app->pharmacy_service.medicine_repository,
+                dr->medicine_id,
+                &medicine
+            );
+            if (result.success) {
+                result = VisitRecordRepository_find_by_visit_id(
+                    &app->medical_record_service.visit_repository,
+                    dr->prescription_id,
+                    &visit
+                );
+                if (result.success) {
+                    for (i = 0; i < dept_count; i++) {
+                        if (strcmp(perf[i].department_id, visit.department_id) == 0) {
+                            perf[i].revenue += medicine.price * dr->quantity;
+                            break;
+                        }
+                    }
+                }
+            }
+            current = current->next;
+        }
+        DispenseRecordRepository_clear_list(&dispense_records);
+    }
+
+    /* 格式化输出 */
+    result = MenuApplication_write_text(
+        buffer, capacity,
+        TUI_STAR " 科室综合绩效\n"
+        TUI_DH TUI_DH TUI_DH TUI_DH TUI_DH TUI_DH TUI_DH TUI_DH TUI_DH TUI_DH
+        TUI_DH TUI_DH TUI_DH TUI_DH TUI_DH TUI_DH TUI_DH TUI_DH TUI_DH TUI_DH
+        TUI_DH TUI_DH TUI_DH TUI_DH TUI_DH TUI_DH TUI_DH TUI_DH TUI_DH TUI_DH "\n"
+        "%-12s " TUI_DV " %-14s " TUI_DV " %10s " TUI_DV " %6s " TUI_DV " %6s " TUI_DV " %8s\n"
+        "-------------|----------------|------------|--------|--------|---------",
+        "科室编号", "科室名称", "收入(元)", "患者数", "医生数", "人均患者"
+    );
+    if (result.success == 0) return result;
+    used = strlen(buffer);
+
+    for (i = 0; i < dept_count; i++) {
+        double avg_patients = 0.0;
+        if (perf[i].doctor_count > 0) {
+            avg_patients = (double)perf[i].patient_count / perf[i].doctor_count;
+        }
+        result = MenuApplication_append_text(
+            buffer, capacity, &used,
+            "\n%-12s " TUI_DV " %-14s " TUI_DV " %10.2f " TUI_DV " %6d " TUI_DV " %6d " TUI_DV " %8.1f",
+            perf[i].department_id,
+            perf[i].department_name,
+            perf[i].revenue,
+            perf[i].patient_count,
+            perf[i].doctor_count,
+            avg_patients
+        );
+        if (result.success == 0) return result;
+    }
+
+    return Result_make_success("department performance stats ready");
+    #undef STATS_PERF_MAX_DEPTS
+}
+
+/**
+ * @brief 住院周转率
+ *
+ * 加载所有入院记录，统计总入院数、在院/出院分布、平均住院天数、
+ * 各病房入院数和占用率。
+ */
+Result MenuApplication_stats_admission_turnover(
+    MenuApplication *app,
+    char *buffer,
+    size_t capacity
+) {
+    LinkedList admissions;
+    LinkedList wards;
+    LinkedList beds;
+    const LinkedListNode *current = 0;
+    const LinkedListNode *bed_node = 0;
+    size_t used = 0;
+    Result result;
+    int i;
+
+    int total_admissions = 0;
+    int active_count = 0;
+    int discharged_count = 0;
+    int los_count = 0;
+    double total_los = 0.0;
+
+    #define STATS_TURNOVER_MAX_WARDS 32
+    struct {
+        char ward_id[HIS_DOMAIN_ID_CAPACITY];
+        char ward_name[HIS_DOMAIN_NAME_CAPACITY];
+        int admission_count;
+        int active_admission_count;
+        int total_beds;
+        int occupied_beds;
+    } ward_stats[STATS_TURNOVER_MAX_WARDS];
+    int ward_count = 0;
+
+    if (app == 0 || buffer == 0 || capacity == 0) {
+        return Result_make_failure("stats arguments missing");
+    }
+
+    /* 加载病房 */
+    LinkedList_init(&wards);
+    result = WardRepository_load_all(
+        &app->bed_service.ward_repository,
+        &wards
+    );
+    if (result.success == 0) {
+        return MenuApplication_write_failure("无法加载病房数据", buffer, capacity);
+    }
+
+    memset(ward_stats, 0, sizeof(ward_stats));
+
+    current = wards.head;
+    while (current != 0 && ward_count < STATS_TURNOVER_MAX_WARDS) {
+        const Ward *w = (const Ward *)current->data;
+        strncpy(ward_stats[ward_count].ward_id, w->ward_id, HIS_DOMAIN_ID_CAPACITY - 1);
+        strncpy(ward_stats[ward_count].ward_name, w->name, HIS_DOMAIN_NAME_CAPACITY - 1);
+        ward_count++;
+        current = current->next;
+    }
+    WardRepository_clear_loaded_list(&wards);
+
+    /* 加载床位统计每病房总床位和已占用 */
+    LinkedList_init(&beds);
+    result = BedRepository_load_all(
+        &app->bed_service.bed_repository,
+        &beds
+    );
+    if (result.success) {
+        bed_node = beds.head;
+        while (bed_node != 0) {
+            const Bed *bed = (const Bed *)bed_node->data;
+            for (i = 0; i < ward_count; i++) {
+                if (strcmp(ward_stats[i].ward_id, bed->ward_id) == 0) {
+                    ward_stats[i].total_beds++;
+                    if (bed->status == BED_STATUS_OCCUPIED) {
+                        ward_stats[i].occupied_beds++;
+                    }
+                    break;
+                }
+            }
+            bed_node = bed_node->next;
+        }
+        BedRepository_clear_loaded_list(&beds);
+    }
+
+    /* 加载所有入院记录 */
+    LinkedList_init(&admissions);
+    result = AdmissionRepository_load_all(
+        &app->inpatient_service.admission_repository,
+        &admissions
+    );
+    if (result.success == 0) {
+        return MenuApplication_write_failure("无法加载住院记录", buffer, capacity);
+    }
+
+    current = admissions.head;
+    while (current != 0) {
+        const Admission *a = (const Admission *)current->data;
+        total_admissions++;
+
+        if (a->status == ADMISSION_STATUS_ACTIVE) {
+            active_count++;
+        } else {
+            discharged_count++;
+            /* 估算住院天数 */
+            if (a->admitted_at[0] != '\0' && a->discharged_at[0] != '\0') {
+                if (strlen(a->admitted_at) >= 10 && strlen(a->discharged_at) >= 10) {
+                    int ay = 0, am = 0, ad = 0, dy = 0, dm = 0, dd = 0;
+                    if (sscanf(a->admitted_at, "%d-%d-%d", &ay, &am, &ad) == 3 &&
+                        sscanf(a->discharged_at, "%d-%d-%d", &dy, &dm, &dd) == 3) {
+                        int admit_day = ay * 365 + am * 30 + ad;
+                        int discharge_day = dy * 365 + dm * 30 + dd;
+                        if (discharge_day > admit_day) {
+                            total_los += (discharge_day - admit_day);
+                            los_count++;
+                        } else {
+                            total_los += 1.0;
+                            los_count++;
+                        }
+                    }
+                }
+            }
+        }
+
+        /* 统计病房入院数 */
+        for (i = 0; i < ward_count; i++) {
+            if (strcmp(ward_stats[i].ward_id, a->ward_id) == 0) {
+                ward_stats[i].admission_count++;
+                if (a->status == ADMISSION_STATUS_ACTIVE) {
+                    ward_stats[i].active_admission_count++;
+                }
+                break;
+            }
+        }
+
+        current = current->next;
+    }
+    AdmissionRepository_clear_loaded_list(&admissions);
+
+    /* 格式化输出 */
+    {
+        double avg_los = los_count > 0 ? total_los / los_count : 0.0;
+
+        result = MenuApplication_write_text(
+            buffer, capacity,
+            TUI_MEDICAL " 住院周转率分析\n"
+            TUI_DH TUI_DH TUI_DH TUI_DH TUI_DH TUI_DH TUI_DH TUI_DH TUI_DH TUI_DH
+            TUI_DH TUI_DH TUI_DH TUI_DH TUI_DH TUI_DH TUI_DH TUI_DH TUI_DH TUI_DH
+            TUI_DH TUI_DH TUI_DH TUI_DH TUI_DH TUI_DH TUI_DH TUI_DH TUI_DH TUI_DH "\n"
+            TUI_BULLET " 总入院数: %d    在院: %d    已出院: %d\n"
+            TUI_BULLET " 平均住院天数: %.1f 天\n"
+            TUI_DH TUI_DH TUI_DH TUI_DH TUI_DH TUI_DH TUI_DH TUI_DH TUI_DH TUI_DH
+            TUI_DH TUI_DH TUI_DH TUI_DH TUI_DH TUI_DH TUI_DH TUI_DH TUI_DH TUI_DH
+            TUI_DH TUI_DH TUI_DH TUI_DH TUI_DH TUI_DH TUI_DH TUI_DH TUI_DH TUI_DH "\n"
+            "%-12s " TUI_DV " %-14s " TUI_DV " %6s " TUI_DV " %6s " TUI_DV " %6s " TUI_DV " %6s " TUI_DV " %8s\n"
+            "-------------|----------------|--------|--------|--------|--------|---------",
+            total_admissions, active_count, discharged_count,
+            avg_los,
+            "病房编号", "病房名称", "入院数", "在院", "总床位", "占用", "占用率"
+        );
+    }
+    if (result.success == 0) return result;
+    used = strlen(buffer);
+
+    for (i = 0; i < ward_count; i++) {
+        double occ_rate = 0.0;
+        if (ward_stats[i].total_beds > 0) {
+            occ_rate = (double)ward_stats[i].occupied_beds / ward_stats[i].total_beds * 100.0;
+        }
+
+        result = MenuApplication_append_text(
+            buffer, capacity, &used,
+            "\n%-12s " TUI_DV " %-14s " TUI_DV " %6d " TUI_DV " %6d " TUI_DV " %6d " TUI_DV " %6d " TUI_DV " %7.1f%%",
+            ward_stats[i].ward_id,
+            ward_stats[i].ward_name,
+            ward_stats[i].admission_count,
+            ward_stats[i].active_admission_count,
+            ward_stats[i].total_beds,
+            ward_stats[i].occupied_beds,
+            occ_rate
+        );
+        if (result.success == 0) return result;
+    }
+
+    return Result_make_success("admission turnover stats ready");
+    #undef STATS_TURNOVER_MAX_WARDS
+}
+
+/**
  * @brief 患者费用查询
  *
- * 加载指定患者的所有发药记录，查找药品价格，计算每项费用和总费用。
+ * 加载指定患者的发药记录和住院记录，计算药品费用和住院床位费，
+ * 分类展示明细并汇总总费用。
  */
 Result MenuApplication_query_patient_fees(
     MenuApplication *app,
@@ -4854,10 +5775,21 @@ Result MenuApplication_query_patient_fees(
     size_t capacity
 ) {
     LinkedList records;
+    LinkedList admissions;
+    LinkedList reg_list;
+    LinkedList visit_list;
+    LinkedList exam_list;
     const LinkedListNode *current = 0;
     size_t used = 0;
-    double total_fee = 0.0;
-    int item_count = 0;
+    double drug_total = 0.0;
+    double bed_total = 0.0;
+    double reg_total = 0.0;
+    double exam_total = 0.0;
+    double grand_total = 0.0;
+    int drug_count = 0;
+    int bed_count = 0;
+    int reg_count = 0;
+    int exam_count = 0;
     Result result;
 
     if (app == 0 || patient_id == 0 || buffer == 0 || capacity == 0) {
@@ -4875,31 +5807,227 @@ Result MenuApplication_query_patient_fees(
         return MenuApplication_write_failure("无法加载发药记录", buffer, capacity);
     }
 
-    if (LinkedList_count(&records) == 0) {
-        PharmacyService_clear_dispense_record_results(&records);
-        return MenuApplication_write_text(
-            buffer, capacity,
-            TUI_STAR " 费用查询 - 患者: %s\n暂无费用记录",
-            patient_id
-        );
-    }
-
-    /* 表头 */
-    result = MenuApplication_write_text(
-        buffer, capacity,
-        TUI_STAR " 费用查询 - 患者: %s\n"
-        "%-12s | %-16s | %8s | %8s | %12s\n"
-        "-------------|------------------|----------|----------|--------------",
-        patient_id,
-        "发药编号", "药品名称", "单价", "数量", "小计(元)"
+    /* 加载所有住院记录 */
+    LinkedList_init(&admissions);
+    result = AdmissionRepository_load_all(
+        &app->inpatient_service.admission_repository,
+        &admissions
     );
     if (result.success == 0) {
         PharmacyService_clear_dispense_record_results(&records);
+        return MenuApplication_write_failure("无法加载住院记录", buffer, capacity);
+    }
+
+    /* 加载该患者的挂号记录 */
+    LinkedList_init(&reg_list);
+    {
+        RegistrationRepositoryFilter reg_filter;
+        RegistrationRepositoryFilter_init(&reg_filter);
+        result = RegistrationService_find_by_patient_id(
+            &app->registration_service,
+            patient_id,
+            &reg_filter,
+            &reg_list
+        );
+        if (result.success == 0) {
+            PharmacyService_clear_dispense_record_results(&records);
+            AdmissionRepository_clear_loaded_list(&admissions);
+            return MenuApplication_write_failure("无法加载挂号记录", buffer, capacity);
+        }
+    }
+
+    /* 加载所有就诊记录以便查找该患者的检查费用 */
+    LinkedList_init(&visit_list);
+    result = VisitRecordRepository_load_all(
+        &app->medical_record_service.visit_repository,
+        &visit_list
+    );
+    if (result.success == 0) {
+        PharmacyService_clear_dispense_record_results(&records);
+        AdmissionRepository_clear_loaded_list(&admissions);
+        RegistrationRepository_clear_list(&reg_list);
+        return MenuApplication_write_failure("无法加载就诊记录", buffer, capacity);
+    }
+
+    /* 检查是否有任何费用记录 */
+    {
+        int has_admissions = 0;
+        int has_exams = 0;
+        current = admissions.head;
+        while (current != 0) {
+            const Admission *adm = (const Admission *)current->data;
+            if (strcmp(adm->patient_id, patient_id) == 0) {
+                has_admissions = 1;
+                break;
+            }
+            current = current->next;
+        }
+
+        /* 检查是否有检查记录 */
+        current = visit_list.head;
+        while (current != 0 && has_exams == 0) {
+            const VisitRecord *visit = (const VisitRecord *)current->data;
+            if (strcmp(visit->patient_id, patient_id) == 0) {
+                LinkedList tmp_exams;
+                LinkedList_init(&tmp_exams);
+                if (ExaminationRecordRepository_find_by_visit_id(
+                        &app->medical_record_service.examination_repository,
+                        visit->visit_id, &tmp_exams).success) {
+                    if (LinkedList_count(&tmp_exams) > 0) {
+                        has_exams = 1;
+                    }
+                }
+                ExaminationRecordRepository_clear_list(&tmp_exams);
+            }
+            current = current->next;
+        }
+
+        if (LinkedList_count(&records) == 0 && has_admissions == 0 &&
+            LinkedList_count(&reg_list) == 0 && has_exams == 0) {
+            PharmacyService_clear_dispense_record_results(&records);
+            AdmissionRepository_clear_loaded_list(&admissions);
+            RegistrationRepository_clear_list(&reg_list);
+            VisitRecordRepository_clear_list(&visit_list);
+            return MenuApplication_write_text(
+                buffer, capacity,
+                TUI_STAR " 费用查询 - 患者: %s\n暂无费用记录",
+                patient_id
+            );
+        }
+    }
+
+    /* 总标题 */
+    result = MenuApplication_write_text(
+        buffer, capacity,
+        TUI_STAR " 费用查询 - 患者: %s",
+        patient_id
+    );
+    if (result.success == 0) {
+        PharmacyService_clear_dispense_record_results(&records);
+        AdmissionRepository_clear_loaded_list(&admissions);
+        RegistrationRepository_clear_list(&reg_list);
+        VisitRecordRepository_clear_list(&visit_list);
         return result;
     }
     used = strlen(buffer);
 
-    /* 遍历每条记录 */
+    /* ===== 一、挂号费用 ===== */
+    result = MenuApplication_append_text(
+        buffer, capacity, &used,
+        "\n\n" TUI_BULLET " 一、挂号费用\n"
+        "%-12s | %-6s | %-10s | %8s\n"
+        "-------------|--------|------------|----------",
+        "编号", "类型", "科室", "费用(元)"
+    );
+    if (result.success == 0) {
+        PharmacyService_clear_dispense_record_results(&records);
+        AdmissionRepository_clear_loaded_list(&admissions);
+        RegistrationRepository_clear_list(&reg_list);
+        VisitRecordRepository_clear_list(&visit_list);
+        return result;
+    }
+
+    current = reg_list.head;
+    while (current != 0) {
+        const Registration *reg = (const Registration *)current->data;
+        Department dept;
+        const char *dept_name = reg->department_id;
+
+        if (DepartmentRepository_find_by_department_id(
+                &app->doctor_service.department_repository,
+                reg->department_id, &dept).success) {
+            dept_name = dept.name;
+        }
+
+        reg_total += reg->registration_fee;
+        reg_count++;
+        result = MenuApplication_append_text(
+            buffer, capacity, &used,
+            "\n%-12s | %-6s | %-10s | %8.2f",
+            reg->registration_id,
+            MenuApplication_registration_type_label(reg->registration_type),
+            dept_name,
+            reg->registration_fee
+        );
+        if (result.success == 0) break;
+        current = current->next;
+    }
+    RegistrationRepository_clear_list(&reg_list);
+
+    result = MenuApplication_append_text(
+        buffer, capacity, &used,
+        "\n挂号费小计: %.2f 元",
+        reg_total
+    );
+
+    /* ===== 二、检查费用 ===== */
+    result = MenuApplication_append_text(
+        buffer, capacity, &used,
+        "\n\n" TUI_BULLET " 二、检查费用\n"
+        "%-12s | %-12s | %-6s | %8s\n"
+        "-------------|--------------|--------|----------",
+        "编号", "检查项目", "类型", "费用(元)"
+    );
+    if (result.success == 0) {
+        PharmacyService_clear_dispense_record_results(&records);
+        AdmissionRepository_clear_loaded_list(&admissions);
+        VisitRecordRepository_clear_list(&visit_list);
+        return result;
+    }
+
+    current = visit_list.head;
+    while (current != 0) {
+        const VisitRecord *visit = (const VisitRecord *)current->data;
+        if (strcmp(visit->patient_id, patient_id) == 0) {
+            LinkedList exams;
+            LinkedList_init(&exams);
+            if (ExaminationRecordRepository_find_by_visit_id(
+                    &app->medical_record_service.examination_repository,
+                    visit->visit_id, &exams).success) {
+                const LinkedListNode *exam_node = exams.head;
+                while (exam_node != 0) {
+                    const ExaminationRecord *exam = (const ExaminationRecord *)exam_node->data;
+                    exam_total += exam->exam_fee;
+                    exam_count++;
+                    result = MenuApplication_append_text(
+                        buffer, capacity, &used,
+                        "\n%-12s | %-12s | %-6s | %8.2f",
+                        exam->examination_id,
+                        exam->exam_item,
+                        exam->exam_type,
+                        exam->exam_fee
+                    );
+                    if (result.success == 0) break;
+                    exam_node = exam_node->next;
+                }
+            }
+            ExaminationRecordRepository_clear_list(&exams);
+            if (result.success == 0) break;
+        }
+        current = current->next;
+    }
+    VisitRecordRepository_clear_list(&visit_list);
+
+    result = MenuApplication_append_text(
+        buffer, capacity, &used,
+        "\n检查费小计: %.2f 元",
+        exam_total
+    );
+
+    /* ===== 三、药品费用 ===== */
+    result = MenuApplication_append_text(
+        buffer, capacity, &used,
+        "\n\n" TUI_BULLET " 三、药品费用\n"
+        "%-12s | %-16s | %8s | %8s | %12s\n"
+        "-------------|------------------|----------|----------|--------------",
+        "发药编号", "药品名称", "单价", "数量", "小计(元)"
+    );
+    if (result.success == 0) {
+        PharmacyService_clear_dispense_record_results(&records);
+        AdmissionRepository_clear_loaded_list(&admissions);
+        return result;
+    }
+
     current = records.head;
     while (current != 0) {
         const DispenseRecord *dr = (const DispenseRecord *)current->data;
@@ -4913,8 +6041,8 @@ Result MenuApplication_query_patient_fees(
         );
         if (result.success) {
             item_fee = medicine.price * dr->quantity;
-            total_fee += item_fee;
-            item_count++;
+            drug_total += item_fee;
+            drug_count++;
 
             result = MenuApplication_append_text(
                 buffer, capacity, &used,
@@ -4942,17 +6070,770 @@ Result MenuApplication_query_patient_fees(
         current = current->next;
     }
 
-    /* 总计 */
     result = MenuApplication_append_text(
         buffer, capacity, &used,
-        "\n-------------|------------------|----------|----------|----------"
-        "\n共 %d 项 | 合计费用: %.2f 元",
-        item_count,
-        total_fee
+        "\n药品费小计: %.2f 元",
+        drug_total
+    );
+
+    /* ===== 四、住院床位费 ===== */
+    result = MenuApplication_append_text(
+        buffer, capacity, &used,
+        "\n\n" TUI_BULLET " 四、住院床位费\n"
+        "%-12s | %-12s | %6s | %8s | %6s | %12s\n"
+        "-------------|--------------|--------|----------|--------|--------------",
+        "住院编号", "病房名称", "类型", "日费", "天数", "小计(元)"
+    );
+
+    current = admissions.head;
+    while (current != 0) {
+        const Admission *adm = (const Admission *)current->data;
+        if (strcmp(adm->patient_id, patient_id) == 0) {
+            Ward ward;
+            Result ward_result = WardRepository_find_by_id(
+                &app->bed_service.ward_repository,
+                adm->ward_id,
+                &ward
+            );
+            if (ward_result.success) {
+                int days = 1;
+                double bed_fee = 0.0;
+
+                /* 解析入院和出院日期计算天数 */
+                {
+                    int adm_year = 0, adm_month = 0, adm_day = 0;
+                    int dis_year = 0, dis_month = 0, dis_day = 0;
+                    int adm_days_total = 0;
+                    int dis_days_total = 0;
+                    static const int month_days[12] = {
+                        0, 31, 59, 90, 120, 151, 181, 212, 243, 273, 304, 334
+                    };
+
+                    if (sscanf(adm->admitted_at, "%d-%d-%d",
+                               &adm_year, &adm_month, &adm_day) == 3) {
+                        adm_days_total = adm_year * 365 + month_days[adm_month - 1] + adm_day;
+
+                        if (adm->status == ADMISSION_STATUS_DISCHARGED &&
+                            adm->discharged_at[0] != '\0') {
+                            if (sscanf(adm->discharged_at, "%d-%d-%d",
+                                       &dis_year, &dis_month, &dis_day) == 3) {
+                                dis_days_total = dis_year * 365 + month_days[dis_month - 1] + dis_day;
+                                days = dis_days_total - adm_days_total;
+                            }
+                        } else {
+                            /* 在院患者：计算到当前日期 2026-04-12 */
+                            dis_days_total = 2026 * 365 + month_days[3] + 12;
+                            days = dis_days_total - adm_days_total;
+                        }
+                        if (days < 1) days = 1;
+                    }
+                }
+
+                bed_fee = ward.daily_fee * days;
+                bed_total += bed_fee;
+                bed_count++;
+
+                result = MenuApplication_append_text(
+                    buffer, capacity, &used,
+                    "\n%-12s | %-12s | %6s | %8.2f | %6d | %12.2f",
+                    adm->admission_id,
+                    ward.name,
+                    MenuApplication_ward_type_label(ward.ward_type),
+                    ward.daily_fee,
+                    days,
+                    bed_fee
+                );
+            } else {
+                result = MenuApplication_append_text(
+                    buffer, capacity, &used,
+                    "\n%-12s | %-12s | %6s | %8s | %6s | %12s",
+                    adm->admission_id,
+                    adm->ward_id,
+                    "未知",
+                    "未知",
+                    "未知",
+                    "未知"
+                );
+            }
+            if (result.success == 0) break;
+        }
+        current = current->next;
+    }
+
+    result = MenuApplication_append_text(
+        buffer, capacity, &used,
+        "\n住院费小计: %.2f 元",
+        bed_total
+    );
+
+    /* ===== 总费用汇总 ===== */
+    grand_total = reg_total + exam_total + drug_total + bed_total;
+    result = MenuApplication_append_text(
+        buffer, capacity, &used,
+        "\n\n" TUI_DH TUI_DH TUI_DH TUI_DH TUI_DH TUI_DH TUI_DH TUI_DH
+        TUI_DH TUI_DH TUI_DH TUI_DH TUI_DH TUI_DH TUI_DH TUI_DH TUI_DH
+        TUI_DH TUI_DH TUI_DH TUI_DH TUI_DH TUI_DH TUI_DH TUI_DH TUI_DH
+        TUI_DH TUI_DH TUI_DH TUI_DH TUI_DH TUI_DH TUI_DH TUI_DH TUI_DH
+        TUI_DH TUI_DH TUI_DH TUI_DH TUI_DH TUI_DH TUI_DH
+        "\n费用总计: %.2f 元",
+        grand_total
     );
 
     PharmacyService_clear_dispense_record_results(&records);
+    AdmissionRepository_clear_loaded_list(&admissions);
     return Result_make_success("patient fees query ready");
+}
+
+/* ─── 出院结算单 ─────────────────────────────────────────────────────── */
+
+Result MenuApplication_discharge_settlement(
+    MenuApplication *app,
+    const char *admission_id,
+    char *buffer,
+    size_t capacity
+) {
+    Admission admission;
+    Ward ward;
+    LinkedList dispense_list;
+    LinkedList visit_list;
+    LinkedList exam_list;
+    const LinkedListNode *current = 0;
+    size_t used = 0;
+    double bed_total = 0.0;
+    double drug_total = 0.0;
+    double exam_total = 0.0;
+    double grand_total = 0.0;
+    int days = 1;
+    Result result;
+
+    static const int month_days[12] = {
+        0, 31, 59, 90, 120, 151, 181, 212, 243, 273, 304, 334
+    };
+
+    if (app == 0 || admission_id == 0 || buffer == 0 || capacity == 0) {
+        return Result_make_failure("discharge settlement arguments missing");
+    }
+
+    /* 查找住院记录 */
+    result = AdmissionRepository_find_by_id(
+        &app->inpatient_service.admission_repository,
+        admission_id,
+        &admission
+    );
+    if (result.success == 0) {
+        return MenuApplication_write_failure("未找到住院记录", buffer, capacity);
+    }
+
+    /* 查找病房信息计算床位费 */
+    result = WardRepository_find_by_id(
+        &app->bed_service.ward_repository,
+        admission.ward_id,
+        &ward
+    );
+    if (result.success) {
+        int adm_year = 0, adm_month = 0, adm_day = 0;
+        int dis_year = 0, dis_month = 0, dis_day = 0;
+        int adm_days_total = 0;
+        int dis_days_total = 0;
+
+        if (sscanf(admission.admitted_at, "%d-%d-%d",
+                   &adm_year, &adm_month, &adm_day) == 3) {
+            adm_days_total = adm_year * 365 + month_days[adm_month - 1] + adm_day;
+
+            if (admission.status == ADMISSION_STATUS_DISCHARGED &&
+                admission.discharged_at[0] != '\0') {
+                if (sscanf(admission.discharged_at, "%d-%d-%d",
+                           &dis_year, &dis_month, &dis_day) == 3) {
+                    dis_days_total = dis_year * 365 + month_days[dis_month - 1] + dis_day;
+                    days = dis_days_total - adm_days_total;
+                }
+            } else {
+                /* 在院患者：计算到当前日期 2026-04-12 */
+                dis_days_total = 2026 * 365 + month_days[3] + 12;
+                days = dis_days_total - adm_days_total;
+            }
+            if (days < 1) days = 1;
+        }
+        bed_total = ward.daily_fee * days;
+    }
+
+    /* 加载该患者的发药记录并筛选住院期间的 */
+    LinkedList_init(&dispense_list);
+    result = PharmacyService_find_dispense_records_by_patient_id(
+        &app->pharmacy_service,
+        admission.patient_id,
+        &dispense_list
+    );
+    if (result.success) {
+        current = dispense_list.head;
+        while (current != 0) {
+            const DispenseRecord *dr = (const DispenseRecord *)current->data;
+            /* 检查发药时间是否在住院期间 */
+            if (dr->dispensed_at[0] != '\0' &&
+                strcmp(dr->dispensed_at, admission.admitted_at) >= 0) {
+                /* 如果已出院，检查是否在出院前 */
+                if (admission.discharged_at[0] == '\0' ||
+                    strcmp(dr->dispensed_at, admission.discharged_at) <= 0) {
+                    Medicine medicine;
+                    if (MedicineRepository_find_by_medicine_id(
+                            &app->pharmacy_service.medicine_repository,
+                            dr->medicine_id, &medicine).success) {
+                        drug_total += medicine.price * dr->quantity;
+                    }
+                }
+            }
+            current = current->next;
+        }
+    }
+
+    /* 加载就诊记录并查找住院期间的检查费用 */
+    LinkedList_init(&visit_list);
+    result = VisitRecordRepository_load_all(
+        &app->medical_record_service.visit_repository,
+        &visit_list
+    );
+    if (result.success) {
+        current = visit_list.head;
+        while (current != 0) {
+            const VisitRecord *visit = (const VisitRecord *)current->data;
+            if (strcmp(visit->patient_id, admission.patient_id) == 0 &&
+                visit->visit_time[0] != '\0' &&
+                strcmp(visit->visit_time, admission.admitted_at) >= 0) {
+                if (admission.discharged_at[0] == '\0' ||
+                    strcmp(visit->visit_time, admission.discharged_at) <= 0) {
+                    LinkedList_init(&exam_list);
+                    if (ExaminationRecordRepository_find_by_visit_id(
+                            &app->medical_record_service.examination_repository,
+                            visit->visit_id, &exam_list).success) {
+                        const LinkedListNode *exam_node = exam_list.head;
+                        while (exam_node != 0) {
+                            const ExaminationRecord *exam =
+                                (const ExaminationRecord *)exam_node->data;
+                            exam_total += exam->exam_fee;
+                            exam_node = exam_node->next;
+                        }
+                    }
+                    ExaminationRecordRepository_clear_list(&exam_list);
+                }
+            }
+            current = current->next;
+        }
+    }
+
+    grand_total = bed_total + drug_total + exam_total;
+
+    /* 生成结算单 */
+    result = MenuApplication_write_text(
+        buffer, capacity,
+        TUI_STAR " 出院结算单"
+    );
+    if (result.success == 0) {
+        PharmacyService_clear_dispense_record_results(&dispense_list);
+        VisitRecordRepository_clear_list(&visit_list);
+        return result;
+    }
+    used = strlen(buffer);
+
+    result = MenuApplication_append_text(
+        buffer, capacity, &used,
+        "\n  住院编号: %s"
+        "\n  患者编号: %s"
+        "\n  病房: %s"
+        "\n  入院时间: %s"
+        "\n  住院天数: %d 天",
+        admission.admission_id,
+        admission.patient_id,
+        ward.name,
+        admission.admitted_at,
+        days
+    );
+
+    result = MenuApplication_append_text(
+        buffer, capacity, &used,
+        "\n\n" TUI_DH TUI_DH TUI_DH TUI_DH TUI_DH TUI_DH TUI_DH TUI_DH
+        TUI_DH TUI_DH TUI_DH TUI_DH TUI_DH TUI_DH TUI_DH TUI_DH TUI_DH
+        TUI_DH TUI_DH TUI_DH TUI_DH TUI_DH TUI_DH TUI_DH TUI_DH TUI_DH
+        TUI_DH TUI_DH TUI_DH TUI_DH TUI_DH TUI_DH TUI_DH TUI_DH TUI_DH
+        TUI_DH TUI_DH TUI_DH TUI_DH TUI_DH TUI_DH TUI_DH
+    );
+
+    result = MenuApplication_append_text(
+        buffer, capacity, &used,
+        "\n" TUI_BULLET " 床位费: %d 天 x %.2f 元/天 = %.2f 元",
+        days,
+        ward.daily_fee,
+        bed_total
+    );
+
+    result = MenuApplication_append_text(
+        buffer, capacity, &used,
+        "\n" TUI_BULLET " 药品费: %.2f 元",
+        drug_total
+    );
+
+    result = MenuApplication_append_text(
+        buffer, capacity, &used,
+        "\n" TUI_BULLET " 检查费: %.2f 元",
+        exam_total
+    );
+
+    result = MenuApplication_append_text(
+        buffer, capacity, &used,
+        "\n\n" TUI_DH TUI_DH TUI_DH TUI_DH TUI_DH TUI_DH TUI_DH TUI_DH
+        TUI_DH TUI_DH TUI_DH TUI_DH TUI_DH TUI_DH TUI_DH TUI_DH TUI_DH
+        TUI_DH TUI_DH TUI_DH TUI_DH TUI_DH TUI_DH TUI_DH TUI_DH TUI_DH
+        TUI_DH TUI_DH TUI_DH TUI_DH TUI_DH TUI_DH TUI_DH TUI_DH TUI_DH
+        TUI_DH TUI_DH TUI_DH TUI_DH TUI_DH TUI_DH TUI_DH
+        "\n费用总计: %.2f 元",
+        grand_total
+    );
+
+    PharmacyService_clear_dispense_record_results(&dispense_list);
+    VisitRecordRepository_clear_list(&visit_list);
+    return Result_make_success("discharge settlement ready");
+}
+
+/* ─── 住院医嘱业务函数 ──────────────���───────────────��──────────────── */
+
+Result MenuApplication_create_inpatient_order(
+    MenuApplication *application,
+    const char *admission_id,
+    const char *order_type,
+    const char *content,
+    const char *ordered_at,
+    char *buffer,
+    size_t capacity
+) {
+    InpatientOrder order;
+    Result result;
+
+    if (application == 0 || buffer == 0 || capacity == 0) {
+        return Result_make_failure("create order arguments missing");
+    }
+
+    memset(&order, 0, sizeof(order));
+    strncpy(order.admission_id, admission_id ? admission_id : "", sizeof(order.admission_id) - 1);
+    strncpy(order.order_type, order_type ? order_type : "", sizeof(order.order_type) - 1);
+    strncpy(order.content, content ? content : "", sizeof(order.content) - 1);
+    strncpy(order.ordered_at, ordered_at ? ordered_at : "", sizeof(order.ordered_at) - 1);
+
+    result = InpatientOrderService_create_order(
+        &application->inpatient_order_service,
+        &order
+    );
+
+    if (result.success) {
+        snprintf(buffer, capacity,
+            TUI_STAR " 医嘱创建成功\n"
+            "  医嘱编号: %s\n"
+            "  入院编号: %s\n"
+            "  医嘱类型: %s\n"
+            "  医嘱内容: %s\n"
+            "  开具时间: %s\n"
+            "  状  态: 待执行",
+            order.order_id,
+            order.admission_id,
+            order.order_type,
+            order.content,
+            order.ordered_at
+        );
+    } else {
+        snprintf(buffer, capacity, "医嘱创建失败: %s", result.message);
+    }
+
+    return result;
+}
+
+Result MenuApplication_query_orders_by_admission(
+    MenuApplication *application,
+    const char *admission_id,
+    char *buffer,
+    size_t capacity
+) {
+    LinkedList orders;
+    LinkedListNode *current = 0;
+    int used = 0;
+    int count = 0;
+    Result result;
+
+    if (application == 0 || buffer == 0 || capacity == 0) {
+        return Result_make_failure("query orders arguments missing");
+    }
+
+    result = InpatientOrderService_find_by_admission_id(
+        &application->inpatient_order_service,
+        admission_id,
+        &orders
+    );
+
+    if (result.success == 0) {
+        snprintf(buffer, capacity, "查询医嘱失败: %s", result.message);
+        return result;
+    }
+
+    used = snprintf(buffer, capacity,
+        TUI_MEDICAL " 入院记录 [%s] 的医嘱列表\n",
+        admission_id ? admission_id : ""
+    );
+
+    current = orders.head;
+    while (current != 0 && (size_t)used < capacity - 1) {
+        const InpatientOrder *order = (const InpatientOrder *)current->data;
+        const char *status_text = "待执行";
+        const char *status_color = TUI_YELLOW;
+
+        if (order->status == INPATIENT_ORDER_STATUS_EXECUTED) {
+            status_text = "已执行";
+            status_color = TUI_GREEN;
+        } else if (order->status == INPATIENT_ORDER_STATUS_CANCELLED) {
+            status_text = "已取消";
+            status_color = TUI_RED;
+        }
+
+        used += snprintf(buffer + used, capacity - (size_t)used,
+            "\n  " TUI_STAR " 医嘱编号: %s\n"
+            "    类型: %s | 内容: %s\n"
+            "    开具时间: %s\n"
+            "    状态: %s%s" TUI_RESET "\n",
+            order->order_id,
+            order->order_type,
+            order->content,
+            order->ordered_at,
+            status_color,
+            status_text
+        );
+
+        if (order->status == INPATIENT_ORDER_STATUS_EXECUTED && order->executed_at[0] != '\0') {
+            used += snprintf(buffer + used, capacity - (size_t)used,
+                "    执行时间: %s\n", order->executed_at);
+        }
+        if (order->status == INPATIENT_ORDER_STATUS_CANCELLED && order->cancelled_at[0] != '\0') {
+            used += snprintf(buffer + used, capacity - (size_t)used,
+                "    取消时间: %s\n", order->cancelled_at);
+        }
+
+        count++;
+        current = current->next;
+    }
+
+    if (count == 0) {
+        used += snprintf(buffer + used, capacity - (size_t)used,
+            "\n  (暂无医嘱记录)\n");
+    } else {
+        used += snprintf(buffer + used, capacity - (size_t)used,
+            "\n  共 %d 条医嘱\n", count);
+    }
+
+    InpatientOrderService_clear_results(&orders);
+    return Result_make_success("orders query ready");
+}
+
+Result MenuApplication_execute_inpatient_order(
+    MenuApplication *application,
+    const char *order_id,
+    const char *executed_at,
+    char *buffer,
+    size_t capacity
+) {
+    Result result;
+
+    if (application == 0 || buffer == 0 || capacity == 0) {
+        return Result_make_failure("execute order arguments missing");
+    }
+
+    result = InpatientOrderService_execute_order(
+        &application->inpatient_order_service,
+        order_id,
+        executed_at
+    );
+
+    if (result.success) {
+        snprintf(buffer, capacity,
+            TUI_MEDICAL " 医嘱执行成功\n"
+            "  医嘱编号: %s\n"
+            "  执行时间: %s\n"
+            "  状  态: " TUI_GREEN "已执行" TUI_RESET,
+            order_id ? order_id : "",
+            executed_at ? executed_at : ""
+        );
+    } else {
+        snprintf(buffer, capacity, "医嘱执行失败: %s", result.message);
+    }
+
+    return result;
+}
+
+Result MenuApplication_cancel_inpatient_order(
+    MenuApplication *application,
+    const char *order_id,
+    const char *cancelled_at,
+    char *buffer,
+    size_t capacity
+) {
+    Result result;
+
+    if (application == 0 || buffer == 0 || capacity == 0) {
+        return Result_make_failure("cancel order arguments missing");
+    }
+
+    result = InpatientOrderService_cancel_order(
+        &application->inpatient_order_service,
+        order_id,
+        cancelled_at
+    );
+
+    if (result.success) {
+        snprintf(buffer, capacity,
+            TUI_MEDICAL " 医嘱取消成功\n"
+            "  医嘱编号: %s\n"
+            "  取消时间: %s\n"
+            "  状  态: " TUI_RED "已取消" TUI_RESET,
+            order_id ? order_id : "",
+            cancelled_at ? cancelled_at : ""
+        );
+    } else {
+        snprintf(buffer, capacity, "医嘱取消失败: %s", result.message);
+    }
+
+    return result;
+}
+
+Result MenuApplication_create_nursing_record(
+    MenuApplication *application,
+    const char *admission_id,
+    const char *record_type,
+    const char *nurse_name,
+    const char *content,
+    const char *recorded_at,
+    char *buffer,
+    size_t capacity
+) {
+    NursingRecord record;
+    Result result;
+
+    if (application == 0 || buffer == 0 || capacity == 0) {
+        return Result_make_failure("nursing record arguments missing");
+    }
+
+    memset(&record, 0, sizeof(record));
+    strncpy(record.admission_id, admission_id ? admission_id : "", sizeof(record.admission_id) - 1);
+    strncpy(record.nurse_name, nurse_name ? nurse_name : "", sizeof(record.nurse_name) - 1);
+    strncpy(record.record_type, record_type ? record_type : "", sizeof(record.record_type) - 1);
+    strncpy(record.content, content ? content : "", sizeof(record.content) - 1);
+    strncpy(record.recorded_at, recorded_at ? recorded_at : "", sizeof(record.recorded_at) - 1);
+
+    result = NursingRecordService_create_record(
+        &application->nursing_record_service,
+        &record
+    );
+
+    if (result.success) {
+        snprintf(buffer, capacity,
+            TUI_MEDICAL " 护理记录已创建\n"
+            "  记录编号: " TUI_BOLD_CYAN "%s" TUI_RESET "\n"
+            "  住院编号: %s\n"
+            "  护理类型: " TUI_BOLD_YELLOW "%s" TUI_RESET "\n"
+            "  护士姓名: %s\n"
+            "  记录内容: %s\n"
+            "  记录时间: %s",
+            record.nursing_id,
+            record.admission_id,
+            record.record_type,
+            record.nurse_name,
+            record.content,
+            record.recorded_at
+        );
+    } else {
+        snprintf(buffer, capacity, "护理记录创建失败: %s", result.message);
+    }
+
+    return result;
+}
+
+Result MenuApplication_query_nursing_records(
+    MenuApplication *application,
+    const char *admission_id,
+    char *buffer,
+    size_t capacity
+) {
+    LinkedList records;
+    LinkedListNode *current = 0;
+    int written = 0;
+    int count = 0;
+    Result result;
+
+    if (application == 0 || buffer == 0 || capacity == 0) {
+        return Result_make_failure("nursing query arguments missing");
+    }
+
+    LinkedList_init(&records);
+    result = NursingRecordService_find_by_admission_id(
+        &application->nursing_record_service,
+        admission_id,
+        &records
+    );
+
+    if (result.success == 0) {
+        snprintf(buffer, capacity, "查询护理记录失败: %s", result.message);
+        return result;
+    }
+
+    count = (int)LinkedList_count(&records);
+    if (count == 0) {
+        NursingRecordService_clear_results(&records);
+        snprintf(buffer, capacity, "该住院记录暂无护理记录");
+        return Result_make_success("no nursing records");
+    }
+
+    written = snprintf(buffer, capacity,
+        TUI_MEDICAL " 住院编号 %s 的护理记录 (共%d条)\n"
+        "  %-10s %-8s %-10s %-8s %s\n"
+        "  ---------- -------- ---------- -------- --------",
+        admission_id ? admission_id : "", count,
+        "记录编号", "类型", "护士", "时间", "内容"
+    );
+
+    current = records.head;
+    while (current != 0 && written >= 0 && (size_t)written < capacity) {
+        const NursingRecord *rec = (const NursingRecord *)current->data;
+        const char *type_color = TUI_RESET;
+
+        if (strcmp(rec->record_type, "体温") == 0) {
+            type_color = TUI_RED;
+        } else if (strcmp(rec->record_type, "血压") == 0) {
+            type_color = TUI_BOLD_CYAN;
+        } else if (strcmp(rec->record_type, "用药") == 0) {
+            type_color = TUI_BOLD_YELLOW;
+        } else if (strcmp(rec->record_type, "护理观察") == 0) {
+            type_color = TUI_GREEN;
+        } else if (strcmp(rec->record_type, "输液") == 0) {
+            type_color = TUI_MAGENTA;
+        }
+
+        written += snprintf(buffer + written, capacity - (size_t)written,
+            "\n  %-10s %s%-8s" TUI_RESET " %-10s %-8s %s",
+            rec->nursing_id,
+            type_color, rec->record_type,
+            rec->nurse_name,
+            rec->recorded_at,
+            rec->content
+        );
+        current = current->next;
+    }
+
+    NursingRecordService_clear_results(&records);
+    return Result_make_success("nursing records listed");
+}
+
+/* ─── 查房记录业务函数 ──────────────────────────────────────────────── */
+
+Result MenuApplication_create_round_record(
+    MenuApplication *application,
+    const char *admission_id,
+    const char *doctor_id,
+    const char *findings,
+    const char *plan,
+    const char *rounded_at,
+    char *buffer,
+    size_t capacity
+) {
+    RoundRecord record;
+    Result result;
+
+    if (application == 0 || buffer == 0 || capacity == 0) {
+        return Result_make_failure("round record arguments missing");
+    }
+
+    memset(&record, 0, sizeof(record));
+    strncpy(record.admission_id, admission_id ? admission_id : "", sizeof(record.admission_id) - 1);
+    strncpy(record.doctor_id, doctor_id ? doctor_id : "", sizeof(record.doctor_id) - 1);
+    strncpy(record.findings, findings ? findings : "", sizeof(record.findings) - 1);
+    strncpy(record.plan, plan ? plan : "", sizeof(record.plan) - 1);
+    strncpy(record.rounded_at, rounded_at ? rounded_at : "", sizeof(record.rounded_at) - 1);
+
+    result = RoundRecordService_create_record(
+        &application->round_record_service,
+        &record
+    );
+
+    if (result.success) {
+        snprintf(buffer, capacity,
+            TUI_MEDICAL " 查房记录已创建\n"
+            "  记录编号: %s\n"
+            "  住院编号: %s\n"
+            "  查房医生: %s\n"
+            "  查房时间: %s",
+            record.round_id,
+            record.admission_id,
+            record.doctor_id,
+            record.rounded_at);
+    } else {
+        snprintf(buffer, capacity, "创建查房记录失败: %s", result.message);
+    }
+
+    return result;
+}
+
+Result MenuApplication_query_round_records(
+    MenuApplication *application,
+    const char *admission_id,
+    char *buffer,
+    size_t capacity
+) {
+    LinkedList records;
+    LinkedListNode *current = 0;
+    size_t used = 0;
+    int count = 0;
+    Result result;
+
+    if (application == 0 || buffer == 0 || capacity == 0) {
+        return Result_make_failure("round query arguments missing");
+    }
+
+    buffer[0] = '\0';
+
+    result = RoundRecordService_find_by_admission_id(
+        &application->round_record_service,
+        admission_id,
+        &records
+    );
+
+    if (!result.success) {
+        snprintf(buffer, capacity, "查询查房记录失败: %s", result.message);
+        return result;
+    }
+
+    if (LinkedList_count(&records) == 0) {
+        snprintf(buffer, capacity, "该住院记录暂无查房记录");
+        RoundRecordService_clear_results(&records);
+        return Result_make_success("no round records");
+    }
+
+    used = (size_t)snprintf(buffer, capacity,
+        TUI_MEDICAL " 住院编号 %s 的查房记录 (共 %d 条)\n",
+        admission_id, (int)LinkedList_count(&records));
+
+    current = records.head;
+    while (current != 0 && used < capacity - 1) {
+        const RoundRecord *r = (const RoundRecord *)current->data;
+        int written = 0;
+        count++;
+        written = snprintf(buffer + used, capacity - used,
+            "\n  [%d] %s\n"
+            "      医生: %s | 时间: %s\n"
+            "      发现: %s\n"
+            "      计划: %s",
+            count, r->round_id,
+            r->doctor_id, r->rounded_at,
+            r->findings,
+            r->plan);
+        if (written < 0 || (size_t)written >= capacity - used) break;
+        used += (size_t)written;
+        current = current->next;
+    }
+
+    RoundRecordService_clear_results(&records);
+    return Result_make_success("round records listed");
 }
 
 Result MenuApplication_execute_action(
@@ -4974,6 +6855,10 @@ Result MenuApplication_execute_action(
         case MENU_ACTION_ADMIN_STATS_REVENUE:
         case MENU_ACTION_ADMIN_STATS_WORKLOAD:
         case MENU_ACTION_ADMIN_STATS_BED_UTIL:
+        case MENU_ACTION_ADMIN_STATS_MEDICINE:
+        case MENU_ACTION_ADMIN_STATS_PATIENT_FLOW:
+        case MENU_ACTION_ADMIN_STATS_DEPT_PERFORMANCE:
+        case MENU_ACTION_ADMIN_STATS_ADMISSION_TURNOVER:
             return MenuAction_handle_admin(application, action, input, output);
 
         case MENU_ACTION_DOCTOR_PENDING_LIST:
@@ -4981,6 +6866,8 @@ Result MenuApplication_execute_action(
         case MENU_ACTION_DOCTOR_VISIT_RECORD:
         case MENU_ACTION_DOCTOR_PRESCRIPTION_STOCK:
         case MENU_ACTION_DOCTOR_EXAM_RECORD:
+        case MENU_ACTION_DOCTOR_ROUND_CREATE:
+        case MENU_ACTION_DOCTOR_ROUND_QUERY:
             return MenuAction_handle_doctor(application, action, input, output);
 
         case MENU_ACTION_PATIENT_BASIC_INFO:
@@ -5002,6 +6889,12 @@ Result MenuApplication_execute_action(
         case MENU_ACTION_INPATIENT_QUERY_RECORD:
         case MENU_ACTION_INPATIENT_TRANSFER_BED:
         case MENU_ACTION_INPATIENT_DISCHARGE_CHECK:
+        case MENU_ACTION_INPATIENT_CREATE_ORDER:
+        case MENU_ACTION_INPATIENT_QUERY_ORDERS:
+        case MENU_ACTION_INPATIENT_EXECUTE_ORDER:
+        case MENU_ACTION_INPATIENT_CANCEL_ORDER:
+        case MENU_ACTION_INPATIENT_NURSING_CREATE:
+        case MENU_ACTION_INPATIENT_NURSING_QUERY:
             return MenuAction_handle_inpatient(application, action, input, output);
 
         case MENU_ACTION_PHARMACY_ADD_MEDICINE:

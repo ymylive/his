@@ -7,7 +7,7 @@
  * 全量加载和全量保存操作。
  *
  * 数据文件格式：每行一条挂号记录，字段以管道符 '|' 分隔。
- * 表头：registration_id|patient_id|doctor_id|department_id|registered_at|status|diagnosed_at|cancelled_at
+ * 表头：registration_id|patient_id|doctor_id|department_id|registered_at|status|diagnosed_at|cancelled_at|registration_type|registration_fee
  */
 
 #ifndef HIS_REPOSITORY_REGISTRATION_REPOSITORY_H
@@ -19,7 +19,7 @@
 #include "repository/TextFileRepository.h"
 
 /** 挂号记录的字段数量 */
-#define REGISTRATION_REPOSITORY_FIELD_COUNT 8
+#define REGISTRATION_REPOSITORY_FIELD_COUNT 10
 
 /**
  * @brief 挂号记录仓储结构体

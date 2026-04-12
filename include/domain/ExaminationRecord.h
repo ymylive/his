@@ -34,6 +34,7 @@ typedef struct ExaminationRecord {
     char exam_type[HIS_DOMAIN_NAME_CAPACITY];      /* 检查类型（如化验、影像、超声等） */
     ExaminationStatus status;                       /* 检查当前状态（待检/已完成） */
     char result[HIS_DOMAIN_TEXT_CAPACITY];          /* 检查结果 */
+    double exam_fee;                                /* 检查费用(元) */
     char requested_at[HIS_DOMAIN_TIME_CAPACITY];   /* 检查申请时间 */
     char completed_at[HIS_DOMAIN_TIME_CAPACITY];   /* 检查完成时间 */
 } ExaminationRecord;

@@ -73,7 +73,7 @@ static void test_render_patient_and_inpatient_menus(void) {
     );
     assert(result.success == 1);
     assert(strstr(buffer, "待诊列表") != 0);
-    assert(strstr(buffer, "处方与发药/查询药品库存") != 0);
+    assert(strstr(buffer, "处方管理/查询库存") != 0);
     assert(strstr(buffer, "检查记录/检查结果") != 0);
 
     result = MenuController_render_role_menu(

@@ -82,27 +82,62 @@ Result MenuAction_handle_patient(MenuApplication *app, MenuAction action, FILE *
                 tui_print_error(output, "输入包含非法字符，请勿使用 | 等特殊符号");
                 return Result_make_failure("invalid input characters");
             }
-            /* 创建挂号 */
-            tui_spinner_run(output, "正在创建挂号...", 500);
-            result = MenuApplication_create_self_registration(
-                app,
-                second_id,
-                first_id,
-                time_value,
-                &registration
-            );
-            if (result.success == 0) {
-                MenuApplication_print_result(output, result.message, 0);
+            /* 选择挂号类型 */
+            {
+                char type_choice[16];
+                RegistrationType reg_type = REG_TYPE_STANDARD;
+                double reg_fee = 5.00;
+
+                tui_print_info(output, "请选择挂号类型:");
+                tui_print_info(output, "  [1] 普通号 (5.00元)");
+                tui_print_info(output, "  [2] 专家号 (20.00元)");
+                tui_print_info(output, "  [3] 急诊号 (10.00元)");
+                result = MenuApplication_prompt_line(
+                    &context,
+                    "请输入选项(1-3): ",
+                    type_choice,
+                    sizeof(type_choice)
+                );
+                if (result.success == 0) {
+                    return result;
+                }
+                if (type_choice[0] == '2') {
+                    reg_type = REG_TYPE_SPECIALIST;
+                    reg_fee = 20.00;
+                } else if (type_choice[0] == '3') {
+                    reg_type = REG_TYPE_EMERGENCY;
+                    reg_fee = 10.00;
+                } else if (type_choice[0] != '1') {
+                    tui_print_error(output, "无效的挂号类型选项，默认使用普通号");
+                }
+
+                /* 创建挂号 */
+                tui_spinner_run(output, "正在创建挂号...", 500);
+                result = MenuApplication_create_self_registration(
+                    app,
+                    second_id,
+                    first_id,
+                    time_value,
+                    reg_type,
+                    reg_fee,
+                    &registration
+                );
+                if (result.success == 0) {
+                    MenuApplication_print_result(output, result.message, 0);
+                    return result;
+                }
+                snprintf(output_buffer, sizeof(output_buffer),
+                    "挂号成功! 挂号编号: %s | 科室: %s | 医生: %s | 时间: %s | 类型: %s | 费用: %.2f元 | 状态: 待诊",
+                    registration.registration_id,
+                    registration.department_id,
+                    registration.doctor_id,
+                    registration.registered_at,
+                    reg_type == REG_TYPE_SPECIALIST ? "专家号" :
+                    reg_type == REG_TYPE_EMERGENCY ? "急诊号" : "普通号",
+                    reg_fee);
+                MenuApplication_print_result(output, output_buffer, 1);
                 return result;
             }
-            snprintf(output_buffer, sizeof(output_buffer),
-                "挂号成功! 挂号编号: %s | 科室: %s | 医生: %s | 时间: %s | 状态: 待诊",
-                registration.registration_id,
-                registration.department_id,
-                registration.doctor_id,
-                registration.registered_at);
-            MenuApplication_print_result(output, output_buffer, 1);
-            return result;
 
         case MENU_ACTION_PATIENT_QUERY_REGISTRATION:
             result = MenuApplication_require_patient_session(app);

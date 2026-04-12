@@ -20,6 +20,15 @@ typedef enum WardStatus {
 } WardStatus;
 
 /**
+ * @brief 病房类型枚举
+ */
+typedef enum WardType {
+    WARD_TYPE_STANDARD = 0,   /* 普通病房 */
+    WARD_TYPE_DOUBLE = 1,     /* 双人间 */
+    WARD_TYPE_VIP = 2         /* VIP单人间 */
+} WardType;
+
+/**
  * @brief 病房信息结构体
  *
  * 存储病房的基本信息、容量、已占用床位数及运行状态。
@@ -32,6 +41,8 @@ typedef struct Ward {
     int capacity;                                    /* 病房总床位容量 */
     int occupied_beds;                               /* 当前已占用床位数 */
     WardStatus status;                               /* 病房当前状态（开放/关闭） */
+    WardType ward_type;                              /* 病房类型 */
+    double daily_fee;                                /* 每日床位费(元) */
 } Ward;
 
 /**

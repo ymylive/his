@@ -21,7 +21,7 @@ static const char *TEST_REGISTRATION_PATH =
 
 /* 预期的文件表头 */
 static const char *TEST_REGISTRATION_HEADER =
-    "registration_id|patient_id|doctor_id|department_id|registered_at|status|diagnosed_at|cancelled_at";
+    "registration_id|patient_id|doctor_id|department_id|registered_at|status|diagnosed_at|cancelled_at|registration_type|registration_fee";
 
 /**
  * @brief 辅助函数：安全地复制字符串
@@ -63,6 +63,8 @@ static Registration make_registration(
     registration.status = status;
     copy_text(registration.diagnosed_at, sizeof(registration.diagnosed_at), diagnosed_at);
     copy_text(registration.cancelled_at, sizeof(registration.cancelled_at), cancelled_at);
+    registration.registration_type = REG_TYPE_STANDARD;
+    registration.registration_fee = 5.00;
     return registration;
 }
 

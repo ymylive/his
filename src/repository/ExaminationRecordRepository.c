@@ -3,13 +3,14 @@
  * @brief 检查记录数据仓储层实现
  *
  * 实现检查记录（ExaminationRecord）数据的持久化存储操作，包括：
- * - 检查记录的序列化与反序列化（10个字段）
+ * - 检查记录的序列化与反序列化（11个字段）
  * - 数据校验（必填字段、状态与完成时间一致性、保留字符检测）
  * - 追加、按检查ID查找、按就诊ID筛选、全量加载、全量保存
  */
 
 #include "repository/ExaminationRecordRepository.h"
 
+#include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -18,7 +19,7 @@
 
 /** 检查记录数据文件的表头行 */
 static const char EXAMINATION_RECORD_REPOSITORY_HEADER[] =
-    "examination_id|visit_id|patient_id|doctor_id|exam_item|exam_type|status|result|requested_at|completed_at";
+    "examination_id|visit_id|patient_id|doctor_id|exam_item|exam_type|status|result|exam_fee|requested_at|completed_at";
 
 /** 按检查ID查找时使用的上下文 */
 typedef struct ExaminationRecordFindByIdContext {
@@ -110,6 +111,7 @@ static Result ExaminationRecordRepository_validate(const ExaminationRecord *reco
     if (!result.success) return result;
     result = ExaminationRecordRepository_validate_text_field(record->result, "result", 1); /* 可为空 */
     if (!result.success) return result;
+    if (record->exam_fee < 0) return Result_make_failure("exam_fee must be non-negative");
     result = ExaminationRecordRepository_validate_text_field(record->requested_at, "requested_at", 0);
     if (!result.success) return result;
     result = ExaminationRecordRepository_validate_text_field(record->completed_at, "completed_at", 1); /* 可为空 */
@@ -161,10 +163,11 @@ static Result ExaminationRecordRepository_serialize(
     Result result = ExaminationRecordRepository_validate(record);
     if (!result.success) return result;
 
-    written = snprintf(line, capacity, "%s|%s|%s|%s|%s|%s|%d|%s|%s|%s",
+    written = snprintf(line, capacity, "%s|%s|%s|%s|%s|%s|%d|%s|%.2f|%s|%s",
         record->examination_id, record->visit_id, record->patient_id,
         record->doctor_id, record->exam_item, record->exam_type,
-        (int)record->status, record->result, record->requested_at, record->completed_at);
+        (int)record->status, record->result, record->exam_fee,
+        record->requested_at, record->completed_at);
     if (written < 0 || (size_t)written >= capacity) return Result_make_failure("exam line too long");
     return Result_make_success("exam serialized");
 }
@@ -200,8 +203,22 @@ static Result ExaminationRecordRepository_parse_line(const char *line, Examinati
     if (!result.success) return result;
 
     ExaminationRecordRepository_copy_text(out_record->result, sizeof(out_record->result), fields[7]);
-    ExaminationRecordRepository_copy_text(out_record->requested_at, sizeof(out_record->requested_at), fields[8]);
-    ExaminationRecordRepository_copy_text(out_record->completed_at, sizeof(out_record->completed_at), fields[9]);
+
+    /* 解析检查费用 */
+    {
+        char *end_ptr = 0;
+        errno = 0;
+        out_record->exam_fee = strtod(fields[8], &end_ptr);
+        if (end_ptr == fields[8] || errno == ERANGE) {
+            return Result_make_failure("exam_fee parse failed");
+        }
+        if (out_record->exam_fee < 0) {
+            return Result_make_failure("exam_fee must be non-negative");
+        }
+    }
+
+    ExaminationRecordRepository_copy_text(out_record->requested_at, sizeof(out_record->requested_at), fields[9]);
+    ExaminationRecordRepository_copy_text(out_record->completed_at, sizeof(out_record->completed_at), fields[10]);
     return ExaminationRecordRepository_validate(out_record);
 }
 

@@ -172,7 +172,11 @@ Result DemoData_reset(const MenuApplicationPaths *paths, char *buffer, size_t ca
         { paths != 0 ? paths->bed_path : 0 },
         { paths != 0 ? paths->admission_path : 0 },
         { paths != 0 ? paths->medicine_path : 0 },
-        { paths != 0 ? paths->dispense_record_path : 0 }
+        { paths != 0 ? paths->dispense_record_path : 0 },
+        { paths != 0 ? paths->prescription_path : 0 },
+        { paths != 0 ? paths->inpatient_order_path : 0 },
+        { paths != 0 ? paths->nursing_record_path : 0 },
+        { paths != 0 ? paths->round_record_path : 0 }
     };
     char seed_path[TEXT_FILE_REPOSITORY_PATH_CAPACITY];
     size_t index = 0;
@@ -187,6 +191,10 @@ Result DemoData_reset(const MenuApplicationPaths *paths, char *buffer, size_t ca
 
     /* 逐一处理每个数据文件：推导种子路径 -> 复制种子文件到运行时路径 */
     for (index = 0; index < sizeof(files) / sizeof(files[0]); index++) {
+        /* 跳过未配置的可选路径 */
+        if (files[index].runtime_path == 0 || files[index].runtime_path[0] == '\0') {
+            continue;
+        }
         /* 第一步：推导种子文件路径 */
         Result result = DemoData_resolve_seed_path(
             files[index].runtime_path,

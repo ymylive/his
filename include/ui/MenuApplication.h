@@ -27,7 +27,11 @@
 #include "service/InpatientService.h"
 #include "service/MedicalRecordService.h"
 #include "service/PatientService.h"
+#include "service/InpatientOrderService.h"
+#include "service/NursingRecordService.h"
 #include "service/PharmacyService.h"
+#include "service/RoundRecordService.h"
+#include "service/PrescriptionService.h"
 #include "service/RegistrationService.h"
 #include "ui/MenuController.h"
 
@@ -50,6 +54,10 @@ typedef struct MenuApplicationPaths {
     const char *admission_path;       /**< 住院记录数据文件路径 */
     const char *medicine_path;        /**< 药品数据文件路径 */
     const char *dispense_record_path; /**< 发药记录数据文件路径 */
+    const char *prescription_path;    /**< 处方数据文件路径 */
+    const char *inpatient_order_path; /**< 住院医嘱数据文件路径 */
+    const char *nursing_record_path;  /**< 护理记录数据文件路径 */
+    const char *round_record_path;    /**< 查房记录数据文件路径 */
 } MenuApplicationPaths;
 
 /**
@@ -68,6 +76,10 @@ typedef struct MenuApplication {
     InpatientService inpatient_service;            /**< 住院服务 */
     BedService bed_service;                        /**< 床位服务 */
     PharmacyService pharmacy_service;              /**< 药房服务 */
+    PrescriptionService prescription_service;      /**< 处方服务 */
+    InpatientOrderService inpatient_order_service; /**< 住院医嘱服务 */
+    NursingRecordService nursing_record_service;  /**< 护理记录服务 */
+    RoundRecordService round_record_service;    /**< 查房记录服务 */
     User authenticated_user;                       /**< 当前已认证用户 */
     int has_authenticated_user;                    /**< 是否有已认证用户（0=无，1=有） */
     char bound_patient_id[HIS_DOMAIN_ID_CAPACITY]; /**< 绑定的患者编号（患者角色登录时自动绑定） */
@@ -305,14 +317,16 @@ Result MenuApplication_list_doctors_by_department(
 
 /**
  * @brief 创建挂号记录（管理员操作）
- * @param application   应用程序实例指针
- * @param patient_id    患者编号
- * @param doctor_id     医生工号
- * @param department_id 科室编号
- * @param registered_at 挂号时间
- * @param buffer        输出缓冲区
- * @param capacity      缓冲区容量
- * @return Result       成功或失败的结果
+ * @param application       应用程序实例指针
+ * @param patient_id        患者编号
+ * @param doctor_id         医生工号
+ * @param department_id     科室编号
+ * @param registered_at     挂号时间
+ * @param registration_type 挂号类型（普通号/专家号/急诊号）
+ * @param registration_fee  挂号费(元)
+ * @param buffer            输出缓冲区
+ * @param capacity          缓冲区容量
+ * @return Result           成功或失败的结果
  */
 Result MenuApplication_create_registration(
     MenuApplication *application,
@@ -320,6 +334,8 @@ Result MenuApplication_create_registration(
     const char *doctor_id,
     const char *department_id,
     const char *registered_at,
+    RegistrationType registration_type,
+    double registration_fee,
     char *buffer,
     size_t capacity
 );
@@ -329,18 +345,22 @@ Result MenuApplication_create_registration(
  *
  * 使用当前绑定的患者会话自动填充患者编号。
  *
- * @param application      应用程序实例指针
- * @param doctor_id        医生工号
- * @param department_id    科室编号
- * @param registered_at    挂号时间
- * @param out_registration 输出参数，创建成功后的挂号记录
- * @return Result          成功或失败的结果
+ * @param application       应用程序实例指针
+ * @param doctor_id         医生工号
+ * @param department_id     科室编号
+ * @param registered_at     挂号时间
+ * @param registration_type 挂号类型（普通号/专家号/急诊号）
+ * @param registration_fee  挂号费(元)
+ * @param out_registration  输出参数，创建成功后的挂号记录
+ * @return Result           成功或失败的结果
  */
 Result MenuApplication_create_self_registration(
     MenuApplication *application,
     const char *doctor_id,
     const char *department_id,
     const char *registered_at,
+    RegistrationType registration_type,
+    double registration_fee,
     Registration *out_registration
 );
 
@@ -503,6 +523,7 @@ Result MenuApplication_query_patient_history(
  * @param visit_id     就诊记录编号
  * @param exam_item    检查项目名称
  * @param exam_type    检查类型
+ * @param exam_fee     检查费用(元)
  * @param requested_at 申请时间
  * @param buffer       输出缓冲区
  * @param capacity     缓冲区容量
@@ -513,6 +534,7 @@ Result MenuApplication_create_examination_record(
     const char *visit_id,
     const char *exam_item,
     const char *exam_type,
+    double exam_fee,
     const char *requested_at,
     char *buffer,
     size_t capacity
@@ -777,6 +799,39 @@ Result MenuApplication_find_low_stock_medicines(
 );
 
 /**
+ * @brief 创建处方
+ *
+ * 校验就诊记录和药品是否存在，检查药品库存后创建处方。
+ *
+ * @param application   应用程序实例指针
+ * @param prescription  处方数据
+ * @param buffer        输出缓冲区
+ * @param capacity      缓冲区容量
+ * @return Result       成功或失败的结果
+ */
+Result MenuApplication_create_prescription(
+    MenuApplication *application,
+    const Prescription *prescription,
+    char *buffer,
+    size_t capacity
+);
+
+/**
+ * @brief 按就诊ID查询处方列表
+ * @param application 应用程序实例指针
+ * @param visit_id    就诊记录编号
+ * @param buffer      输出缓冲区
+ * @param capacity    缓冲区容量
+ * @return Result     成功或失败的结果
+ */
+Result MenuApplication_query_prescriptions_by_visit(
+    MenuApplication *application,
+    const char *visit_id,
+    char *buffer,
+    size_t capacity
+);
+
+/**
  * @brief 科室收入统计
  * @param application 应用程序实例指针
  * @param buffer      输出缓冲区
@@ -816,6 +871,58 @@ Result MenuApplication_stats_bed_utilization(
 );
 
 /**
+ * @brief 药品消耗排行
+ * @param application 应用程序实例指针
+ * @param buffer      输出缓冲区
+ * @param capacity    缓冲区容量
+ * @return Result     成功或失败的结果
+ */
+Result MenuApplication_stats_medicine_consumption(
+    MenuApplication *application,
+    char *buffer,
+    size_t capacity
+);
+
+/**
+ * @brief 患者流量统计
+ * @param application 应用程序实例指针
+ * @param buffer      输出缓冲区
+ * @param capacity    缓冲区容量
+ * @return Result     成功或失败的结果
+ */
+Result MenuApplication_stats_patient_flow(
+    MenuApplication *application,
+    char *buffer,
+    size_t capacity
+);
+
+/**
+ * @brief 科室综合绩效
+ * @param application 应用程序实例指针
+ * @param buffer      输出缓冲区
+ * @param capacity    缓冲区容量
+ * @return Result     成功或失败的结果
+ */
+Result MenuApplication_stats_dept_performance(
+    MenuApplication *application,
+    char *buffer,
+    size_t capacity
+);
+
+/**
+ * @brief 住院周转率
+ * @param application 应用程序实例指针
+ * @param buffer      输出缓冲区
+ * @param capacity    缓冲区容量
+ * @return Result     成功或失败的结果
+ */
+Result MenuApplication_stats_admission_turnover(
+    MenuApplication *application,
+    char *buffer,
+    size_t capacity
+);
+
+/**
  * @brief 患者费用查询
  * @param application 应用程序实例指针
  * @param patient_id  患者编号
@@ -826,6 +933,24 @@ Result MenuApplication_stats_bed_utilization(
 Result MenuApplication_query_patient_fees(
     MenuApplication *application,
     const char *patient_id,
+    char *buffer,
+    size_t capacity
+);
+
+/**
+ * @brief 出院结算单
+ *
+ * 根据住院记录编号生成出院结算单，汇总住院期间的全部费用。
+ *
+ * @param application  应用程序实例指针
+ * @param admission_id 住院记录编号
+ * @param buffer       输出缓冲区
+ * @param capacity     缓冲区容量
+ * @return Result      成功或失败的结果
+ */
+Result MenuApplication_discharge_settlement(
+    MenuApplication *application,
+    const char *admission_id,
     char *buffer,
     size_t capacity
 );
@@ -847,6 +972,152 @@ Result MenuApplication_execute_action(
     MenuAction action,
     FILE *input,
     FILE *output
+);
+
+/**
+ * @brief 创建住院医嘱
+ * @param application  应用程序实例指针
+ * @param admission_id 入院记录编号
+ * @param order_type   医嘱类型（用药/检查/护理/饮食/输液）
+ * @param content      医嘱内容
+ * @param ordered_at   开具时间
+ * @param buffer       输出缓冲区
+ * @param capacity     缓冲区容量
+ * @return Result      成功或失败的结果
+ */
+Result MenuApplication_create_inpatient_order(
+    MenuApplication *application,
+    const char *admission_id,
+    const char *order_type,
+    const char *content,
+    const char *ordered_at,
+    char *buffer,
+    size_t capacity
+);
+
+/**
+ * @brief 查询指定入院记录的所有医嘱
+ * @param application  应用程序实例指针
+ * @param admission_id 入院记录编号
+ * @param buffer       输出缓冲区
+ * @param capacity     缓冲区容量
+ * @return Result      成功或失败的结果
+ */
+Result MenuApplication_query_orders_by_admission(
+    MenuApplication *application,
+    const char *admission_id,
+    char *buffer,
+    size_t capacity
+);
+
+/**
+ * @brief 执行住院医嘱
+ * @param application 应用程序实例指针
+ * @param order_id    医嘱编号
+ * @param executed_at 执行时间
+ * @param buffer      输出缓冲区
+ * @param capacity    缓冲区容量
+ * @return Result     成功或失败的结果
+ */
+Result MenuApplication_execute_inpatient_order(
+    MenuApplication *application,
+    const char *order_id,
+    const char *executed_at,
+    char *buffer,
+    size_t capacity
+);
+
+/**
+ * @brief 取消住院医嘱
+ * @param application  应用程序实例指针
+ * @param order_id     医嘱编号
+ * @param cancelled_at 取消时间
+ * @param buffer       输出缓冲区
+ * @param capacity     缓冲区容量
+ * @return Result      成功或失败的结果
+ */
+Result MenuApplication_cancel_inpatient_order(
+    MenuApplication *application,
+    const char *order_id,
+    const char *cancelled_at,
+    char *buffer,
+    size_t capacity
+);
+
+/**
+ * @brief 创建护理记录
+ * @param application  应用程序实例指针
+ * @param admission_id 住院记录编号
+ * @param record_type  记录类型（体温/血压/用药/护理观察/输液）
+ * @param nurse_name   护士姓名
+ * @param content      记录内容
+ * @param recorded_at  记录时间
+ * @param buffer       输出缓冲区
+ * @param capacity     缓冲区容量
+ * @return Result      成功或失败的结果
+ */
+Result MenuApplication_create_nursing_record(
+    MenuApplication *application,
+    const char *admission_id,
+    const char *record_type,
+    const char *nurse_name,
+    const char *content,
+    const char *recorded_at,
+    char *buffer,
+    size_t capacity
+);
+
+/**
+ * @brief 查询指定住院记录的所有护理记录
+ * @param application  应用程序实例指针
+ * @param admission_id 住院记录编号
+ * @param buffer       输出缓冲区
+ * @param capacity     缓冲区容量
+ * @return Result      成功或失败的结果
+ */
+Result MenuApplication_query_nursing_records(
+    MenuApplication *application,
+    const char *admission_id,
+    char *buffer,
+    size_t capacity
+);
+
+/**
+ * @brief 创建查房记录
+ * @param application  应用程序实例指针
+ * @param admission_id 住院记录编号
+ * @param doctor_id    查房医生编号
+ * @param findings     查房发现/病情观察
+ * @param plan         治疗计划/调整方案
+ * @param rounded_at   查房时间
+ * @param buffer       输出缓冲区
+ * @param capacity     缓冲区容量
+ * @return Result      成功或失败的结果
+ */
+Result MenuApplication_create_round_record(
+    MenuApplication *application,
+    const char *admission_id,
+    const char *doctor_id,
+    const char *findings,
+    const char *plan,
+    const char *rounded_at,
+    char *buffer,
+    size_t capacity
+);
+
+/**
+ * @brief 查询指定住院记录的所有查房记录
+ * @param application  应用程序实例指针
+ * @param admission_id 住院记录编号
+ * @param buffer       输出缓冲区
+ * @param capacity     缓冲区容量
+ * @return Result      成功或失败的结果
+ */
+Result MenuApplication_query_round_records(
+    MenuApplication *application,
+    const char *admission_id,
+    char *buffer,
+    size_t capacity
 );
 
 #endif

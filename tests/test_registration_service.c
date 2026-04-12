@@ -107,6 +107,8 @@ static Registration make_registration(
     registration.status = status;
     copy_text(registration.diagnosed_at, sizeof(registration.diagnosed_at), diagnosed_at);
     copy_text(registration.cancelled_at, sizeof(registration.cancelled_at), cancelled_at);
+    registration.registration_type = REG_TYPE_STANDARD;
+    registration.registration_fee = 5.00;
     return registration;
 }
 
@@ -258,6 +260,8 @@ static void test_create_find_and_query_by_patient(void) {
         "DOC0001",
         "DEP0001",
         "2026-03-20T08:15",
+        REG_TYPE_STANDARD,
+        5.00,
         &first_created
     );
     assert(result.success == 1);
@@ -266,6 +270,8 @@ static void test_create_find_and_query_by_patient(void) {
     assert(first_created.status == REG_STATUS_PENDING);                   /* 初始状态为待诊 */
     assert(strcmp(first_created.diagnosed_at, "") == 0);                   /* 诊断时间为空 */
     assert(strcmp(first_created.cancelled_at, "") == 0);                   /* 取消时间为空 */
+    assert(first_created.registration_type == REG_TYPE_STANDARD);         /* 挂号类型为普通号 */
+    assert(first_created.registration_fee == 5.00);                       /* 挂号费为5元 */
 
     /* 创建第二条挂号 */
     result = RegistrationService_create(
@@ -274,6 +280,8 @@ static void test_create_find_and_query_by_patient(void) {
         "DOC0001",
         "DEP0001",
         "2026-03-20T08:30",
+        REG_TYPE_SPECIALIST,
+        20.00,
         &second_created
     );
     assert(result.success == 1);
@@ -329,6 +337,8 @@ static void test_create_rejects_invalid_related_entities(void) {
         "DOC0001",
         "DEP0001",
         "2026-03-20T09:00",
+        REG_TYPE_STANDARD,
+        5.00,
         &created
     );
     assert(result.success == 0);
@@ -340,6 +350,8 @@ static void test_create_rejects_invalid_related_entities(void) {
         "DOC9999",
         "DEP0001",
         "2026-03-20T09:05",
+        REG_TYPE_STANDARD,
+        5.00,
         &created
     );
     assert(result.success == 0);
@@ -351,6 +363,8 @@ static void test_create_rejects_invalid_related_entities(void) {
         "DOC0001",
         "DEP9999",
         "2026-03-20T09:10",
+        REG_TYPE_STANDARD,
+        5.00,
         &created
     );
     assert(result.success == 0);
@@ -362,6 +376,8 @@ static void test_create_rejects_invalid_related_entities(void) {
         "DOC0001",
         "DEP0002",
         "2026-03-20T09:15",
+        REG_TYPE_STANDARD,
+        5.00,
         &created
     );
     assert(result.success == 0);
@@ -392,6 +408,8 @@ static void test_cancel_pending_registration(void) {
         "DOC0002",
         "DEP0002",
         "2026-03-20T10:00",
+        REG_TYPE_EMERGENCY,
+        10.00,
         &created
     );
     assert(result.success == 1);

@@ -143,6 +143,10 @@ static const MenuOption MENU_ADMIN_OPTIONS[] = {
     {6, MENU_ACTION_ADMIN_STATS_REVENUE, "科室收入统计", TUI_STAR},
     {7, MENU_ACTION_ADMIN_STATS_WORKLOAD, "医生工作量统计", TUI_LOZENGE},
     {8, MENU_ACTION_ADMIN_STATS_BED_UTIL, "床位利用率统计", TUI_CIRCLE},
+    {9, MENU_ACTION_ADMIN_STATS_MEDICINE, "药品消耗排行", TUI_FLASK},
+    {10, MENU_ACTION_ADMIN_STATS_PATIENT_FLOW, "患者流量统计", TUI_HEART},
+    {11, MENU_ACTION_ADMIN_STATS_DEPT_PERFORMANCE, "科室综合绩效", TUI_STAR},
+    {12, MENU_ACTION_ADMIN_STATS_ADMISSION_TURNOVER, "住院周转率", TUI_MEDICAL},
     {0, MENU_ACTION_BACK, "返回上级菜单", TUI_ARROW_R}
 };
 
@@ -151,8 +155,10 @@ static const MenuOption MENU_DOCTOR_OPTIONS[] = {
     {1, MENU_ACTION_DOCTOR_PENDING_LIST, "待诊列表", TUI_LOZENGE},
     {2, MENU_ACTION_DOCTOR_QUERY_PATIENT_HISTORY, "查询患者信息与历史", TUI_HEART},
     {3, MENU_ACTION_DOCTOR_VISIT_RECORD, "诊疗记录/诊断结果/医生建议", TUI_HEAVY_CROSS},
-    {4, MENU_ACTION_DOCTOR_PRESCRIPTION_STOCK, "处方与发药/查询药品库存", TUI_FLASK},
+    {4, MENU_ACTION_DOCTOR_PRESCRIPTION_STOCK, "处方管理/查询库存", TUI_FLASK},
     {5, MENU_ACTION_DOCTOR_EXAM_RECORD, "检查记录/检查结果", TUI_STAR},
+    {6, MENU_ACTION_DOCTOR_ROUND_CREATE, "查房记录", TUI_MEDICAL},
+    {7, MENU_ACTION_DOCTOR_ROUND_QUERY, "查看查房记录", TUI_MEDICAL},
     {0, MENU_ACTION_BACK, "返回上级菜单", TUI_ARROW_R}
 };
 
@@ -180,6 +186,12 @@ static const MenuOption MENU_INPATIENT_OPTIONS[] = {
     {6, MENU_ACTION_INPATIENT_LIST_BEDS, "查看床位状态", TUI_CIRCLE_O},
     {7, MENU_ACTION_INPATIENT_TRANSFER_BED, "床位调整/转床", TUI_DIAMOND},
     {8, MENU_ACTION_INPATIENT_DISCHARGE_CHECK, "出院前检查", TUI_MEDICAL},
+    {9, MENU_ACTION_INPATIENT_CREATE_ORDER, "开具医嘱", TUI_STAR},
+    {10, MENU_ACTION_INPATIENT_QUERY_ORDERS, "查看医嘱", TUI_CIRCLE},
+    {11, MENU_ACTION_INPATIENT_EXECUTE_ORDER, "执行医嘱", TUI_MEDICAL},
+    {12, MENU_ACTION_INPATIENT_CANCEL_ORDER, "取消医嘱", TUI_HEAVY_CROSS},
+    {13, MENU_ACTION_INPATIENT_NURSING_CREATE, "记录护理", TUI_HEART},
+    {14, MENU_ACTION_INPATIENT_NURSING_QUERY, "查看护理记录", TUI_MEDICAL},
     {0, MENU_ACTION_BACK, "返回上级菜单", TUI_ARROW_R}
 };
 
@@ -535,6 +547,14 @@ const char *MenuController_action_label(MenuAction action) {
             return "医生工作量统计";
         case MENU_ACTION_ADMIN_STATS_BED_UTIL:
             return "床位利用率统计";
+        case MENU_ACTION_ADMIN_STATS_MEDICINE:
+            return "药品消耗排行";
+        case MENU_ACTION_ADMIN_STATS_PATIENT_FLOW:
+            return "患者流量统计";
+        case MENU_ACTION_ADMIN_STATS_DEPT_PERFORMANCE:
+            return "科室综合绩效";
+        case MENU_ACTION_ADMIN_STATS_ADMISSION_TURNOVER:
+            return "住院周转率";
         case MENU_ACTION_DOCTOR_QUERY_PATIENT_HISTORY:
             return "查询患者信息与历史";
         case MENU_ACTION_DOCTOR_PENDING_LIST:
@@ -542,9 +562,13 @@ const char *MenuController_action_label(MenuAction action) {
         case MENU_ACTION_DOCTOR_VISIT_RECORD:
             return "诊疗记录/诊断结果/医生建议";
         case MENU_ACTION_DOCTOR_PRESCRIPTION_STOCK:
-            return "处方与发药/查询药品库存";
+            return "处方管理/查询库存";
         case MENU_ACTION_DOCTOR_EXAM_RECORD:
             return "检查记录/检查结果";
+        case MENU_ACTION_DOCTOR_ROUND_CREATE:
+            return "查房记录";
+        case MENU_ACTION_DOCTOR_ROUND_QUERY:
+            return "查看查房记录";
         case MENU_ACTION_PATIENT_BASIC_INFO:
             return "基本信息";
         case MENU_ACTION_PATIENT_SELF_REGISTER:
@@ -579,6 +603,18 @@ const char *MenuController_action_label(MenuAction action) {
             return "床位调整/转床";
         case MENU_ACTION_INPATIENT_DISCHARGE_CHECK:
             return "出院前检查";
+        case MENU_ACTION_INPATIENT_CREATE_ORDER:
+            return "开具医嘱";
+        case MENU_ACTION_INPATIENT_QUERY_ORDERS:
+            return "查看医嘱";
+        case MENU_ACTION_INPATIENT_EXECUTE_ORDER:
+            return "执行医嘱";
+        case MENU_ACTION_INPATIENT_CANCEL_ORDER:
+            return "取消医嘱";
+        case MENU_ACTION_INPATIENT_NURSING_CREATE:
+            return "记录护理";
+        case MENU_ACTION_INPATIENT_NURSING_QUERY:
+            return "查看护理记录";
         case MENU_ACTION_PHARMACY_ADD_MEDICINE:
             return "添加药品";
         case MENU_ACTION_PHARMACY_RESTOCK:

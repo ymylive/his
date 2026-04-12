@@ -1,0 +1,37 @@
+order_id|admission_id|order_type|content|ordered_at|status|executed_at|cancelled_at
+ORD0001|ADM0001|用药|阿莫西林 0.5g tid iv|2026-03-26 12:30|1|2026-03-26 13:00|
+ORD0002|ADM0001|检查|chest CT follow-up|2026-03-26 14:00|1|2026-03-26 15:30|
+ORD0003|ADM0001|护理|monitor SpO2 q4h|2026-03-26 12:30|1|2026-03-26 12:45|
+ORD0004|ADM0001|饮食|soft diet low salt|2026-03-26 12:30|1|2026-03-26 12:40|
+ORD0005|ADM0001|输液|0.9% NaCl 500ml + ambroxol 30mg|2026-03-26 13:00|1|2026-03-26 13:30|
+ORD0006|ADM0004|用药|ibuprofen 0.4g bid oral|2026-03-27 16:30|1|2026-03-27 17:00|
+ORD0007|ADM0004|护理|bed rest and ice pack q6h|2026-03-27 16:30|1|2026-03-27 16:45|
+ORD0008|ADM0006|用药|salbutamol nebulizer q6h|2026-03-28 12:00|1|2026-03-28 12:30|
+ORD0009|ADM0006|输液|glucose 5% 250ml + dexamethasone 5mg|2026-03-28 12:00|1|2026-03-28 12:20|
+ORD0010|ADM0006|检查|arterial blood gas|2026-03-28 14:00|1|2026-03-28 14:40|
+ORD0011|ADM0007|用药|nifedipine 30mg bid oral|2026-03-29 11:00|1|2026-03-29 11:30|
+ORD0012|ADM0007|检查|echocardiogram|2026-03-29 11:00|1|2026-03-29 12:00|
+ORD0013|ADM0007|护理|continuous ECG monitoring|2026-03-29 10:50|1|2026-03-29 11:00|
+ORD0014|ADM0007|饮食|low sodium low fat diet|2026-03-29 10:50|1|2026-03-29 11:00|
+ORD0015|ADM0009|用药|levofloxacin 0.5g qd iv|2026-03-31 09:00|1|2026-03-31 09:30|
+ORD0016|ADM0009|输液|0.9% NaCl 500ml|2026-03-31 09:00|1|2026-03-31 09:20|
+ORD0017|ADM0010|用药|ambroxol 30mg tid oral|2026-03-31 10:30|1|2026-03-31 11:00|
+ORD0018|ADM0010|检查|sputum culture|2026-03-31 10:30|1|2026-04-01 09:00|
+ORD0019|ADM0011|用药|omeprazole 40mg bid iv|2026-03-31 12:00|1|2026-03-31 12:30|
+ORD0020|ADM0011|检查|upper GI endoscopy|2026-03-31 14:00|2||2026-03-31 16:00
+ORD0021|ADM0013|用药|ketorolac 30mg prn iv|2026-04-01 09:30|1|2026-04-01 10:00|
+ORD0022|ADM0013|输液|0.9% NaCl 1000ml|2026-04-01 09:30|1|2026-04-01 09:50|
+ORD0023|ADM0015|用药|amoxicillin 0.25g tid oral|2026-04-01 14:30|1|2026-04-01 15:00|
+ORD0024|ADM0015|护理|tepid sponge bath prn for fever|2026-04-01 14:30|1|2026-04-01 14:45|
+ORD0025|ADM0016|用药|atorvastatin 20mg qn oral|2026-04-02 09:00|1|2026-04-02 09:30|
+ORD0026|ADM0016|检查|cardiac enzyme panel|2026-04-02 09:00|1|2026-04-02 10:00|
+ORD0027|ADM0017|用药|amiodarone 200mg tid oral|2026-04-02 10:30|1|2026-04-02 11:00|
+ORD0028|ADM0017|护理|telemetry monitoring continuous|2026-04-02 10:30|1|2026-04-02 10:45|
+ORD0029|ADM0019|用药|calcium carbonate 600mg bid oral|2026-04-02 14:30|1|2026-04-02 15:00|
+ORD0030|ADM0019|饮食|high calcium diet|2026-04-02 14:30|1|2026-04-02 14:45|
+ORD0031|ADM0020|输液|aminophylline 250mg in 5% glucose 250ml|2026-04-03 09:00|1|2026-04-03 09:20|
+ORD0032|ADM0020|检查|pulmonary function test|2026-04-03 10:00|0||
+ORD0033|ADM0022|用药|montelukast 5mg qn oral|2026-04-03 14:30|1|2026-04-03 15:00|
+ORD0034|ADM0022|护理|nebulizer therapy q8h|2026-04-03 14:30|1|2026-04-03 14:45|
+ORD0035|ADM0023|用药|aspirin 100mg qd oral|2026-04-04 09:00|1|2026-04-04 09:30|
+ORD0036|ADM0023|输液|citicoline 500mg in 0.9% NaCl 250ml|2026-04-04 09:00|1|2026-04-04 09:20|

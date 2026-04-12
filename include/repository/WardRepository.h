@@ -19,10 +19,10 @@
 
 /** 病区数据文件的表头行 */
 #define WARD_REPOSITORY_HEADER \
-    "ward_id|name|department_id|location|capacity|occupied_beds|status"
+    "ward_id|name|department_id|location|capacity|occupied_beds|status|ward_type|daily_fee"
 
 /** 病区记录的字段数量 */
-#define WARD_REPOSITORY_FIELD_COUNT 7
+#define WARD_REPOSITORY_FIELD_COUNT 9
 
 /**
  * @brief 病区仓储结构体

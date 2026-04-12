@@ -36,6 +36,22 @@ static void WardRepository_copy_text(
     destination[capacity - 1] = '\0';
 }
 
+/** 解析浮点数字段 */
+static Result WardRepository_parse_double(const char *field, double *out_value) {
+    char *end_pointer = 0;
+    double value = 0.0;
+
+    if (field == 0 || out_value == 0 || field[0] == '\0') {
+        return Result_make_failure("ward double missing");
+    }
+    value = strtod(field, &end_pointer);
+    if (end_pointer == field || end_pointer == 0 || *end_pointer != '\0') {
+        return Result_make_failure("ward double invalid");
+    }
+    *out_value = value;
+    return Result_make_success("ward double parsed");
+}
+
 /** 解析整数字段 */
 static Result WardRepository_parse_int(const char *field, int *out_value) {
     char *end_pointer = 0;
@@ -83,6 +99,14 @@ static Result WardRepository_validate(const Ward *ward) {
         return Result_make_failure("ward status invalid");
     }
 
+    if (ward->ward_type < WARD_TYPE_STANDARD || ward->ward_type > WARD_TYPE_VIP) {
+        return Result_make_failure("ward type invalid");
+    }
+
+    if (ward->daily_fee < 0.0) {
+        return Result_make_failure("ward daily fee invalid");
+    }
+
     return Result_make_success("ward valid");
 }
 
@@ -95,9 +119,10 @@ static Result WardRepository_format_line(
     if (result.success == 0) return result;
     if (line == 0 || line_capacity == 0) return Result_make_failure("ward line buffer missing");
 
-    written = snprintf(line, line_capacity, "%s|%s|%s|%s|%d|%d|%d",
+    written = snprintf(line, line_capacity, "%s|%s|%s|%s|%d|%d|%d|%d|%.2f",
         ward->ward_id, ward->name, ward->department_id, ward->location,
-        ward->capacity, ward->occupied_beds, (int)ward->status);
+        ward->capacity, ward->occupied_beds, (int)ward->status,
+        (int)ward->ward_type, ward->daily_fee);
     if (written < 0 || (size_t)written >= line_capacity) {
         return Result_make_failure("ward line too long");
     }
@@ -136,6 +161,16 @@ static Result WardRepository_parse_line(const char *line, Ward *ward) {
     result = WardRepository_parse_int(fields[6], &status_value);
     if (result.success == 0) return result;
     ward->status = (WardStatus)status_value;
+
+    {
+        int ward_type_value = 0;
+        result = WardRepository_parse_int(fields[7], &ward_type_value);
+        if (result.success == 0) return result;
+        ward->ward_type = (WardType)ward_type_value;
+    }
+
+    result = WardRepository_parse_double(fields[8], &ward->daily_fee);
+    if (result.success == 0) return result;
 
     return WardRepository_validate(ward);
 }

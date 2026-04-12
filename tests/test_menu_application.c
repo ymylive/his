@@ -38,6 +38,10 @@ typedef struct MenuApplicationTestContext {
     char admission_path[TEXT_FILE_REPOSITORY_PATH_CAPACITY];
     char medicine_path[TEXT_FILE_REPOSITORY_PATH_CAPACITY];
     char dispense_record_path[TEXT_FILE_REPOSITORY_PATH_CAPACITY];
+    char prescription_path[TEXT_FILE_REPOSITORY_PATH_CAPACITY];
+    char inpatient_order_path[TEXT_FILE_REPOSITORY_PATH_CAPACITY];
+    char nursing_record_path[TEXT_FILE_REPOSITORY_PATH_CAPACITY];
+    char round_record_path[TEXT_FILE_REPOSITORY_PATH_CAPACITY];
     MenuApplicationPaths paths;
 } MenuApplicationTestContext;
 
@@ -121,6 +125,30 @@ static void setup_context(MenuApplicationTestContext *context, const char *test_
         test_name,
         "dispense_records.txt"
     );
+    build_test_path(
+        context->prescription_path,
+        sizeof(context->prescription_path),
+        test_name,
+        "prescriptions.txt"
+    );
+    build_test_path(
+        context->inpatient_order_path,
+        sizeof(context->inpatient_order_path),
+        test_name,
+        "inpatient_orders.txt"
+    );
+    build_test_path(
+        context->nursing_record_path,
+        sizeof(context->nursing_record_path),
+        test_name,
+        "nursing_records.txt"
+    );
+    build_test_path(
+        context->round_record_path,
+        sizeof(context->round_record_path),
+        test_name,
+        "round_records.txt"
+    );
 
     context->paths.user_path = context->user_path;
     context->paths.patient_path = context->patient_path;
@@ -134,6 +162,10 @@ static void setup_context(MenuApplicationTestContext *context, const char *test_
     context->paths.admission_path = context->admission_path;
     context->paths.medicine_path = context->medicine_path;
     context->paths.dispense_record_path = context->dispense_record_path;
+    context->paths.prescription_path = context->prescription_path;
+    context->paths.inpatient_order_path = context->inpatient_order_path;
+    context->paths.nursing_record_path = context->nursing_record_path;
+    context->paths.round_record_path = context->round_record_path;
 }
 
 static void seed_user_account(
@@ -336,6 +368,8 @@ static void test_clerk_flow_add_query_patient_and_registration(void) {
         "DOC0001",
         "DEP0001",
         "2026-03-20T08:15",
+        REG_TYPE_STANDARD,
+        5.00,
         output,
         sizeof(output)
     );
@@ -385,6 +419,8 @@ static void test_patient_self_registration_requires_session_and_tracks_duplicate
         "DOC0001",
         "DEP0001",
         "2026-03-21T08:00",
+        REG_TYPE_STANDARD,
+        5.00,
         &first_registration
     );
     assert(result.success == 0);
@@ -398,6 +434,8 @@ static void test_patient_self_registration_requires_session_and_tracks_duplicate
         "DOC0001",
         "DEP0001",
         "2026-03-21T08:05",
+        REG_TYPE_STANDARD,
+        5.00,
         &first_registration
     );
     assert(result.success == 1);
@@ -410,6 +448,8 @@ static void test_patient_self_registration_requires_session_and_tracks_duplicate
         "DOC0001",
         "DEP0001",
         "2026-03-21T08:10",
+        REG_TYPE_STANDARD,
+        5.00,
         &second_registration
     );
     assert(result.success == 1);
@@ -466,6 +506,8 @@ static void test_menu_application_lists_departments_and_creates_visit_handoff(vo
         "DOC0001",
         "DEP0001",
         "2026-03-21T09:00",
+        REG_TYPE_STANDARD,
+        5.00,
         output,
         sizeof(output)
     );
@@ -537,6 +579,8 @@ static void test_doctor_flow_create_visit_and_query_history(void) {
         "DOC0001",
         "DEP0001",
         "2026-03-20T09:00",
+        REG_TYPE_STANDARD,
+        5.00,
         output,
         sizeof(output)
     );
@@ -885,6 +929,8 @@ static void test_execute_action_doctor_visit_preserves_long_complaint(void) {
         "DOC0001",
         "DEP0001",
         "2026-03-20T13:00",
+        REG_TYPE_STANDARD,
+        5.00,
         output,
         sizeof(output)
     );
@@ -996,6 +1042,8 @@ static void test_execute_action_patient_query_registration_lists_records(void) {
         "DOC0001",
         "DEP0001",
         "2026-03-20T14:00",
+        REG_TYPE_STANDARD,
+        5.00,
         output,
         sizeof(output)
     );
@@ -1070,6 +1118,8 @@ static void test_patient_session_authorizes_only_bound_patient_routes(void) {
         "DOC0001",
         "DEP0001",
         "2026-03-20T14:20",
+        REG_TYPE_STANDARD,
+        5.00,
         output,
         sizeof(output)
     );
@@ -1080,6 +1130,8 @@ static void test_patient_session_authorizes_only_bound_patient_routes(void) {
         "DOC0001",
         "DEP0001",
         "2026-03-20T14:25",
+        REG_TYPE_STANDARD,
+        5.00,
         output,
         sizeof(output)
     );
@@ -1363,6 +1415,8 @@ static void test_execute_action_doctor_exam_record_create_and_complete(void) {
         "DOC0001",
         "DEP0001",
         "2026-03-20T15:00",
+        REG_TYPE_STANDARD,
+        5.00,
         output,
         sizeof(output)
     );
@@ -1391,6 +1445,7 @@ static void test_execute_action_doctor_exam_record_create_and_complete(void) {
         "VIS0001\n"
         "BloodTest\n"
         "Lab\n"
+        "30.00\n"
         "2026-03-20T16:00\n",
         output,
         sizeof(output)
@@ -1482,6 +1537,8 @@ static void test_execute_action_doctor_pending_list_filters_diagnosed(void) {
         "DOC0001",
         "DEP0001",
         "2026-03-20T18:00",
+        REG_TYPE_STANDARD,
+        5.00,
         output,
         sizeof(output)
     );
@@ -1492,6 +1549,8 @@ static void test_execute_action_doctor_pending_list_filters_diagnosed(void) {
         "DOC0001",
         "DEP0001",
         "2026-03-20T18:10",
+        REG_TYPE_STANDARD,
+        5.00,
         output,
         sizeof(output)
     );
@@ -1639,6 +1698,8 @@ static void test_execute_action_admin_medical_records_queries_time_range(void) {
         "DOC0001",
         "DEP0001",
         "2026-03-20T09:00",
+        REG_TYPE_STANDARD,
+        5.00,
         output,
         sizeof(output)
     );

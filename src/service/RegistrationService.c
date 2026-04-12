@@ -18,7 +18,7 @@
 #include "repository/RepositoryUtils.h"
 
 /** @brief 挂号记录数据行的字段数量 */
-#define REGISTRATION_SERVICE_FIELD_COUNT 8
+#define REGISTRATION_SERVICE_FIELD_COUNT 10
 
 /** @brief 挂号ID的前缀 */
 #define REGISTRATION_SERVICE_ID_PREFIX "REG"
@@ -173,6 +173,26 @@ static Result RegistrationService_parse_registration_line(
         sizeof(out_registration->cancelled_at),
         fields[7]
     );
+
+    /* 解析挂号类型 */
+    {
+        char *end = 0;
+        long type_value = strtol(fields[8], &end, 10);
+        if (end == 0 || *end != '\0' || type_value < REG_TYPE_STANDARD || type_value > REG_TYPE_EMERGENCY) {
+            return Result_make_failure("registration type invalid");
+        }
+        out_registration->registration_type = (RegistrationType)type_value;
+    }
+
+    /* 解析挂号费 */
+    {
+        char *end = 0;
+        double fee_value = strtod(fields[9], &end);
+        if (end == 0 || *end != '\0' || fee_value < 0) {
+            return Result_make_failure("registration fee invalid");
+        }
+        out_registration->registration_fee = fee_value;
+    }
 
     return Result_make_success("registration parsed");
 }
@@ -511,7 +531,9 @@ static Result RegistrationService_fill_new_registration(
     const char *patient_id,
     const char *doctor_id,
     const char *department_id,
-    const char *registered_at
+    const char *registered_at,
+    RegistrationType registration_type,
+    double registration_fee
 ) {
     if (registration == 0) {
         return Result_make_failure("registration output missing");
@@ -546,6 +568,8 @@ static Result RegistrationService_fill_new_registration(
     registration->status = REG_STATUS_PENDING;  /* 初始状态为待诊 */
     registration->diagnosed_at[0] = '\0';
     registration->cancelled_at[0] = '\0';
+    registration->registration_type = registration_type;
+    registration->registration_fee = registration_fee;
     return Result_make_success("registration filled");
 }
 
@@ -643,6 +667,8 @@ Result RegistrationService_create(
     const char *doctor_id,
     const char *department_id,
     const char *registered_at,
+    RegistrationType registration_type,
+    double registration_fee,
     Registration *out_registration
 ) {
     LinkedList registrations;
@@ -702,7 +728,9 @@ Result RegistrationService_create(
         patient_id,
         doctor_id,
         department_id,
-        registered_at
+        registered_at,
+        registration_type,
+        registration_fee
     );
     if (!result.success) {
         RegistrationRepository_clear_list(&registrations);

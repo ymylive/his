@@ -465,6 +465,7 @@ static void test_delete_visit_rejects_when_examination_exists(void) {
         visit.visit_id,
         "Chest CT",
         "Imaging",
+        500.00,
         "2026-03-20T08:40",
         &examination
     );
@@ -518,6 +519,7 @@ static void test_create_update_and_delete_examination_record(void) {
         visit.visit_id,
         "Blood test",
         "Lab",
+        30.00,
         "2026-03-20T08:25",
         &examination
     );
@@ -612,6 +614,7 @@ static void test_history_query_collects_four_record_types(void) {
         visit.visit_id,
         "Ultrasound",
         "Imaging",
+        200.00,
         "2026-03-20T08:45",
         &examination
     );
@@ -686,6 +689,7 @@ static void test_time_range_query_filters_occurrence_time(void) {
         visit.visit_id,
         "Gastroscopy",
         "Endoscopy",
+        300.00,
         "2026-03-22T11:00",
         &examination
     );

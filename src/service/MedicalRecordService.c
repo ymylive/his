@@ -1191,6 +1191,7 @@ Result MedicalRecordService_delete_visit_record(
  * @param visit_id      关联的就诊ID
  * @param exam_item     检查项目名称
  * @param exam_type     检查类型
+ * @param exam_fee      检查费用(元)
  * @param requested_at  申请检查的时间
  * @param out_record    输出参数，创建成功时存放检查记录
  * @return Result       操作结果
@@ -1200,6 +1201,7 @@ Result MedicalRecordService_create_examination_record(
     const char *visit_id,
     const char *exam_item,
     const char *exam_type,
+    double exam_fee,
     const char *requested_at,
     ExaminationRecord *out_record
 ) {
@@ -1234,6 +1236,10 @@ Result MedicalRecordService_create_examination_record(
     result = MedicalRecordService_validate_text(requested_at, "requested at", 0);
     if (result.success == 0) {
         return result;
+    }
+
+    if (exam_fee < 0) {
+        return Result_make_failure("exam fee must be non-negative");
     }
 
     /* 加载就诊和检查记录 */
@@ -1286,6 +1292,7 @@ Result MedicalRecordService_create_examination_record(
     StringUtils_copy(new_record.exam_type, sizeof(new_record.exam_type), exam_type);
     new_record.status = EXAM_STATUS_PENDING;  /* 初始状态为待检查 */
     new_record.result[0] = '\0';
+    new_record.exam_fee = exam_fee;
     StringUtils_copy(
         new_record.requested_at,
         sizeof(new_record.requested_at),

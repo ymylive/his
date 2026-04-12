@@ -22,6 +22,15 @@ typedef enum RegistrationStatus {
 } RegistrationStatus;
 
 /**
+ * @brief 挂号类型枚举
+ */
+typedef enum RegistrationType {
+    REG_TYPE_STANDARD = 0,      /* 普通号 */
+    REG_TYPE_SPECIALIST = 1,    /* 专家号 */
+    REG_TYPE_EMERGENCY = 2      /* 急诊号 */
+} RegistrationType;
+
+/**
  * @brief 挂号记录结构体
  *
  * 存储一次挂号的完整信息，包括患者、医生、科室及各时间节点。
@@ -35,6 +44,8 @@ typedef struct Registration {
     RegistrationStatus status;                      /* 当前挂号状态 */
     char diagnosed_at[HIS_DOMAIN_TIME_CAPACITY];   /* 就诊完成时间 */
     char cancelled_at[HIS_DOMAIN_TIME_CAPACITY];   /* 取消时间 */
+    RegistrationType registration_type;             /* 挂号类型 */
+    double registration_fee;                        /* 挂号费(元) */
 } Registration;
 
 /**

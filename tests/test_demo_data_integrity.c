@@ -195,6 +195,10 @@ static void test_demo_seed_files_exist_and_reset_runtime_files(void) {
     char runtime_admissions[256];
     char runtime_medicines[256];
     char runtime_dispenses[256];
+    char runtime_prescriptions[256];
+    char runtime_inpatient_orders[256];
+    char runtime_nursing_records[256];
+    char runtime_round_records[256];
     char buffer[256];
     FILE *file = 0;
     char line[256];
@@ -218,6 +222,8 @@ static void test_demo_seed_files_exist_and_reset_runtime_files(void) {
     assert(fopen(resolve_demo_seed_path("admissions.txt"), "r") != 0);
     assert(fopen(resolve_demo_seed_path("medicines.txt"), "r") != 0);
     assert(fopen(resolve_demo_seed_path("dispense_records.txt"), "r") != 0);
+    assert(fopen(resolve_demo_seed_path("nursing_records.txt"), "r") != 0);
+    assert(fopen(resolve_demo_seed_path("round_records.txt"), "r") != 0);
 
     snprintf(runtime_users, sizeof(runtime_users), "build/users.txt");
     snprintf(runtime_patients, sizeof(runtime_patients), "build/patients.txt");
@@ -231,6 +237,10 @@ static void test_demo_seed_files_exist_and_reset_runtime_files(void) {
     snprintf(runtime_admissions, sizeof(runtime_admissions), "build/admissions.txt");
     snprintf(runtime_medicines, sizeof(runtime_medicines), "build/medicines.txt");
     snprintf(runtime_dispenses, sizeof(runtime_dispenses), "build/dispense_records.txt");
+    snprintf(runtime_prescriptions, sizeof(runtime_prescriptions), "build/prescriptions.txt");
+    snprintf(runtime_inpatient_orders, sizeof(runtime_inpatient_orders), "build/inpatient_orders.txt");
+    snprintf(runtime_nursing_records, sizeof(runtime_nursing_records), "build/nursing_records.txt");
+    snprintf(runtime_round_records, sizeof(runtime_round_records), "build/round_records.txt");
 
     copy_file_contents(resolve_demo_seed_path("users.txt"), "build/demo_seed/users.txt");
     copy_file_contents(resolve_demo_seed_path("patients.txt"), "build/demo_seed/patients.txt");
@@ -244,6 +254,10 @@ static void test_demo_seed_files_exist_and_reset_runtime_files(void) {
     copy_file_contents(resolve_demo_seed_path("admissions.txt"), "build/demo_seed/admissions.txt");
     copy_file_contents(resolve_demo_seed_path("medicines.txt"), "build/demo_seed/medicines.txt");
     copy_file_contents(resolve_demo_seed_path("dispense_records.txt"), "build/demo_seed/dispense_records.txt");
+    copy_file_contents(resolve_demo_seed_path("prescriptions.txt"), "build/demo_seed/prescriptions.txt");
+    copy_file_contents(resolve_demo_seed_path("inpatient_orders.txt"), "build/demo_seed/inpatient_orders.txt");
+    copy_file_contents(resolve_demo_seed_path("nursing_records.txt"), "build/demo_seed/nursing_records.txt");
+    copy_file_contents(resolve_demo_seed_path("round_records.txt"), "build/demo_seed/round_records.txt");
 
     file = fopen(runtime_users, "w");
     assert(file != 0);
@@ -305,6 +319,21 @@ static void test_demo_seed_files_exist_and_reset_runtime_files(void) {
     fputs("corrupted\n", file);
     fclose(file);
 
+    file = fopen(runtime_prescriptions, "w");
+    assert(file != 0);
+    fputs("corrupted\n", file);
+    fclose(file);
+
+    file = fopen(runtime_inpatient_orders, "w");
+    assert(file != 0);
+    fputs("corrupted\n", file);
+    fclose(file);
+
+    file = fopen(runtime_nursing_records, "w");
+    assert(file != 0);
+    fputs("corrupted\n", file);
+    fclose(file);
+
     paths.user_path = runtime_users;
     paths.patient_path = runtime_patients;
     paths.department_path = runtime_departments;
@@ -317,6 +346,10 @@ static void test_demo_seed_files_exist_and_reset_runtime_files(void) {
     paths.admission_path = runtime_admissions;
     paths.medicine_path = runtime_medicines;
     paths.dispense_record_path = runtime_dispenses;
+    paths.prescription_path = runtime_prescriptions;
+    paths.inpatient_order_path = runtime_inpatient_orders;
+    paths.nursing_record_path = runtime_nursing_records;
+    paths.round_record_path = runtime_round_records;
 
     result = DemoData_reset(&paths, buffer, sizeof(buffer));
     assert(result.success == 1);

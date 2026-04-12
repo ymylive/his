@@ -30,9 +30,12 @@ add_library(his_common
     src/repository/DoctorRepository.c
     src/repository/ExaminationRecordRepository.c
     src/repository/InpatientOrderRepository.c
+    src/repository/NursingRecordRepository.c
+    src/repository/RoundRecordRepository.c
     src/repository/MedicineRepository.c
     src/repository/RepositoryUtils.c
     src/repository/PatientRepository.c
+    src/repository/PrescriptionRepository.c
     src/repository/RegistrationRepository.c
     src/repository/TextFileRepository.c
     src/repository/UserRepository.c
@@ -42,10 +45,14 @@ add_library(his_common
     src/service/DepartmentService.c
     src/service/BedService.c
     src/service/DoctorService.c
+    src/service/InpatientOrderService.c
     src/service/InpatientService.c
     src/service/MedicalRecordService.c
     src/service/PatientService.c
+    src/service/NursingRecordService.c
+    src/service/RoundRecordService.c
     src/service/PharmacyService.c
+    src/service/PrescriptionService.c
     src/service/RegistrationService.c
     src/ui/DemoData.c
     src/ui/MenuActionAdmin.c

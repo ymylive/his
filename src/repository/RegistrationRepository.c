@@ -18,7 +18,7 @@
 
 /** 挂号记录数据文件的表头行 */
 static const char REGISTRATION_REPOSITORY_HEADER[] =
-    "registration_id|patient_id|doctor_id|department_id|registered_at|status|diagnosed_at|cancelled_at";
+    "registration_id|patient_id|doctor_id|department_id|registered_at|status|diagnosed_at|cancelled_at|registration_type|registration_fee";
 
 /** 按挂号ID查找时使用的上下文结构体 */
 typedef struct RegistrationFindByIdContext {
@@ -134,6 +134,66 @@ static Result RegistrationRepository_parse_status(
 }
 
 /**
+ * @brief 解析挂号类型枚举值
+ * @param field    文本字段
+ * @param out_type 输出参数，解析得到的挂号类型
+ * @return 成功返回 success；格式不合法时返回 failure
+ */
+static Result RegistrationRepository_parse_type(
+    const char *field,
+    RegistrationType *out_type
+) {
+    char *end = 0;
+    long value = 0;
+
+    if (field == 0 || out_type == 0 || field[0] == '\0') {
+        return Result_make_failure("registration type missing");
+    }
+
+    value = strtol(field, &end, 10);
+    if (end == 0 || *end != '\0') {
+        return Result_make_failure("registration type invalid");
+    }
+
+    if (value < REG_TYPE_STANDARD || value > REG_TYPE_EMERGENCY) {
+        return Result_make_failure("registration type out of range");
+    }
+
+    *out_type = (RegistrationType)value;
+    return Result_make_success("registration type parsed");
+}
+
+/**
+ * @brief 解析挂号费
+ * @param field   文本字段
+ * @param out_fee 输出参数，解析得到的挂号费
+ * @return 成功返回 success；格式不合法时返回 failure
+ */
+static Result RegistrationRepository_parse_fee(
+    const char *field,
+    double *out_fee
+) {
+    char *end = 0;
+    double value = 0;
+
+    if (field == 0 || out_fee == 0 || field[0] == '\0') {
+        return Result_make_failure("registration fee missing");
+    }
+
+    value = strtod(field, &end);
+    if (end == 0 || *end != '\0') {
+        return Result_make_failure("registration fee invalid");
+    }
+
+    if (value < 0) {
+        return Result_make_failure("registration fee must be >= 0");
+    }
+
+    *out_fee = value;
+    return Result_make_success("registration fee parsed");
+}
+
+/**
  * @brief 校验挂号记录的合法性
  *
  * 除了基本字段校验外，还检查状态与时间戳的一致性：
@@ -199,6 +259,17 @@ static Result RegistrationRepository_validate(const Registration *registration) 
     );
     if (!result.success) {
         return result;
+    }
+
+    /* 校验挂号类型 */
+    if (registration->registration_type < REG_TYPE_STANDARD ||
+        registration->registration_type > REG_TYPE_EMERGENCY) {
+        return Result_make_failure("registration_type out of range");
+    }
+
+    /* 校验挂号费 */
+    if (registration->registration_fee < 0) {
+        return Result_make_failure("registration_fee must be >= 0");
     }
 
     /* 校验状态与时间戳的一致性 */
@@ -290,7 +361,7 @@ static Result RegistrationRepository_serialize(
     written = snprintf(
         line,
         capacity,
-        "%s|%s|%s|%s|%s|%d|%s|%s",
+        "%s|%s|%s|%s|%s|%d|%s|%s|%d|%.2f",
         registration->registration_id,
         registration->patient_id,
         registration->doctor_id,
@@ -298,7 +369,9 @@ static Result RegistrationRepository_serialize(
         registration->registered_at,
         (int)registration->status,
         registration->diagnosed_at,
-        registration->cancelled_at
+        registration->cancelled_at,
+        (int)registration->registration_type,
+        registration->registration_fee
     );
     if (written < 0 || (size_t)written >= capacity) {
         return Result_make_failure("registration line too long");
@@ -373,6 +446,18 @@ static Result RegistrationRepository_parse_line(const char *line, Registration *
     RegistrationRepository_copy_text(
         out_registration->cancelled_at, sizeof(out_registration->cancelled_at), fields[7]
     );
+
+    /* 解析挂号类型字段 */
+    result = RegistrationRepository_parse_type(fields[8], &out_registration->registration_type);
+    if (!result.success) {
+        return result;
+    }
+
+    /* 解析挂号费字段 */
+    result = RegistrationRepository_parse_fee(fields[9], &out_registration->registration_fee);
+    if (!result.success) {
+        return result;
+    }
 
     return RegistrationRepository_validate(out_registration);
 }

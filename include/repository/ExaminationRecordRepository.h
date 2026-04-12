@@ -5,9 +5,9 @@
  * 提供检查记录（ExaminationRecord）数据的持久化存储功能，基于文本文件存储。
  * 支持检查记录的追加、按检查ID查找、按就诊ID筛选、全量加载和全量保存操作。
  *
- * 数据文件格式：每行一条检查记录，字段以管道符 '|' 分隔，共10个字段。
+ * 数据文件格式：每行一条检查记录，字段以管道符 '|' 分隔，共11个字段。
  * 表头：examination_id|visit_id|patient_id|doctor_id|exam_item|exam_type|
- *       status|result|requested_at|completed_at
+ *       status|result|exam_fee|requested_at|completed_at
  */
 
 #ifndef HIS_REPOSITORY_EXAMINATION_RECORD_REPOSITORY_H
@@ -19,7 +19,7 @@
 #include "repository/TextFileRepository.h"
 
 /** 检查记录的字段数量 */
-#define EXAMINATION_RECORD_REPOSITORY_FIELD_COUNT 10
+#define EXAMINATION_RECORD_REPOSITORY_FIELD_COUNT 11
 
 /**
  * @brief 检查记录仓储结构体

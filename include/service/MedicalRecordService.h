@@ -141,6 +141,7 @@ Result MedicalRecordService_delete_visit_record(
  * @param visit_id      关联的就诊ID
  * @param exam_item     检查项目名称
  * @param exam_type     检查类型
+ * @param exam_fee      检查费用(元)，必须 >= 0
  * @param requested_at  申请检查的时间字符串
  * @param out_record    输出参数，创建成功时存放检查记录
  * @return Result       操作结果，success=1 表示创建成功
@@ -150,6 +151,7 @@ Result MedicalRecordService_create_examination_record(
     const char *visit_id,
     const char *exam_item,
     const char *exam_type,
+    double exam_fee,
     const char *requested_at,
     ExaminationRecord *out_record
 );

@@ -468,7 +468,11 @@ int main(void) {
         HIS_DATA_DIR "beds.txt",
         HIS_DATA_DIR "admissions.txt",
         HIS_DATA_DIR "medicines.txt",
-        HIS_DATA_DIR "dispense_records.txt"
+        HIS_DATA_DIR "dispense_records.txt",
+        HIS_DATA_DIR "prescriptions.txt",
+        HIS_DATA_DIR "inpatient_orders.txt",
+        HIS_DATA_DIR "nursing_records.txt",
+        HIS_DATA_DIR "round_records.txt"
     };
 
     /* 初始化应用程序（加载所有业务服务） */

@@ -9,3 +9,13 @@ DOC0007|GraceQiao|Resident|DEP0001|Mon-Fri|1
 DOC0008|HenryXu|Chief|DEP0005|Mon-Thu AM|1
 DOC0009|IrisTang|Associate|DEP0006|Tue-Fri PM|1
 DOC0010|JasonMo|Attending|DEP0004|Wed-Sun PM|1
+DOC0011|KarenFeng|Attending|DEP0007|Mon-Fri AM|1
+DOC0012|LeoYang|Associate|DEP0007|Tue-Sat PM|1
+DOC0013|MiaChen|Resident|DEP0008|Mon-Fri|1
+DOC0014|NickWu|Chief|DEP0008|Mon-Thu AM|1
+DOC0015|OliviaLu|Attending|DEP0001|Wed-Sun AM|1
+DOC0016|PeterShi|Associate|DEP0002|Mon-Fri PM|1
+DOC0017|QuinnDai|Attending|DEP0003|Tue-Sat AM|1
+DOC0018|RyanBai|Resident|DEP0004|Mon-Fri|1
+DOC0019|SophieYe|Attending|DEP0005|Mon-Wed PM|1
+DOC0020|TomJin|Associate|DEP0006|Thu-Sun AM|1
