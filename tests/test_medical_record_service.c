@@ -343,18 +343,22 @@ static void test_create_update_and_delete_visit_record(void) {
     seed_registration(&context, "REG0001", "PAT0001", "DOC0001", "DEP0001", "2026-03-20T08:00");
 
     /* 创建就诊记录 */
-    result = MedicalRecordService_create_visit_record(
-        &context.service,
-        "REG0001",
-        "Fever",         /* 主诉 */
-        "Influenza",     /* 诊断 */
-        "Rest",          /* 医嘱 */
-        1,               /* 需要检查 */
-        0,               /* 不需要住院 */
-        1,               /* 需要开处方 */
-        "2026-03-20T08:30",
-        &created
-    );
+    {
+        VisitRecordParams params = {0};
+        params.registration_id = "REG0001";
+        params.chief_complaint = "Fever";         /* 主诉 */
+        params.diagnosis = "Influenza";           /* 诊断 */
+        params.advice = "Rest";                   /* 医嘱 */
+        params.need_exam = 1;                     /* 需要检查 */
+        params.need_admission = 0;                /* 不需要住院 */
+        params.need_medicine = 1;                 /* 需要开处方 */
+        params.visit_time = "2026-03-20T08:30";
+        result = MedicalRecordService_create_visit_record(
+            &context.service,
+            &params,
+            &created
+        );
+    }
     assert(result.success == 1);
     assert(strcmp(created.visit_id, "VIS0001") == 0);     /* 自动分配的ID */
     assert(strcmp(created.patient_id, "PAT0001") == 0);   /* 从挂号记录继承的患者ID */
@@ -371,18 +375,22 @@ static void test_create_update_and_delete_visit_record(void) {
     assert(strcmp(registration.diagnosed_at, "2026-03-20T08:30") == 0);
 
     /* 更新就诊记录 */
-    result = MedicalRecordService_update_visit_record(
-        &context.service,
-        "VIS0001",
-        "High fever",         /* 更新主诉 */
-        "Pneumonia",          /* 更新诊断 */
-        "Ward observation",   /* 更新医嘱 */
-        1,
-        1,                    /* 现在需要住院 */
-        1,
-        "2026-03-20T09:00",
-        &updated
-    );
+    {
+        VisitRecordParams params = {0};
+        params.chief_complaint = "High fever";         /* 更新主诉 */
+        params.diagnosis = "Pneumonia";                /* 更新诊断 */
+        params.advice = "Ward observation";            /* 更新医嘱 */
+        params.need_exam = 1;
+        params.need_admission = 1;                     /* 现在需要住院 */
+        params.need_medicine = 1;
+        params.visit_time = "2026-03-20T09:00";
+        result = MedicalRecordService_update_visit_record(
+            &context.service,
+            "VIS0001",
+            &params,
+            &updated
+        );
+    }
     assert(result.success == 1);
     assert(strcmp(updated.diagnosis, "Pneumonia") == 0);   /* 诊断已更新 */
     assert(updated.need_admission == 1);                   /* 住院标记已更新 */
@@ -433,18 +441,22 @@ static void test_delete_visit_rejects_when_examination_exists(void) {
     seed_registration(&context, "REG0001", "PAT0001", "DOC0001", "DEP0001", "2026-03-20T08:00");
 
     /* 创建就诊记录 */
-    result = MedicalRecordService_create_visit_record(
-        &context.service,
-        "REG0001",
-        "Cough",
-        "Bronchitis",
-        "Chest exam",
-        1,
-        0,
-        0,
-        "2026-03-20T08:20",
-        &visit
-    );
+    {
+        VisitRecordParams params = {0};
+        params.registration_id = "REG0001";
+        params.chief_complaint = "Cough";
+        params.diagnosis = "Bronchitis";
+        params.advice = "Chest exam";
+        params.need_exam = 1;
+        params.need_admission = 0;
+        params.need_medicine = 0;
+        params.visit_time = "2026-03-20T08:20";
+        result = MedicalRecordService_create_visit_record(
+            &context.service,
+            &params,
+            &visit
+        );
+    }
     assert(result.success == 1);
 
     /* 为该就诊记录创建一条检查记录 */
@@ -482,18 +494,22 @@ static void test_create_update_and_delete_examination_record(void) {
     seed_registration(&context, "REG0001", "PAT0001", "DOC0001", "DEP0001", "2026-03-20T08:00");
 
     /* 先创建就诊记录 */
-    result = MedicalRecordService_create_visit_record(
-        &context.service,
-        "REG0001",
-        "Headache",
-        "Migraine",
-        "Observe",
-        1,
-        0,
-        0,
-        "2026-03-20T08:15",
-        &visit
-    );
+    {
+        VisitRecordParams params = {0};
+        params.registration_id = "REG0001";
+        params.chief_complaint = "Headache";
+        params.diagnosis = "Migraine";
+        params.advice = "Observe";
+        params.need_exam = 1;
+        params.need_admission = 0;
+        params.need_medicine = 0;
+        params.visit_time = "2026-03-20T08:15";
+        result = MedicalRecordService_create_visit_record(
+            &context.service,
+            &params,
+            &visit
+        );
+    }
     assert(result.success == 1);
 
     /* 创建检查记录 */
@@ -573,18 +589,22 @@ static void test_history_query_collects_four_record_types(void) {
     seed_admission(&context, "ADM0002", "PAT0002", "BED0002", "2026-03-21T10:00");
 
     /* 为 PAT0001 创建就诊记录和检查记录 */
-    result = MedicalRecordService_create_visit_record(
-        &context.service,
-        "REG0001",
-        "Pain",
-        "Appendicitis",
-        "Admit",
-        1,
-        1,
-        0,
-        "2026-03-20T08:30",
-        &visit
-    );
+    {
+        VisitRecordParams params = {0};
+        params.registration_id = "REG0001";
+        params.chief_complaint = "Pain";
+        params.diagnosis = "Appendicitis";
+        params.advice = "Admit";
+        params.need_exam = 1;
+        params.need_admission = 1;
+        params.need_medicine = 0;
+        params.visit_time = "2026-03-20T08:30";
+        result = MedicalRecordService_create_visit_record(
+            &context.service,
+            &params,
+            &visit
+        );
+    }
     assert(result.success == 1);
 
     result = MedicalRecordService_create_examination_record(
@@ -643,18 +663,22 @@ static void test_time_range_query_filters_occurrence_time(void) {
     seed_admission(&context, "ADM0002", "PAT0002", "BED0002", "2026-03-26T08:00");
 
     /* 就诊时间为 3/21，检查时间为 3/22（均在查询范围内） */
-    result = MedicalRecordService_create_visit_record(
-        &context.service,
-        "REG0001",
-        "Nausea",
-        "Gastritis",
-        "Diet",
-        1,
-        0,
-        1,
-        "2026-03-21T09:00",
-        &visit
-    );
+    {
+        VisitRecordParams params = {0};
+        params.registration_id = "REG0001";
+        params.chief_complaint = "Nausea";
+        params.diagnosis = "Gastritis";
+        params.advice = "Diet";
+        params.need_exam = 1;
+        params.need_admission = 0;
+        params.need_medicine = 1;
+        params.visit_time = "2026-03-21T09:00";
+        result = MedicalRecordService_create_visit_record(
+            &context.service,
+            &params,
+            &visit
+        );
+    }
     assert(result.success == 1);
 
     result = MedicalRecordService_create_examination_record(

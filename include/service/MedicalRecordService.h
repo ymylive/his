@@ -21,6 +21,22 @@
 #include "repository/VisitRecordRepository.h"
 
 /**
+ * @brief 就诊记录参数结构体
+ *
+ * 用于创建和更新就诊记录时传递参数，避免函数参数过多。
+ */
+typedef struct VisitRecordParams {
+    const char *registration_id;   /* 关联的挂号ID（创建时使用） */
+    const char *chief_complaint;   /* 主诉（可为空） */
+    const char *diagnosis;         /* 诊断（可为空） */
+    const char *advice;            /* 医嘱建议（可为空） */
+    int need_exam;                 /* 是否需要检查（0或1） */
+    int need_admission;            /* 是否需要住院（0或1） */
+    int need_medicine;             /* 是否需要开药（0或1） */
+    const char *visit_time;        /* 就诊时间字符串 */
+} VisitRecordParams;
+
+/**
  * @brief 病历历史记录结构体
  *
  * 聚合了一个患者或某个时间范围内的所有医疗记录，
@@ -71,28 +87,14 @@ Result MedicalRecordService_init(
  * 根据挂号ID创建就诊记录，自动生成就诊ID，同时将挂号状态标记为已诊。
  * 每个挂号只能创建一条就诊记录。
  *
- * @param service          指向病历服务结构体
- * @param registration_id  关联的挂号ID
- * @param chief_complaint  主诉（可为空）
- * @param diagnosis        诊断（可为空）
- * @param advice           医嘱建议（可为空）
- * @param need_exam        是否需要检查（0或1）
- * @param need_admission   是否需要住院（0或1）
- * @param need_medicine    是否需要开药（0或1）
- * @param visit_time       就诊时间字符串
- * @param out_record       输出参数，创建成功时存放就诊记录
- * @return Result          操作结果，success=1 表示创建成功
+ * @param service     指向病历服务结构体
+ * @param params      就诊记录参数（registration_id 为关联的挂号ID）
+ * @param out_record  输出参数，创建成功时存放就诊记录
+ * @return Result     操作结果，success=1 表示创建成功
  */
 Result MedicalRecordService_create_visit_record(
     MedicalRecordService *service,
-    const char *registration_id,
-    const char *chief_complaint,
-    const char *diagnosis,
-    const char *advice,
-    int need_exam,
-    int need_admission,
-    int need_medicine,
-    const char *visit_time,
+    const VisitRecordParams *params,
     VisitRecord *out_record
 );
 
@@ -100,29 +102,18 @@ Result MedicalRecordService_create_visit_record(
  * @brief 更新就诊记录
  *
  * 根据就诊ID查找并更新就诊记录的各项内容。
+ * 注意：params->registration_id 在更新时用作 visit_id（待更新的就诊ID）。
  *
- * @param service          指向病历服务结构体
- * @param visit_id         待更新的就诊ID
- * @param chief_complaint  主诉（可为空）
- * @param diagnosis        诊断（可为空）
- * @param advice           医嘱建议（可为空）
- * @param need_exam        是否需要检查（0或1）
- * @param need_admission   是否需要住院（0或1）
- * @param need_medicine    是否需要开药（0或1）
- * @param visit_time       就诊时间字符串
- * @param out_record       输出参数，更新成功时存放就诊记录
- * @return Result          操作结果，success=1 表示更新成功
+ * @param service     指向病历服务结构体
+ * @param visit_id    待更新的就诊ID
+ * @param params      就诊记录参数（registration_id 字段在更新时不使用）
+ * @param out_record  输出参数，更新成功时存放就诊记录
+ * @return Result     操作结果，success=1 表示更新成功
  */
 Result MedicalRecordService_update_visit_record(
     MedicalRecordService *service,
     const char *visit_id,
-    const char *chief_complaint,
-    const char *diagnosis,
-    const char *advice,
-    int need_exam,
-    int need_admission,
-    int need_medicine,
-    const char *visit_time,
+    const VisitRecordParams *params,
     VisitRecord *out_record
 );
 

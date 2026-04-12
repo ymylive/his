@@ -186,7 +186,8 @@ static Result VisitRecordRepository_parse_line(const char *line, VisitRecord *ou
     if (line == 0 || out_record == 0) return Result_make_failure("visit parse arguments invalid");
     if (strlen(line) >= sizeof(buffer)) return Result_make_failure("visit line too long");
 
-    strcpy(buffer, line);
+    strncpy(buffer, line, sizeof(buffer) - 1);
+    buffer[sizeof(buffer) - 1] = '\0';
     result = RepositoryUtils_split_pipe_line(buffer, fields, VISIT_RECORD_REPOSITORY_FIELD_COUNT, &field_count);
     if (!result.success) return result;
 

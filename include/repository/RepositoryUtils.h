@@ -24,6 +24,17 @@
 #define REPOSITORY_UTILS_MAX_FIELDS 32
 
 /**
+ * @brief 判断文本是否为非空字符串
+ *
+ * 检查指针非空且首字符不为 '\0'，用于替代各仓储文件中
+ * 重复实现的 _has_text() 内部函数。
+ *
+ * @param text 待检查的字符串指针
+ * @return 1 表示有内容，0 表示为空指针或空串
+ */
+int RepositoryUtils_has_text(const char *text);
+
+/**
  * @brief 剥离字符串末尾的换行符（\n 和 \r）
  * @param line 待处理的字符串（原地修改）
  */

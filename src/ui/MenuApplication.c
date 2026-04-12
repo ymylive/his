@@ -1116,22 +1116,26 @@ Result MenuApplication_create_visit_record_handoff(
     MenuApplicationVisitHandoff *out_handoff
 ) {
     VisitRecord record;
+    VisitRecordParams params;
     Result result;
 
     if (application == 0 || out_handoff == 0) {
         return Result_make_failure("visit handoff arguments missing");
     }
 
+    memset(&params, 0, sizeof(params));
+    params.registration_id = registration_id;
+    params.chief_complaint = chief_complaint;
+    params.diagnosis = diagnosis;
+    params.advice = advice;
+    params.need_exam = need_exam;
+    params.need_admission = need_admission;
+    params.need_medicine = need_medicine;
+    params.visit_time = visit_time;
+
     result = MedicalRecordService_create_visit_record(
         &application->medical_record_service,
-        registration_id,
-        chief_complaint,
-        diagnosis,
-        advice,
-        need_exam,
-        need_admission,
-        need_medicine,
-        visit_time,
+        &params,
         &record
     );
     if (result.success == 0) {

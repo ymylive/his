@@ -164,7 +164,8 @@ static Result PatientRepository_parse_line(const char *line, Patient *out_patien
     }
 
     /* 复制到可修改缓冲区（split 会原地修改） */
-    strcpy(buffer, line);
+    strncpy(buffer, line, sizeof(buffer) - 1);
+    buffer[sizeof(buffer) - 1] = '\0';
     result = RepositoryUtils_split_pipe_line(
         buffer,
         fields,
@@ -510,44 +511,61 @@ static Result PatientRepository_load_line_handler(const char *line, void *contex
  * @param patients 待校验的患者链表
  * @return 合法返回 success；不合法返回 failure
  */
+static int PatientRepository_compare_ids(const void *a, const void *b) {
+    return strcmp(*(const char *const *)a, *(const char *const *)b);
+}
+
 static Result PatientRepository_validate_patient_list(const LinkedList *patients) {
-    const LinkedListNode *outer = 0;
+    const LinkedListNode *current = 0;
+    const char **id_array = 0;
+    size_t count = 0;
+    size_t index = 0;
 
     if (patients == 0) {
         return Result_make_failure("patient list missing");
     }
 
-    /*
-     * 双层循环：外层校验数据合法性，内层检查ID唯一性。
-     * 时间复杂度 O(n²)。对于医院信息系统的患者规模（通常 < 几千条），
-     * 这种简单实现足够高效。如果患者数量超过 PATIENT_LIST_N2_THRESHOLD，
-     * 应考虑改用排序+相邻比较（O(n log n)）或哈希集合（O(n)）。
-     */
-#define PATIENT_LIST_N2_THRESHOLD 5000
-    outer = patients->head;
-    while (outer != 0) {
-        const LinkedListNode *inner = outer->next;
-        const Patient *patient = (const Patient *)outer->data;
+    current = patients->head;
+    while (current != 0) {
+        const Patient *patient = (const Patient *)current->data;
         Result result = PatientRepository_validate_patient(patient);
 
         if (result.success == 0) {
             return result;
         }
 
-        /* 与后续节点比较，检查ID重复 */
-        while (inner != 0) {
-            const Patient *other_patient = (const Patient *)inner->data;
-
-            if (strcmp(patient->patient_id, other_patient->patient_id) == 0) {
-                return Result_make_failure("duplicate patient id in list");
-            }
-
-            inner = inner->next;
-        }
-
-        outer = outer->next;
+        count++;
+        current = current->next;
     }
 
+    if (count < 2) {
+        return Result_make_success("patient list valid");
+    }
+
+    id_array = (const char **)malloc(count * sizeof(const char *));
+    if (id_array == 0) {
+        return Result_make_failure("failed to allocate id array for validation");
+    }
+
+    current = patients->head;
+    index = 0;
+    while (current != 0) {
+        const Patient *patient = (const Patient *)current->data;
+        id_array[index] = patient->patient_id;
+        index++;
+        current = current->next;
+    }
+
+    qsort(id_array, count, sizeof(const char *), PatientRepository_compare_ids);
+
+    for (index = 1; index < count; index++) {
+        if (strcmp(id_array[index - 1], id_array[index]) == 0) {
+            free(id_array);
+            return Result_make_failure("duplicate patient id in list");
+        }
+    }
+
+    free(id_array);
     return Result_make_success("patient list valid");
 }
 

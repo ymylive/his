@@ -327,7 +327,8 @@ static Result RegistrationRepository_parse_line(const char *line, Registration *
         return Result_make_failure("registration line too long");
     }
 
-    strcpy(buffer, line);
+    strncpy(buffer, line, sizeof(buffer) - 1);
+    buffer[sizeof(buffer) - 1] = '\0';
     result = RepositoryUtils_split_pipe_line(
         buffer, fields, REGISTRATION_REPOSITORY_FIELD_COUNT, &field_count
     );

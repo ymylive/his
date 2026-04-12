@@ -822,28 +822,14 @@ static Result MedicalRecordService_build_visit_record(
  * 检查挂号未取消且无重复就诊 -> 生成就诊ID -> 构建就诊记录 ->
  * 追加到链表 -> 将挂号标记为已诊 -> 保存就诊和挂号数据。
  *
- * @param service          指向病历服务结构体
- * @param registration_id  关联的挂号ID
- * @param chief_complaint  主诉
- * @param diagnosis        诊断
- * @param advice           医嘱建议
- * @param need_exam        是否需要检查
- * @param need_admission   是否需要住院
- * @param need_medicine    是否需要开药
- * @param visit_time       就诊时间
- * @param out_record       输出参数，创建成功时存放就诊记录
- * @return Result          操作结果
+ * @param service     指向病历服务结构体
+ * @param params      就诊记录参数
+ * @param out_record  输出参数，创建成功时存放就诊记录
+ * @return Result     操作结果
  */
 Result MedicalRecordService_create_visit_record(
     MedicalRecordService *service,
-    const char *registration_id,
-    const char *chief_complaint,
-    const char *diagnosis,
-    const char *advice,
-    int need_exam,
-    int need_admission,
-    int need_medicine,
-    const char *visit_time,
+    const VisitRecordParams *params,
     VisitRecord *out_record
 ) {
     LinkedList registrations;
@@ -856,11 +842,11 @@ Result MedicalRecordService_create_visit_record(
     int next_sequence = 0;
     Result result;
 
-    if (service == 0 || out_record == 0) {
+    if (service == 0 || params == 0 || out_record == 0) {
         return Result_make_failure("visit create arguments invalid");
     }
 
-    result = MedicalRecordService_validate_text(registration_id, "registration id", 0);
+    result = MedicalRecordService_validate_text(params->registration_id, "registration id", 0);
     if (result.success == 0) {
         return result;
     }
@@ -878,7 +864,7 @@ Result MedicalRecordService_create_visit_record(
     }
 
     /* 查找关联的挂号记录 */
-    registration = MedicalRecordService_find_registration(&registrations, registration_id);
+    registration = MedicalRecordService_find_registration(&registrations, params->registration_id);
     if (registration == 0) {
         VisitRecordRepository_clear_list(&visits);
         RegistrationRepository_clear_list(&registrations);
@@ -893,7 +879,7 @@ Result MedicalRecordService_create_visit_record(
     }
 
     /* 检查该挂号是否已有就诊记录（每个挂号只能有一条） */
-    existing = MedicalRecordService_find_visit_by_registration(&visits, registration_id);
+    existing = MedicalRecordService_find_visit_by_registration(&visits, params->registration_id);
     if (existing != 0) {
         VisitRecordRepository_clear_list(&visits);
         RegistrationRepository_clear_list(&registrations);
@@ -925,13 +911,13 @@ Result MedicalRecordService_create_visit_record(
         &new_record,
         generated_visit_id,
         registration,
-        chief_complaint,
-        diagnosis,
-        advice,
-        need_exam,
-        need_admission,
-        need_medicine,
-        visit_time
+        params->chief_complaint,
+        params->diagnosis,
+        params->advice,
+        params->need_exam,
+        params->need_admission,
+        params->need_medicine,
+        params->visit_time
     );
     if (result.success == 0) {
         VisitRecordRepository_clear_list(&visits);
@@ -957,7 +943,7 @@ Result MedicalRecordService_create_visit_record(
 
     /* 将挂号状态从待诊标记为已诊 */
     if (registration->status == REG_STATUS_PENDING &&
-        !Registration_mark_diagnosed(registration, visit_time)) {
+        !Registration_mark_diagnosed(registration, params->visit_time)) {
         VisitRecordRepository_clear_list(&visits);
         RegistrationRepository_clear_list(&registrations);
         return Result_make_failure("failed to mark registration diagnosed");
@@ -990,28 +976,16 @@ Result MedicalRecordService_create_visit_record(
  * 流程：校验参数 -> 加载挂号和就诊记录 -> 查找目标就诊记录 ->
  * 查找关联挂号记录 -> 构建更新后的记录 -> 覆盖旧记录 -> 保存。
  *
- * @param service          指向病历服务结构体
- * @param visit_id         待更新的就诊ID
- * @param chief_complaint  主诉
- * @param diagnosis        诊断
- * @param advice           医嘱建议
- * @param need_exam        是否需要检查
- * @param need_admission   是否需要住院
- * @param need_medicine    是否需要开药
- * @param visit_time       就诊时间
- * @param out_record       输出参数，更新成功时存放就诊记录
- * @return Result          操作结果
+ * @param service     指向病历服务结构体
+ * @param visit_id    待更新的就诊ID
+ * @param params      就诊记录参数
+ * @param out_record  输出参数，更新成功时存放就诊记录
+ * @return Result     操作结果
  */
 Result MedicalRecordService_update_visit_record(
     MedicalRecordService *service,
     const char *visit_id,
-    const char *chief_complaint,
-    const char *diagnosis,
-    const char *advice,
-    int need_exam,
-    int need_admission,
-    int need_medicine,
-    const char *visit_time,
+    const VisitRecordParams *params,
     VisitRecord *out_record
 ) {
     LinkedList registrations;
@@ -1021,7 +995,7 @@ Result MedicalRecordService_update_visit_record(
     VisitRecord updated_record;
     Result result;
 
-    if (service == 0 || out_record == 0) {
+    if (service == 0 || params == 0 || out_record == 0) {
         return Result_make_failure("visit update arguments invalid");
     }
 
@@ -1063,13 +1037,13 @@ Result MedicalRecordService_update_visit_record(
         &updated_record,
         visit_id,
         registration,
-        chief_complaint,
-        diagnosis,
-        advice,
-        need_exam,
-        need_admission,
-        need_medicine,
-        visit_time
+        params->chief_complaint,
+        params->diagnosis,
+        params->advice,
+        params->need_exam,
+        params->need_admission,
+        params->need_medicine,
+        params->visit_time
     );
     if (result.success == 0) {
         VisitRecordRepository_clear_list(&visits);

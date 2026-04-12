@@ -123,7 +123,8 @@ static Result UserRepository_parse_line(const char *line, User *out_user) {
     }
 
     /* 复制到可修改缓冲区 */
-    strcpy(buffer, line);
+    strncpy(buffer, line, sizeof(buffer) - 1);
+    buffer[sizeof(buffer) - 1] = '\0';
     result = RepositoryUtils_split_pipe_line(
         buffer, fields, USER_REPOSITORY_FIELD_COUNT, &field_count
     );
@@ -145,8 +146,10 @@ static Result UserRepository_parse_line(const char *line, User *out_user) {
     }
 
     /* 复制 user_id 和 password_hash */
-    strcpy(out_user->user_id, fields[0]);
-    strcpy(out_user->password_hash, fields[1]);
+    strncpy(out_user->user_id, fields[0], sizeof(out_user->user_id) - 1);
+    out_user->user_id[sizeof(out_user->user_id) - 1] = '\0';
+    strncpy(out_user->password_hash, fields[1], sizeof(out_user->password_hash) - 1);
+    out_user->password_hash[sizeof(out_user->password_hash) - 1] = '\0';
 
     /* 解析角色字段 */
     result = UserRepository_parse_int(fields[2], &parsed_role);

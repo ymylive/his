@@ -12,6 +12,15 @@
 #include <stdio.h>
 
 /**
+ * @brief 判断文本是否为非空字符串
+ * @param text 待检查的字符串指针
+ * @return 1 表示有内容，0 表示为空指针或空串
+ */
+int RepositoryUtils_has_text(const char *text) {
+    return text != 0 && text[0] != '\0';
+}
+
+/**
  * @brief 剥离字符串末尾的换行符（\n 和 \r）
  * @param line 待处理的字符串（原地修改）
  */

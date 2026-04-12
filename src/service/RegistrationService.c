@@ -108,7 +108,8 @@ static Result RegistrationService_parse_registration_line(
     }
 
     /* 复制到缓冲区后进行分割（分割会修改字符串内容） */
-    strcpy(buffer, line);
+    strncpy(buffer, line, sizeof(buffer) - 1);
+    buffer[sizeof(buffer) - 1] = '\0';
     result = RepositoryUtils_split_pipe_line(
         buffer,
         fields,

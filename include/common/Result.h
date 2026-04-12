@@ -12,6 +12,12 @@
 /** 结果消息缓冲区的最大容量（字节数，含末尾 '\0'） */
 #define RESULT_MESSAGE_CAPACITY 128
 
+/** 便捷宏：判断 Result 是否为失败状态 */
+#define RESULT_FAILED(r)   ((r).success == 0)
+
+/** 便捷宏：判断 Result 是否为成功状态 */
+#define RESULT_OK(r)       ((r).success != 0)
+
 /**
  * @brief 操作结果结构体
  *

@@ -233,6 +233,30 @@ target_link_libraries(test_tui_style PRIVATE his_common)
 
 add_test(NAME test_tui_style COMMAND test_tui_style)
 
+add_executable(test_text_file_repository
+    tests/test_text_file_repository.c
+)
+
+target_link_libraries(test_text_file_repository PRIVATE his_common)
+
+add_test(NAME test_text_file_repository COMMAND test_text_file_repository)
+
+add_executable(test_ward
+    tests/test_ward.c
+)
+
+target_link_libraries(test_ward PRIVATE his_common)
+
+add_test(NAME test_ward COMMAND test_ward)
+
+add_executable(test_admission
+    tests/test_admission.c
+)
+
+target_link_libraries(test_admission PRIVATE his_common)
+
+add_test(NAME test_admission COMMAND test_admission)
+
 set(HIS_TEST_TARGETS
     test_result
     test_common
@@ -254,6 +278,9 @@ set(HIS_TEST_TARGETS
     test_demo_data_integrity
     test_auth_service
     test_tui_style
+    test_text_file_repository
+    test_ward
+    test_admission
 )
 
 foreach(test_target IN LISTS HIS_TEST_TARGETS)

@@ -337,7 +337,7 @@ static Result DoctorRepository_collect_line(const char *line, void *context) {
  * @brief 按ID查找医生的行处理回调
  * @param line    当前行文本
  * @param context 查找上下文
- * @return 始终返回 success（遍历所有行）
+ * @return 未匹配返回 success（继续）；匹配返回 failure（终止遍历）
  */
 static Result DoctorRepository_find_line(const char *line, void *context) {
     DoctorRepositoryFindContext *find_context = (DoctorRepositoryFindContext *)context;
@@ -354,13 +354,13 @@ static Result DoctorRepository_find_line(const char *line, void *context) {
         return result;
     }
 
-    /* ID匹配时复制数据并标记 */
-    if (strcmp(doctor.doctor_id, find_context->doctor_id) == 0) {
-        *(find_context->out_doctor) = doctor;
-        find_context->found = 1;
+    if (strcmp(doctor.doctor_id, find_context->doctor_id) != 0) {
+        return Result_make_success("doctor id mismatch");
     }
 
-    return Result_make_success("doctor inspected");
+    *(find_context->out_doctor) = doctor;
+    find_context->found = 1;
+    return Result_make_failure("doctor found");
 }
 
 /**
@@ -535,15 +535,16 @@ Result DoctorRepository_find_by_doctor_id(
         DoctorRepository_find_line,
         &context
     );
+
+    if (context.found != 0) {
+        return Result_make_success("doctor found");
+    }
+
     if (result.success == 0) {
         return result;
     }
 
-    if (context.found == 0) {
-        return Result_make_failure("doctor not found");
-    }
-
-    return Result_make_success("doctor found");
+    return Result_make_failure("doctor not found");
 }
 
 /**

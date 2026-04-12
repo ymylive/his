@@ -13,7 +13,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <time.h>
 
 #ifdef _WIN32
 #include <windows.h>
@@ -94,15 +93,17 @@ static Result AuthService_validate_text(const char *text, const char *field_name
 /**
  * @brief 生成16字节（32个十六进制字符）的随机盐值
  *
- * 使用当前时间和CPU时钟作为随机种子，生成伪随机盐值字符串。
+ * 使用操作系统提供的密码学安全随机数生成器（CSPRNG）生成盐值。
+ * 如果系统不支持安全随机源，则返回错误，不会回退到不安全的 srand/rand。
  *
  * @param salt_hex  输出缓冲区，至少33字节（32字符 + '\0'）
  * @param capacity  缓冲区容量（未使用，仅作安全标记）
+ * @return Result   操作结果，CSPRNG 不可用时返回 failure
  */
-static void AuthService_generate_salt(char *salt_hex, size_t capacity) {
+static Result AuthService_generate_salt(char *salt_hex, size_t capacity) {
     unsigned char raw_bytes[16];
     int i = 0;
-    int use_fallback = 0;
+    int csprng_ok = 0;
 
     (void)capacity;  /* 显式忽略未使用的参数 */
     memset(raw_bytes, 0, sizeof(raw_bytes));
@@ -116,13 +117,9 @@ static void AuthService_generate_salt(char *salt_hex, size_t capacity) {
         if (bcrypt_lib) {
             BCryptGenRandomFunc gen_random = (BCryptGenRandomFunc)GetProcAddress(bcrypt_lib, "BCryptGenRandom");
             if (gen_random && gen_random(NULL, raw_bytes, sizeof(raw_bytes), 0x00000002) == 0) {
-                use_fallback = 0;
-            } else {
-                use_fallback = 1;
+                csprng_ok = 1;
             }
             FreeLibrary(bcrypt_lib);
-        } else {
-            use_fallback = 1;
         }
     }
 #else
@@ -133,30 +130,22 @@ static void AuthService_generate_salt(char *salt_hex, size_t capacity) {
             size_t read_count = fread(raw_bytes, 1, sizeof(raw_bytes), urand);
             fclose(urand);
             if (read_count == sizeof(raw_bytes)) {
-                use_fallback = 0;
-            } else {
-                use_fallback = 1;
+                csprng_ok = 1;
             }
-        } else {
-            use_fallback = 1;
         }
     }
 #endif
 
-    if (use_fallback) {
-        /* 回退方案：使用 srand/rand（不安全，仅在 CSPRNG 不可用时使用） */
-        /* WARNING: 此回退方案生成的盐值可预测，仅应在系统不支持安全随机源时使用 */
-        unsigned int seed = (unsigned int)(time(NULL) ^ clock());
-        srand(seed);
-        for (i = 0; i < 16; i++) {
-            raw_bytes[i] = (unsigned char)(rand() % 256);
-        }
+    if (!csprng_ok) {
+        return Result_make_failure("no secure random source available");
     }
 
     /* 将原始字节转换为十六进制字符串 */
     for (i = 0; i < 16; i++) {
         snprintf(salt_hex + i * 2, 3, "%02x", raw_bytes[i]);
     }
+
+    return Result_make_success("salt generated");
 }
 
 /**
@@ -481,7 +470,10 @@ Result AuthService_register_user(
 
     /* 生成随机盐值并计算加盐密码哈希 */
     memset(salt_hex, 0, sizeof(salt_hex));
-    AuthService_generate_salt(salt_hex, sizeof(salt_hex));
+    result = AuthService_generate_salt(salt_hex, sizeof(salt_hex));
+    if (result.success == 0) {
+        return result;
+    }
 
     result = AuthService_hash_password(password, salt_hex, user.password_hash, sizeof(user.password_hash));
     if (result.success == 0) {

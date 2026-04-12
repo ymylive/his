@@ -25,7 +25,9 @@
 #include <direct.h>
 #define HIS_MKDIR(path) _mkdir(path)
 #else
+#include <fcntl.h>
 #include <sys/types.h>
+#include <unistd.h>
 #define HIS_MKDIR(path) mkdir(path, 0750) /* Unix/macOS：权限 rwxr-x--- */
 #endif
 
@@ -115,7 +117,8 @@ static Result TextFileRepository_create_parent_directories(const char *path) {
     }
 
     /* 复制路径到可修改缓冲区 */
-    strcpy(buffer, path);
+    strncpy(buffer, path, sizeof(buffer) - 1);
+    buffer[sizeof(buffer) - 1] = '\0';
     for (index = 0; index < length; index++) {
         if (!TextFileRepository_is_separator(buffer[index])) {
             continue; /* 跳过非分隔符字符 */
@@ -256,7 +259,8 @@ Result TextFileRepository_init(TextFileRepository *repository, const char *path)
     }
 
     /* 保存路径并标记为未初始化（文件未确认存在） */
-    strcpy(repository->path, path);
+    strncpy(repository->path, path, sizeof(repository->path) - 1);
+    repository->path[sizeof(repository->path) - 1] = '\0';
     repository->initialized = 0;
     return Result_make_success("repository ready");
 }
@@ -290,7 +294,21 @@ Result TextFileRepository_ensure_file_exists(const TextFileRepository *repositor
     }
 
     /* 以追加模式打开文件（不存在时自动创建） */
+#if defined(_WIN32)
     file = fopen(repository->path, "a");
+#else
+    {
+        int fd = open(repository->path, O_WRONLY | O_CREAT | O_APPEND, 0600);
+        if (fd < 0) {
+            return Result_make_failure("failed to open repository file");
+        }
+        file = fdopen(fd, "a");
+        if (file == 0) {
+            close(fd);
+            return Result_make_failure("failed to open repository file");
+        }
+    }
+#endif
     if (file == 0) {
         return Result_make_failure("failed to open repository file");
     }
@@ -356,7 +374,21 @@ Result TextFileRepository_append_line(
     }
 
     /* 以追加模式打开文件 */
+#if defined(_WIN32)
     file = fopen(repository->path, "a");
+#else
+    {
+        int fd = open(repository->path, O_WRONLY | O_CREAT | O_APPEND, 0600);
+        if (fd < 0) {
+            return Result_make_failure("failed to append repository file");
+        }
+        file = fdopen(fd, "a");
+        if (file == 0) {
+            close(fd);
+            return Result_make_failure("failed to append repository file");
+        }
+    }
+#endif
     if (file == 0) {
         return Result_make_failure("failed to append repository file");
     }
@@ -413,7 +445,21 @@ Result TextFileRepository_save_file(
     }
 
     /* 写入临时文件 */
+#if defined(_WIN32)
     file = fopen(tmp_path, "w");
+#else
+    {
+        int fd = open(tmp_path, O_WRONLY | O_CREAT | O_TRUNC, 0600);
+        if (fd < 0) {
+            return Result_make_failure("failed to open temp file");
+        }
+        file = fdopen(fd, "w");
+        if (file == 0) {
+            close(fd);
+            return Result_make_failure("failed to open temp file");
+        }
+    }
+#endif
     if (file == 0) {
         return Result_make_failure("failed to open temp file");
     }

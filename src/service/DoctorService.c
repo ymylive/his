@@ -168,8 +168,6 @@ Result DoctorService_init(
  * @return Result  操作结果
  */
 Result DoctorService_add(DoctorService *service, const Doctor *doctor) {
-    LinkedList doctors;
-    Doctor *existing = 0;
     Result result = DoctorService_validate(doctor);
 
     if (result.success == 0) {
@@ -189,16 +187,17 @@ Result DoctorService_add(DoctorService *service, const Doctor *doctor) {
         return result;
     }
 
-    /* 加载已有医生列表，检查ID是否重复 */
-    result = DoctorRepository_load_all(&service->doctor_repository, &doctors);
-    if (result.success == 0) {
-        return result;
-    }
-
-    existing = DoctorService_find_in_list(&doctors, doctor->doctor_id);
-    DoctorRepository_clear_list(&doctors);
-    if (existing != 0) {
-        return Result_make_failure("doctor already exists");
+    /* 使用仓库层按ID直接查找，避免加载全表 */
+    {
+        Doctor found;
+        result = DoctorRepository_find_by_doctor_id(
+            &service->doctor_repository,
+            doctor->doctor_id,
+            &found
+        );
+        if (result.success != 0) {
+            return Result_make_failure("doctor already exists");
+        }
     }
 
     /* ID唯一性校验通过，保存新医生记录 */

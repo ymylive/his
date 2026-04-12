@@ -195,7 +195,8 @@ static Result DispenseRecordRepository_parse_line(const char *line, DispenseReco
     if (line == 0 || out_record == 0) return Result_make_failure("dispense parse arguments invalid");
     if (strlen(line) >= sizeof(buffer)) return Result_make_failure("dispense line too long");
 
-    strcpy(buffer, line);
+    strncpy(buffer, line, sizeof(buffer) - 1);
+    buffer[sizeof(buffer) - 1] = '\0';
     result = RepositoryUtils_split_pipe_line(buffer, fields, DISPENSE_RECORD_REPOSITORY_FIELD_COUNT, &field_count);
     if (!result.success) return result;
     result = RepositoryUtils_validate_field_count(field_count, DISPENSE_RECORD_REPOSITORY_FIELD_COUNT);
