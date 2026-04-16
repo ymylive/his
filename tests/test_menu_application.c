@@ -175,10 +175,12 @@ static void seed_user_account(
     UserRole role
 ) {
     AuthService auth_service;
+    /* 对于患者角色，user_id 同时作为 patient_id 使用（测试兼容） */
+    const char *patient_id = (role == USER_ROLE_PATIENT) ? user_id : "";
     Result result = AuthService_init(&auth_service, context->user_path, context->patient_path);
 
     assert(result.success == 1);
-    result = AuthService_register_user(&auth_service, user_id, password, role);
+    result = AuthService_register_user(&auth_service, user_id, password, role, patient_id);
     assert(result.success == 1);
 }
 

@@ -624,7 +624,6 @@ Result DoctorRepository_save_all(
     const LinkedList *doctors
 ) {
     LinkedListNode *current = 0;
-    FILE *file = 0;
     Result result;
 
     if (repository == 0 || doctors == 0) {
@@ -635,47 +634,55 @@ Result DoctorRepository_save_all(
         return Result_make_failure("doctor list contains invalid item");
     }
 
-    result = TextFileRepository_ensure_file_exists(&repository->storage);
-    if (result.success == 0) {
+    {
+        char line[TEXT_FILE_REPOSITORY_LINE_CAPACITY];
+        char *content = 0;
+        size_t capacity = (doctors->count + 2) * TEXT_FILE_REPOSITORY_LINE_CAPACITY;
+        size_t used = 0;
+        size_t len = 0;
+
+        content = (char *)malloc(capacity);
+        if (content == 0) {
+            return Result_make_failure("failed to allocate doctor content buffer");
+        }
+
+        len = strlen(DOCTOR_REPOSITORY_HEADER);
+        memcpy(content + used, DOCTOR_REPOSITORY_HEADER, len);
+        used += len;
+        content[used++] = '\n';
+
+        current = doctors->head;
+        while (current != 0) {
+            result = DoctorRepository_format_line(
+                (const Doctor *)current->data,
+                line,
+                sizeof(line)
+            );
+            if (result.success == 0) {
+                free(content);
+                return result;
+            }
+
+            len = strlen(line);
+            if (used + len + 2 > capacity) {
+                capacity *= 2;
+                content = (char *)realloc(content, capacity);
+                if (content == 0) {
+                    return Result_make_failure("failed to grow doctor content buffer");
+                }
+            }
+            memcpy(content + used, line, len);
+            used += len;
+            content[used++] = '\n';
+
+            current = current->next;
+        }
+
+        content[used] = '\0';
+        result = TextFileRepository_save_file(&repository->storage, content);
+        free(content);
         return result;
     }
-
-    /* 以写模式打开（覆盖） */
-    file = fopen(repository->storage.path, "w");
-    if (file == 0) {
-        return Result_make_failure("failed to rewrite doctor repository");
-    }
-
-    /* 写入表头 */
-    if (fprintf(file, "%s\n", DOCTOR_REPOSITORY_HEADER) < 0) {
-        fclose(file);
-        return Result_make_failure("failed to write doctor header");
-    }
-
-    /* 逐个写入医生记录 */
-    current = doctors->head;
-    while (current != 0) {
-        char line[TEXT_FILE_REPOSITORY_LINE_CAPACITY];
-        result = DoctorRepository_format_line(
-            (const Doctor *)current->data,
-            line,
-            sizeof(line)
-        );
-        if (result.success == 0) {
-            fclose(file);
-            return result;
-        }
-
-        if (fprintf(file, "%s\n", line) < 0) {
-            fclose(file);
-            return Result_make_failure("failed to write doctor line");
-        }
-
-        current = current->next;
-    }
-
-    fclose(file);
-    return Result_make_success("doctors saved");
 }
 
 /**

@@ -31,6 +31,7 @@
 
 #include "common/InputHelper.h"
 #include "common/UpdateChecker.h"
+#include "service/AuthService.h"
 #include "ui/DemoData.h"
 #include "ui/MenuActionHandlers.h"
 #include "ui/MenuApplication.h"
@@ -133,6 +134,7 @@ static int handle_patient_registration(MenuApplication *application,
                                        FILE *input_stream,
                                        FILE *output_stream) {
     Patient new_patient;
+    char reg_username[HIS_DOMAIN_ID_CAPACITY];
     char reg_password[HIS_INPUT_BUFFER_SIZE];
     char reg_confirm[HIS_INPUT_BUFFER_SIZE];
     char reg_output[2048];
@@ -155,6 +157,14 @@ static int handle_patient_registration(MenuApplication *application,
         }
         tui_animate_error(output_stream, result.message);
         tui_delay(800);
+        return 0;
+    }
+
+    /* 设置用户名 */
+    tui_print_prompt(output_stream, "设置登录用户名: ");
+    read_result = InputHelper_read_line(input_stream, reg_username, sizeof(reg_username));
+    if (read_result <= 0 || read_result == -2) {
+        if (read_result == 0) return -1;
         return 0;
     }
 
@@ -213,12 +223,13 @@ static int handle_patient_registration(MenuApplication *application,
         }
     }
 
-    /* 创建用户账号（用患者ID作为用户ID） */
+    /* 创建用户账号（用自定义用户名作为登录账号） */
     result = AuthService_register_user(
         &application->auth_service,
-        new_patient.patient_id,
+        reg_username,
         reg_password,
-        USER_ROLE_PATIENT);
+        USER_ROLE_PATIENT,
+        new_patient.patient_id);
     secure_zero(reg_password, sizeof(reg_password));
 
     if (result.success == 0) {
@@ -231,8 +242,9 @@ static int handle_patient_registration(MenuApplication *application,
     fprintf(output_stream, "\n");
     tui_animate_success(output_stream, "注册成功！");
     fprintf(output_stream, "\n");
-    tui_print_kv_colored(output_stream, "您的账号", new_patient.patient_id, TUI_BOLD_CYAN);
-    tui_print_info(output_stream, "请牢记您的账号和密码，使用此账号登录系统。");
+    tui_print_kv_colored(output_stream, "您的用户名", reg_username, TUI_BOLD_CYAN);
+    tui_print_kv_colored(output_stream, "您的患者编号", new_patient.patient_id, TUI_BOLD_CYAN);
+    tui_print_info(output_stream, "请牢记您的用户名和密码，使用用户名登录系统。");
     fprintf(output_stream, "\n");
     tui_print_info(output_stream, "按回车返回登录...");
     fflush(output_stream);
@@ -266,12 +278,13 @@ static int handle_login_flow(MenuApplication *application,
     char password[HIS_INPUT_BUFFER_SIZE];
     char prompt_buf[256];
     Result result;
+    int attempts = 0;
 
     for (;;) {
         int read_result = 0;
 
         snprintf(prompt_buf, sizeof(prompt_buf),
-            "请输入[%s]用户编号 (ESC返回): ",
+            "请输入[%s]用户名 (ESC返回): ",
             MenuController_role_label(role));
         tui_print_prompt(output_stream, prompt_buf);
         read_result = InputHelper_read_line(input_stream, input, sizeof(input));
@@ -308,6 +321,13 @@ static int handle_login_flow(MenuApplication *application,
 
         if (result.success == 0) {
             secure_zero(input, sizeof(input));
+            attempts++;
+            if (attempts >= 5) {
+                tui_animate_error(output_stream,
+                    "登录失败次数过多，请稍后再试");
+                tui_delay(3000);
+                return 0; /* back to role selection */
+            }
             tui_animate_error(output_stream, result.message);
             tui_delay(500);
             continue; /* retry from user-ID */
@@ -608,6 +628,114 @@ int main(void) {
         }
         if (login_result == 0) {
             continue; /* back to role selection */
+        }
+
+        /* 首次登录强制修改默认密码 */
+        if (application.authenticated_user.force_password_change == 1) {
+            char old_pw[HIS_INPUT_BUFFER_SIZE];
+            char new_pw[HIS_INPUT_BUFFER_SIZE];
+            char confirm_pw[HIS_INPUT_BUFFER_SIZE];
+            int pw_changed = 0;
+            int read_res = 0;
+
+            tui_print_warning(stdout,
+                "\xe9\xa6\x96\xe6\xac\xa1\xe7\x99\xbb\xe5\xbd\x95\xef\xbc\x8c"
+                "\xe8\xaf\xb7\xe4\xbf\xae\xe6\x94\xb9\xe9\xbb\x98\xe8\xae\xa4"
+                "\xe5\xaf\x86\xe7\xa0\x81" /* 首次登录，请修改默认密码 */);
+
+            while (pw_changed == 0) {
+                tui_print_prompt(stdout,
+                    "\xe8\xaf\xb7\xe8\xbe\x93\xe5\x85\xa5\xe5\xbd\x93\xe5\x89\x8d"
+                    "\xe5\xaf\x86\xe7\xa0\x81 (ESC\xe8\xbf\x94\xe5\x9b\x9e): "
+                    /* 请输入当前密码 (ESC返回):  */);
+                read_res = InputHelper_read_line(stdin, old_pw, sizeof(old_pw));
+                if (read_res == 0) {
+                    secure_zero(old_pw, sizeof(old_pw));
+                    tui_clear_screen();
+                    tui_animate_goodbye(stdout);
+                    tui_show_cursor(stdout);
+                    return 0;
+                }
+                if (read_res == -2) {
+                    break; /* ESC - cancel, will log out */
+                }
+
+                tui_print_prompt(stdout,
+                    "\xe8\xaf\xb7\xe8\xbe\x93\xe5\x85\xa5\xe6\x96\xb0\xe5\xaf\x86"
+                    "\xe7\xa0\x81: " /* 请输入新密码:  */);
+                read_res = InputHelper_read_line(stdin, new_pw, sizeof(new_pw));
+                if (read_res == 0) {
+                    secure_zero(old_pw, sizeof(old_pw));
+                    secure_zero(new_pw, sizeof(new_pw));
+                    tui_clear_screen();
+                    tui_animate_goodbye(stdout);
+                    tui_show_cursor(stdout);
+                    return 0;
+                }
+                if (read_res == -2) {
+                    secure_zero(old_pw, sizeof(old_pw));
+                    break;
+                }
+
+                tui_print_prompt(stdout,
+                    "\xe8\xaf\xb7\xe7\xa1\xae\xe8\xae\xa4\xe6\x96\xb0\xe5\xaf\x86"
+                    "\xe7\xa0\x81: " /* 请确认新密码:  */);
+                read_res = InputHelper_read_line(stdin, confirm_pw, sizeof(confirm_pw));
+                if (read_res == 0) {
+                    secure_zero(old_pw, sizeof(old_pw));
+                    secure_zero(new_pw, sizeof(new_pw));
+                    secure_zero(confirm_pw, sizeof(confirm_pw));
+                    tui_clear_screen();
+                    tui_animate_goodbye(stdout);
+                    tui_show_cursor(stdout);
+                    return 0;
+                }
+                if (read_res == -2) {
+                    secure_zero(old_pw, sizeof(old_pw));
+                    secure_zero(new_pw, sizeof(new_pw));
+                    break;
+                }
+
+                if (strcmp(new_pw, confirm_pw) != 0) {
+                    tui_animate_error(stdout,
+                        "\xe4\xb8\xa4\xe6\xac\xa1\xe8\xbe\x93\xe5\x85\xa5\xe7\x9a\x84"
+                        "\xe5\xaf\x86\xe7\xa0\x81\xe4\xb8\x8d\xe4\xb8\x80\xe8\x87\xb4"
+                        /* 两次输入的密码不一致 */);
+                    secure_zero(old_pw, sizeof(old_pw));
+                    secure_zero(new_pw, sizeof(new_pw));
+                    secure_zero(confirm_pw, sizeof(confirm_pw));
+                    tui_delay(500);
+                    continue;
+                }
+
+                {
+                    Result pw_result = AuthService_change_password(
+                        &application.auth_service, user_id, old_pw, new_pw);
+                    secure_zero(old_pw, sizeof(old_pw));
+                    secure_zero(new_pw, sizeof(new_pw));
+                    secure_zero(confirm_pw, sizeof(confirm_pw));
+
+                    if (pw_result.success == 0) {
+                        tui_animate_error(stdout, pw_result.message);
+                        tui_delay(500);
+                        continue;
+                    }
+
+                    application.authenticated_user.force_password_change = 0;
+                    pw_changed = 1;
+                    tui_animate_success(stdout,
+                        "\xe5\xaf\x86\xe7\xa0\x81\xe4\xbf\xae\xe6\x94\xb9\xe6\x88\x90"
+                        "\xe5\x8a\x9f" /* 密码修改成功 */);
+                    tui_delay(800);
+                }
+            }
+
+            if (pw_changed == 0) {
+                /* User cancelled - log out and return to role selection */
+                MenuApplication_logout(&application);
+                secure_zero(user_id, sizeof(user_id));
+                continue;
+            }
         }
 
         /* 登录成功：进入角色菜单循环 */

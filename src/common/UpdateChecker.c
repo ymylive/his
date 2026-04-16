@@ -368,13 +368,15 @@ int UpdateChecker_check(UpdateInfo *info) {
     /* 通过 popen 执行 curl 命令获取 GitHub API 响应 */
 #ifdef _WIN32
     pipe = popen(
-        "curl -s -m 5 -H \"Accept: application/vnd.github.v3+json\" "
+        "curl -s -m 5 --proto =https --tlsv1.2 "
+        "-H \"Accept: application/vnd.github.v3+json\" "
         "\"" GITHUB_API_URL "\" 2>NUL",
         "r"
     );
 #else
     pipe = popen(
-        "curl -s -m 5 -H \"Accept: application/vnd.github.v3+json\" "
+        "curl -s -m 5 --proto =https --tlsv1.2 "
+        "-H \"Accept: application/vnd.github.v3+json\" "
         "\"" GITHUB_API_URL "\" 2>/dev/null",
         "r"
     );
@@ -476,7 +478,7 @@ static int do_download_and_install(FILE *out, const UpdateInfo *info) {
 
     /* 第一步：使用 curl 下载 zip 安装包 */
     snprintf(cmd, sizeof(cmd),
-        "curl -L -s --progress-bar -o \"%s\" \"%s\"",
+        "curl -L -s -f --proto =https --tlsv1.2 --progress-bar -o \"%s\" \"%s\"",
         tmp_zip, info->asset_url);
     ret = system(cmd);
     if (ret != 0) {
@@ -484,6 +486,32 @@ static int do_download_and_install(FILE *out, const UpdateInfo *info) {
         return 0;
     }
     tui_print_success(out, "下载完成");
+
+    /* 验证下载文件的完整性 */
+    {
+        const char *tmp_env = getenv("TEMP");
+        char zip_path[512];
+        FILE *fcheck = NULL;
+        long fsize = 0;
+        if (tmp_env == NULL) tmp_env = ".";
+        snprintf(zip_path, sizeof(zip_path), "%s\\his_update.zip", tmp_env);
+        fcheck = fopen(zip_path, "rb");
+        if (fcheck == NULL) {
+            tui_print_error(out, "下载的文件不存在。");
+            return 0;
+        }
+        fseek(fcheck, 0, SEEK_END);
+        fsize = ftell(fcheck);
+        fclose(fcheck);
+        if (fsize <= 0) {
+            tui_print_error(out, "下载的文件为空，更新中止。");
+            return 0;
+        }
+        if (fsize < 1024) {
+            tui_print_error(out, "下载的文件过小，可能已损坏，更新中止。");
+            return 0;
+        }
+    }
 
     /* 第二步：使用 PowerShell 解压 zip 文件 */
     tui_print_info(out, "正在解压更新包...");
@@ -634,7 +662,7 @@ static int do_download_and_install(FILE *out, const UpdateInfo *info) {
 
     /* 第一步：使用 curl 下载 zip 安装包（-L 跟随重定向） */
     snprintf(cmd, sizeof(cmd),
-        "curl -L -s --progress-bar -o \"%s\" \"%s\" 2>&1",
+        "curl -L -s -f --proto =https --tlsv1.2 --progress-bar -o \"%s\" \"%s\" 2>&1",
         tmp_zip, info->asset_url);
     ret = system(cmd);
     if (ret != 0) {
@@ -642,6 +670,29 @@ static int do_download_and_install(FILE *out, const UpdateInfo *info) {
         return 0;
     }
     tui_print_success(out, "下载完成");
+
+    /* 验证下载文件的完整性 */
+    {
+        FILE *fcheck = fopen(tmp_zip, "rb");
+        long fsize = 0;
+        if (fcheck == NULL) {
+            tui_print_error(out, "下载的文件不存在。");
+            return 0;
+        }
+        fseek(fcheck, 0, SEEK_END);
+        fsize = ftell(fcheck);
+        fclose(fcheck);
+        if (fsize <= 0) {
+            tui_print_error(out, "下载的文件为空，更新中止。");
+            remove(tmp_zip);
+            return 0;
+        }
+        if (fsize < 1024) {
+            tui_print_error(out, "下载的文件过小，可能已损坏，更新中止。");
+            remove(tmp_zip);
+            return 0;
+        }
+    }
 
     /* 第二步：清理旧的临时目录并解压 zip 文件 */
     tui_print_info(out, "正在解压更新包...");

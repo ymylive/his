@@ -31,6 +31,16 @@
 #define AUTH_HASH_ITERATIONS 100000
 
 /**
+ * @brief 安全清零敏感缓冲区
+ *
+ * 使用 volatile 指针防止编译器优化掉清零操作。
+ */
+static void auth_secure_zero(void *ptr, size_t len) {
+    volatile char *p = (volatile char *)ptr;
+    while (len--) *p++ = 0;
+}
+
+/**
  * @brief 常量时间字符串比较，防止时序攻击
  *
  * 无论输入内容如何，始终比较完整的 len 字节，
@@ -421,7 +431,8 @@ Result AuthService_register_user(
     AuthService *service,
     const char *user_id,
     const char *password,
-    UserRole role
+    UserRole role,
+    const char *patient_id
 ) {
     User user;
     Patient patient;
@@ -432,7 +443,7 @@ Result AuthService_register_user(
         return Result_make_failure("auth service missing");
     }
 
-    /* 校验用户ID合法性 */
+    /* 校验用户名合法性 */
     result = AuthService_validate_text(user_id, "user id");
     if (result.success == 0) {
         return result;
@@ -449,14 +460,18 @@ Result AuthService_register_user(
         return Result_make_failure("user role invalid");
     }
 
-    /* 患者角色用户必须有对应的患者记录存在 */
+    /* 患者角色用户必须提供有效的患者编号 */
     if (role == USER_ROLE_PATIENT) {
         if (service->patient_repository_enabled == 0) {
             return Result_make_failure("patient repository not configured");
         }
 
-        /* 用户ID需与患者ID一致 */
-        result = PatientRepository_find_by_id(&service->patient_repository, user_id, &patient);
+        if (patient_id == 0 || patient_id[0] == '\0') {
+            return Result_make_failure("patient id required for patient role");
+        }
+
+        /* 验证患者记录存在 */
+        result = PatientRepository_find_by_id(&service->patient_repository, patient_id, &patient);
         if (result.success == 0) {
             return Result_make_failure("patient account requires existing patient id");
         }
@@ -467,6 +482,12 @@ Result AuthService_register_user(
     strncpy(user.user_id, user_id, sizeof(user.user_id) - 1);
     user.user_id[sizeof(user.user_id) - 1] = '\0';
     user.role = role;
+
+    /* 存储关联的患者编号 */
+    if (patient_id != 0 && patient_id[0] != '\0') {
+        strncpy(user.patient_id, patient_id, sizeof(user.patient_id) - 1);
+        user.patient_id[sizeof(user.patient_id) - 1] = '\0';
+    }
 
     /* 生成随机盐值并计算加盐密码哈希 */
     memset(salt_hex, 0, sizeof(salt_hex));
@@ -482,6 +503,107 @@ Result AuthService_register_user(
 
     /* 将用户记录追加到存储文件 */
     return UserRepository_append(&service->user_repository, &user);
+}
+
+/**
+ * @brief 用于更新用户密码哈希时重建文件内容的上下文
+ */
+typedef struct AuthUpdateContext {
+    const User *updated_user;  /**< 要更新的用户（已含新哈希） */
+    char *buffer;              /**< 输出缓冲区 */
+    size_t capacity;           /**< 缓冲区容量 */
+    size_t offset;             /**< 当前写入偏移 */
+    int updated;               /**< 是否已成功替换 */
+} AuthUpdateContext;
+
+/**
+ * @brief 重建文件行回调：替换匹配用户的记录
+ */
+static Result AuthService_update_line_handler(const char *line, void *context) {
+    AuthUpdateContext *ctx = (AuthUpdateContext *)context;
+    char user_id_buf[64];
+    const char *sep = 0;
+    size_t id_len = 0;
+    int written = 0;
+
+    /* 提取行中的 user_id（第一个 '|' 之前的部分） */
+    sep = strchr(line, '|');
+    if (sep == 0) {
+        /* 无法解析，原样保留 */
+        written = snprintf(ctx->buffer + ctx->offset,
+                           ctx->capacity - ctx->offset, "%s\n", line);
+        if (written > 0) ctx->offset += (size_t)written;
+        return Result_make_success("line kept");
+    }
+
+    id_len = (size_t)(sep - line);
+    if (id_len >= sizeof(user_id_buf)) {
+        id_len = sizeof(user_id_buf) - 1;
+    }
+    memcpy(user_id_buf, line, id_len);
+    user_id_buf[id_len] = '\0';
+
+    if (strcmp(user_id_buf, ctx->updated_user->user_id) == 0) {
+        /* 写入更新后的记录 */
+        written = snprintf(ctx->buffer + ctx->offset,
+                           ctx->capacity - ctx->offset,
+                           "%s|%s|%d|%s|%d\n",
+                           ctx->updated_user->user_id,
+                           ctx->updated_user->password_hash,
+                           (int)ctx->updated_user->role,
+                           ctx->updated_user->patient_id,
+                           ctx->updated_user->force_password_change);
+        if (written > 0) ctx->offset += (size_t)written;
+        ctx->updated = 1;
+    } else {
+        /* 原样保留 */
+        written = snprintf(ctx->buffer + ctx->offset,
+                           ctx->capacity - ctx->offset, "%s\n", line);
+        if (written > 0) ctx->offset += (size_t)written;
+    }
+
+    return Result_make_success("line processed");
+}
+
+/**
+ * @brief 更新用户的密码哈希（用于旧版哈希自动升级）
+ *
+ * 读取全部用户记录，替换匹配用户的行，然后覆盖写入文件。
+ * 失败时不影响调用方（静默忽略错误）。
+ *
+ * @param service       认证服务
+ * @param updated_user  已更新哈希的用户记录
+ */
+static void AuthService_update_user_hash(AuthService *service, const User *updated_user) {
+    /* 使用固定大小的缓冲区重建文件内容 */
+    char file_content[32768];
+    AuthUpdateContext ctx;
+    int written = 0;
+    Result result;
+
+    memset(file_content, 0, sizeof(file_content));
+
+    /* 先写入表头 */
+    written = snprintf(file_content, sizeof(file_content), "%s\n", USER_REPOSITORY_HEADER);
+    if (written <= 0) return;
+
+    ctx.updated_user = updated_user;
+    ctx.buffer = file_content;
+    ctx.capacity = sizeof(file_content);
+    ctx.offset = (size_t)written;
+    ctx.updated = 0;
+
+    result = TextFileRepository_for_each_data_line(
+        &service->user_repository.file_repository,
+        AuthService_update_line_handler,
+        &ctx
+    );
+
+    if (result.success == 0 || ctx.updated == 0) {
+        return; /* 遍历失败或未找到用户，放弃更新 */
+    }
+
+    TextFileRepository_save_file(&service->user_repository.file_repository, file_content);
 }
 
 /**
@@ -537,7 +659,7 @@ Result AuthService_authenticate(
     /* 从存储中查找用户 */
     memset(&loaded_user, 0, sizeof(loaded_user));
     find_result = UserRepository_find_by_user_id(&service->user_repository, user_id, &loaded_user);
-    memset(password_hash, 0, sizeof(password_hash));
+    auth_secure_zero(password_hash, sizeof(password_hash));
 
     if (find_result.success != 0) {
         /* 用户存在，根据存储的哈希格式选择对应的哈希算法 */
@@ -560,11 +682,17 @@ Result AuthService_authenticate(
         result = AuthService_hash_password(password, extracted_salt, password_hash, sizeof(password_hash));
     }
     if (result.success == 0) {
+        auth_secure_zero(password_hash, sizeof(password_hash));
+        auth_secure_zero(extracted_salt, sizeof(extracted_salt));
+        auth_secure_zero(&loaded_user, sizeof(loaded_user));
         return result;
     }
 
     /* 用户不存在或哈希格式无法识别，统一返回凭证无效 */
     if (find_result.success == 0 || user_hash_format_known == 0) {
+        auth_secure_zero(password_hash, sizeof(password_hash));
+        auth_secure_zero(extracted_salt, sizeof(extracted_salt));
+        auth_secure_zero(&loaded_user, sizeof(loaded_user));
         return Result_make_failure("invalid credentials");
     }
 
@@ -574,16 +702,110 @@ Result AuthService_authenticate(
         size_t computed_len = strlen(password_hash);
         if (stored_len != computed_len ||
             !constant_time_compare(loaded_user.password_hash, password_hash, stored_len)) {
+            auth_secure_zero(password_hash, sizeof(password_hash));
+            auth_secure_zero(extracted_salt, sizeof(extracted_salt));
+            auth_secure_zero(&loaded_user, sizeof(loaded_user));
             return Result_make_failure("invalid credentials");
         }
     }
 
+    /* 盐值不再需要，立即清零 */
+    auth_secure_zero(extracted_salt, sizeof(extracted_salt));
+
     /* 可选的角色匹配验证 */
     if (required_role != USER_ROLE_UNKNOWN && loaded_user.role != required_role) {
+        auth_secure_zero(password_hash, sizeof(password_hash));
+        auth_secure_zero(&loaded_user, sizeof(loaded_user));
         return Result_make_failure("user role mismatch");
     }
 
+    /* 旧版哈希自动升级：使用新的加盐格式重新哈希并更新存储 */
+    if (AuthService_is_legacy_password_hash(loaded_user.password_hash)) {
+        char new_salt[33];
+        char new_hash[HIS_USER_PASSWORD_HASH_CAPACITY];
+        Result salt_result = AuthService_generate_salt(new_salt, sizeof(new_salt));
+        if (salt_result.success != 0) {
+            Result hash_result = AuthService_hash_password(
+                password, new_salt, new_hash, sizeof(new_hash));
+            if (hash_result.success != 0) {
+                /* 更新用户记录中的密码哈希 */
+                strncpy(loaded_user.password_hash, new_hash,
+                        sizeof(loaded_user.password_hash) - 1);
+                loaded_user.password_hash[sizeof(loaded_user.password_hash) - 1] = '\0';
+                /* 尝试保存更新后的用户（失败不影响本次登录） */
+                AuthService_update_user_hash(service, &loaded_user);
+            }
+            auth_secure_zero(new_hash, sizeof(new_hash));
+        }
+        auth_secure_zero(new_salt, sizeof(new_salt));
+    }
+
+    /* 清零密码哈希缓冲区 */
+    auth_secure_zero(password_hash, sizeof(password_hash));
+
     /* 认证成功，输出用户信息 */
     *out_user = loaded_user;
+    auth_secure_zero(&loaded_user, sizeof(loaded_user));
     return Result_make_success("user authenticated");
+}
+
+/**
+ * @brief 修改用户密码
+ *
+ * 验证旧密码后，使用新密码重新生成加盐哈希并更新存储。
+ * 同时将 force_password_change 标志清零。
+ */
+Result AuthService_change_password(
+    AuthService *service,
+    const char *user_id,
+    const char *old_password,
+    const char *new_password
+) {
+    User user;
+    char salt_hex[33];
+    char new_hash[HIS_USER_PASSWORD_HASH_CAPACITY];
+    Result result;
+
+    if (service == 0) {
+        return Result_make_failure("auth service missing");
+    }
+
+    /* 用旧密码验证身份 */
+    result = AuthService_authenticate(service, user_id, old_password, USER_ROLE_UNKNOWN, &user);
+    if (result.success == 0) {
+        return Result_make_failure("old password incorrect");
+    }
+
+    /* 校验新密码合法性 */
+    result = AuthService_validate_text(new_password, "new password");
+    if (result.success == 0) {
+        return result;
+    }
+
+    /* 生成新盐值并计算新哈希 */
+    memset(salt_hex, 0, sizeof(salt_hex));
+    result = AuthService_generate_salt(salt_hex, sizeof(salt_hex));
+    if (result.success == 0) {
+        return result;
+    }
+
+    memset(new_hash, 0, sizeof(new_hash));
+    result = AuthService_hash_password(new_password, salt_hex, new_hash, sizeof(new_hash));
+    auth_secure_zero(salt_hex, sizeof(salt_hex));
+    if (result.success == 0) {
+        auth_secure_zero(new_hash, sizeof(new_hash));
+        return result;
+    }
+
+    /* 更新用户记录 */
+    strncpy(user.password_hash, new_hash, sizeof(user.password_hash) - 1);
+    user.password_hash[sizeof(user.password_hash) - 1] = '\0';
+    user.force_password_change = 0;
+    auth_secure_zero(new_hash, sizeof(new_hash));
+
+    /* 写回存储 */
+    AuthService_update_user_hash(service, &user);
+    auth_secure_zero(&user, sizeof(user));
+
+    return Result_make_success("password changed");
 }

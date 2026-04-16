@@ -5,9 +5,10 @@
  * 提供仓储层中通用的文本处理工具函数，包括：
  * - 行尾符剥离
  * - 空行检测
- * - 字段安全性校验（防止管道符等保留字符注入）
+ * - 字段安全性校验（防止换行符等保留字符注入）
+ * - 字段分隔符转义与反转义（支持字段内包含管道符）
  * - 字段数量验证
- * - 基于管道符 '|' 的行拆分
+ * - 基于管道符 '|' 的行拆分（支持转义的管道符）
  *
  * 这些工具函数被各个具体的 Repository 模块共同使用，
  * 用于文本文件存储格式的解析与校验。
@@ -50,13 +51,40 @@ int RepositoryUtils_is_blank_line(const char *line);
 /**
  * @brief 检查文本是否为安全的字段内容
  *
- * 安全的字段内容不能包含管道符 '|'、回车符 '\r' 或换行符 '\n'，
- * 因为这些字符在文件存储格式中有特殊含义。
+ * 安全的字段内容不能包含回车符 '\r' 或换行符 '\n'，
+ * 因为这些字符在文件存储格式中用作行分隔符。
+ * 管道符 '|' 允许出现，会在写入时被转义。
  *
  * @param text 待检查的文本
  * @return 1 表示安全，0 表示不安全或为空指针
  */
 int RepositoryUtils_is_safe_field_text(const char *text);
+
+/**
+ * @brief 转义字段文本中的分隔符，使其可安全存储
+ *
+ * 转义规则：'\\' → '\\\\'，'|' → '\\|'，其余字符不变。
+ * 始终以 '\\0' 结尾。
+ *
+ * @param dest          目标缓冲区
+ * @param dest_capacity 目标缓冲区容量
+ * @param src           源字符串
+ * @return 写入的字节数（不含终止符）
+ */
+size_t RepositoryUtils_escape_field(char *dest, size_t dest_capacity, const char *src);
+
+/**
+ * @brief 反转义已存储的字段文本，还原为原始内容
+ *
+ * 反转义规则：'\\\\' → '\\'，'\\|' → '|'，'\\x'（其他）→ 'x'，其余不变。
+ * 始终以 '\\0' 结尾。
+ *
+ * @param dest          目标缓冲区
+ * @param dest_capacity 目标缓冲区容量
+ * @param src           源字符串
+ * @return 写入的字节数（不含终止符）
+ */
+size_t RepositoryUtils_unescape_field(char *dest, size_t dest_capacity, const char *src);
 
 /**
  * @brief 校验实际字段数量是否等于期望值

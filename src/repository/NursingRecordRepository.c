@@ -97,15 +97,12 @@ static void NursingRecordRepository_discard_rest_of_line(FILE *file) {
 
 /** 写入表头（覆盖） */
 static Result NursingRecordRepository_write_header(const NursingRecordRepository *repository) {
-    FILE *file = fopen(repository->storage.path, "w");
-    if (file == 0) return Result_make_failure("failed to rewrite nursing storage");
-
-    if (fputs(NURSING_RECORD_REPOSITORY_HEADER, file) == EOF || fputc('\n', file) == EOF) {
-        fclose(file);
-        return Result_make_failure("failed to write nursing header");
+    char content[TEXT_FILE_REPOSITORY_LINE_CAPACITY];
+    int written = snprintf(content, sizeof(content), "%s\n", NURSING_RECORD_REPOSITORY_HEADER);
+    if (written < 0 || (size_t)written >= sizeof(content)) {
+        return Result_make_failure("nursing header too long");
     }
-    fclose(file);
-    return Result_make_success("nursing header ready");
+    return TextFileRepository_save_file(&repository->storage, content);
 }
 
 /** 将护理记录序列化为文本行 */
@@ -300,38 +297,54 @@ Result NursingRecordRepository_save_all(
     const NursingRecordRepository *repository, const LinkedList *records
 ) {
     LinkedListNode *current = 0;
-    FILE *file = 0;
     Result result;
 
     if (repository == 0 || records == 0) return Result_make_failure("nursing save arguments invalid");
-    result = TextFileRepository_ensure_file_exists(&repository->storage);
-    if (!result.success) return result;
 
-    file = fopen(repository->storage.path, "w");
-    if (file == 0) return Result_make_failure("failed to rewrite nursing storage");
-
-    if (fputs(NURSING_RECORD_REPOSITORY_HEADER, file) == EOF || fputc('\n', file) == EOF) {
-        fclose(file);
-        return Result_make_failure("failed to write nursing header");
-    }
-
-    current = records->head;
-    while (current != 0) {
+    {
         char line[TEXT_FILE_REPOSITORY_LINE_CAPACITY];
-        result = NursingRecordRepository_serialize(
-            (const NursingRecord *)current->data, line, sizeof(line)
-        );
-        if (!result.success) { fclose(file); return result; }
+        char *content = 0;
+        size_t capacity = (records->count + 2) * TEXT_FILE_REPOSITORY_LINE_CAPACITY;
+        size_t used = 0;
+        size_t len = 0;
 
-        if (fputs(line, file) == EOF || fputc('\n', file) == EOF) {
-            fclose(file);
-            return Result_make_failure("failed to write nursing row");
+        content = (char *)malloc(capacity);
+        if (content == 0) {
+            return Result_make_failure("failed to allocate nursing content buffer");
         }
-        current = current->next;
-    }
 
-    fclose(file);
-    return Result_make_success("nursing records saved");
+        len = strlen(NURSING_RECORD_REPOSITORY_HEADER);
+        memcpy(content + used, NURSING_RECORD_REPOSITORY_HEADER, len);
+        used += len;
+        content[used++] = '\n';
+
+        current = records->head;
+        while (current != 0) {
+            result = NursingRecordRepository_serialize(
+                (const NursingRecord *)current->data, line, sizeof(line)
+            );
+            if (!result.success) { free(content); return result; }
+
+            len = strlen(line);
+            if (used + len + 2 > capacity) {
+                capacity *= 2;
+                content = (char *)realloc(content, capacity);
+                if (content == 0) {
+                    return Result_make_failure("failed to grow nursing content buffer");
+                }
+            }
+            memcpy(content + used, line, len);
+            used += len;
+            content[used++] = '\n';
+
+            current = current->next;
+        }
+
+        content[used] = '\0';
+        result = TextFileRepository_save_file(&repository->storage, content);
+        free(content);
+        return result;
+    }
 }
 
 /** 清空并释放护理记录链表中的所有元素 */

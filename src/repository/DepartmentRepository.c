@@ -298,13 +298,15 @@ static Result DepartmentRepository_find_line(
         return result;
     }
 
-    /* ID匹配时复制数据并标记 */
-    if (strcmp(department.department_id, find_context->department_id) == 0) {
-        *(find_context->out_department) = department;
-        find_context->found = 1;
+    /* ID不匹配，继续遍历 */
+    if (strcmp(department.department_id, find_context->department_id) != 0) {
+        return Result_make_success("department inspected");
     }
 
-    return Result_make_success("department inspected");
+    /* 找到匹配的科室，复制数据并标记 */
+    *(find_context->out_department) = department;
+    find_context->found = 1;
+    return Result_make_failure("department found"); /* 返回 failure 以终止遍历 */
 }
 
 /**
@@ -424,8 +426,15 @@ Result DepartmentRepository_find_by_department_id(
         DepartmentRepository_find_line,
         &context
     );
-    if (result.success == 0) {
-        return result;
+
+    /* 检查是否通过回调找到了科室 */
+    if (context.found != 0) {
+        return Result_make_success("department found");
+    }
+
+    /* 区分"未找到"和"遍历出错"两种情况 */
+    if (result.success == 0 && strcmp(result.message, "department found") != 0) {
+        return result; /* 真正的错误 */
     }
 
     if (context.found == 0) {
@@ -465,7 +474,6 @@ Result DepartmentRepository_save_all(
     const LinkedList *departments
 ) {
     LinkedListNode *current = 0;
-    FILE *file = 0;
     Result result;
 
     if (repository == 0 || departments == 0) {
@@ -476,46 +484,55 @@ Result DepartmentRepository_save_all(
         return Result_make_failure("department list contains invalid item");
     }
 
-    result = TextFileRepository_ensure_file_exists(&repository->storage);
-    if (result.success == 0) {
+    {
+        char line[TEXT_FILE_REPOSITORY_LINE_CAPACITY];
+        char *content = 0;
+        size_t capacity = (departments->count + 2) * TEXT_FILE_REPOSITORY_LINE_CAPACITY;
+        size_t used = 0;
+        size_t len = 0;
+
+        content = (char *)malloc(capacity);
+        if (content == 0) {
+            return Result_make_failure("failed to allocate department content buffer");
+        }
+
+        len = strlen(DEPARTMENT_REPOSITORY_HEADER);
+        memcpy(content + used, DEPARTMENT_REPOSITORY_HEADER, len);
+        used += len;
+        content[used++] = '\n';
+
+        current = departments->head;
+        while (current != 0) {
+            result = DepartmentRepository_format_line(
+                (const Department *)current->data,
+                line,
+                sizeof(line)
+            );
+            if (result.success == 0) {
+                free(content);
+                return result;
+            }
+
+            len = strlen(line);
+            if (used + len + 2 > capacity) {
+                capacity *= 2;
+                content = (char *)realloc(content, capacity);
+                if (content == 0) {
+                    return Result_make_failure("failed to grow department content buffer");
+                }
+            }
+            memcpy(content + used, line, len);
+            used += len;
+            content[used++] = '\n';
+
+            current = current->next;
+        }
+
+        content[used] = '\0';
+        result = TextFileRepository_save_file(&repository->storage, content);
+        free(content);
         return result;
     }
-
-    file = fopen(repository->storage.path, "w");
-    if (file == 0) {
-        return Result_make_failure("failed to rewrite department repository");
-    }
-
-    /* 写入表头 */
-    if (fprintf(file, "%s\n", DEPARTMENT_REPOSITORY_HEADER) < 0) {
-        fclose(file);
-        return Result_make_failure("failed to write department header");
-    }
-
-    /* 逐个写入科室记录 */
-    current = departments->head;
-    while (current != 0) {
-        char line[TEXT_FILE_REPOSITORY_LINE_CAPACITY];
-        result = DepartmentRepository_format_line(
-            (const Department *)current->data,
-            line,
-            sizeof(line)
-        );
-        if (result.success == 0) {
-            fclose(file);
-            return result;
-        }
-
-        if (fprintf(file, "%s\n", line) < 0) {
-            fclose(file);
-            return Result_make_failure("failed to write department line");
-        }
-
-        current = current->next;
-    }
-
-    fclose(file);
-    return Result_make_success("departments saved");
 }
 
 /**

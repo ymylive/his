@@ -315,24 +315,19 @@ static void RegistrationRepository_discard_rest_of_line(FILE *file) {
  * @brief 向文件写入挂号记录表头（覆盖写入）
  */
 static Result RegistrationRepository_write_header(const RegistrationRepository *repository) {
-    FILE *file = 0;
+    char content[TEXT_FILE_REPOSITORY_LINE_CAPACITY];
+    int written = 0;
 
     if (repository == 0) {
         return Result_make_failure("registration repository missing");
     }
 
-    file = fopen(repository->storage.path, "w");
-    if (file == 0) {
-        return Result_make_failure("failed to rewrite registration storage");
+    written = snprintf(content, sizeof(content), "%s\n", REGISTRATION_REPOSITORY_HEADER);
+    if (written < 0 || (size_t)written >= sizeof(content)) {
+        return Result_make_failure("registration header too long");
     }
 
-    if (fputs(REGISTRATION_REPOSITORY_HEADER, file) == EOF || fputc('\n', file) == EOF) {
-        fclose(file);
-        return Result_make_failure("failed to write registration header");
-    }
-
-    fclose(file);
-    return Result_make_success("registration header ready");
+    return TextFileRepository_save_file(&repository->storage, content);
 }
 
 /**
@@ -873,50 +868,57 @@ Result RegistrationRepository_save_all(
     const LinkedList *registrations
 ) {
     LinkedListNode *current = 0;
-    FILE *file = 0;
     Result result;
 
     if (repository == 0 || registrations == 0) {
         return Result_make_failure("registration save arguments invalid");
     }
 
-    result = TextFileRepository_ensure_file_exists(&repository->storage);
-    if (!result.success) {
+    {
+        char line[TEXT_FILE_REPOSITORY_LINE_CAPACITY];
+        char *content = 0;
+        size_t capacity = (registrations->count + 2) * TEXT_FILE_REPOSITORY_LINE_CAPACITY;
+        size_t used = 0;
+        size_t len = 0;
+
+        content = (char *)malloc(capacity);
+        if (content == 0) {
+            return Result_make_failure("failed to allocate registration content buffer");
+        }
+
+        len = strlen(REGISTRATION_REPOSITORY_HEADER);
+        memcpy(content + used, REGISTRATION_REPOSITORY_HEADER, len);
+        used += len;
+        content[used++] = '\n';
+
+        current = registrations->head;
+        while (current != 0) {
+            result = RegistrationRepository_serialize((const Registration *)current->data, line, sizeof(line));
+            if (!result.success) {
+                free(content);
+                return result;
+            }
+
+            len = strlen(line);
+            if (used + len + 2 > capacity) {
+                capacity *= 2;
+                content = (char *)realloc(content, capacity);
+                if (content == 0) {
+                    return Result_make_failure("failed to grow registration content buffer");
+                }
+            }
+            memcpy(content + used, line, len);
+            used += len;
+            content[used++] = '\n';
+
+            current = current->next;
+        }
+
+        content[used] = '\0';
+        result = TextFileRepository_save_file(&repository->storage, content);
+        free(content);
         return result;
     }
-
-    file = fopen(repository->storage.path, "w");
-    if (file == 0) {
-        return Result_make_failure("failed to rewrite registration storage");
-    }
-
-    /* 写入表头 */
-    if (fputs(REGISTRATION_REPOSITORY_HEADER, file) == EOF || fputc('\n', file) == EOF) {
-        fclose(file);
-        return Result_make_failure("failed to write registration header");
-    }
-
-    /* 逐个序列化并写入 */
-    current = registrations->head;
-    while (current != 0) {
-        char line[TEXT_FILE_REPOSITORY_LINE_CAPACITY];
-
-        result = RegistrationRepository_serialize((const Registration *)current->data, line, sizeof(line));
-        if (!result.success) {
-            fclose(file);
-            return result;
-        }
-
-        if (fputs(line, file) == EOF || fputc('\n', file) == EOF) {
-            fclose(file);
-            return Result_make_failure("failed to write registration row");
-        }
-
-        current = current->next;
-    }
-
-    fclose(file);
-    return Result_make_success("registrations saved");
 }
 
 /**

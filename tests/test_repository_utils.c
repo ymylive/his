@@ -102,12 +102,110 @@ static void test_validate_field_count_failure(void) {
 /**
  * @brief 测试保留字符检测
  *
- * 管道符 '|' 和换行符 '\n' 是保留字符，不允许出现在字段文本中。
+ * 换行符 '\n' 和 '\r' 是保留字符，不允许出现在字段文本中。
+ * 管道符 '|' 现在允许出现（会在写入时转义）。
  */
 static void test_reserved_characters_are_rejected(void) {
     assert(RepositoryUtils_is_safe_field_text("safe text") == 1);       /* 安全文本 */
-    assert(RepositoryUtils_is_safe_field_text("unsafe|text") == 0);     /* 包含管道符 */
+    assert(RepositoryUtils_is_safe_field_text("text|with|pipes") == 1); /* 管道符现在允许 */
     assert(RepositoryUtils_is_safe_field_text("unsafe\ntext") == 0);    /* 包含换行符 */
+    assert(RepositoryUtils_is_safe_field_text("unsafe\rtext") == 0);    /* 包含回车符 */
+}
+
+/**
+ * @brief 测试字段转义功能
+ *
+ * 管道符和反斜杠应被正确转义。
+ */
+static void test_escape_field(void) {
+    char dest[128];
+    size_t len;
+
+    /* 普通文本不变 */
+    len = RepositoryUtils_escape_field(dest, sizeof(dest), "hello");
+    assert(len == 5);
+    assert(strcmp(dest, "hello") == 0);
+
+    /* 管道符被转义 */
+    len = RepositoryUtils_escape_field(dest, sizeof(dest), "a|b|c");
+    assert(strcmp(dest, "a\\|b\\|c") == 0);
+    assert(len == 7);
+
+    /* 反斜杠被转义 */
+    len = RepositoryUtils_escape_field(dest, sizeof(dest), "a\\b");
+    assert(strcmp(dest, "a\\\\b") == 0);
+    assert(len == 4);
+
+    /* 混合转义 */
+    len = RepositoryUtils_escape_field(dest, sizeof(dest), "a|b\\c");
+    assert(strcmp(dest, "a\\|b\\\\c") == 0);
+    assert(len == 7);
+
+    /* 空字符串 */
+    len = RepositoryUtils_escape_field(dest, sizeof(dest), "");
+    assert(len == 0);
+    assert(dest[0] == '\0');
+}
+
+/**
+ * @brief 测试字段反转义功能
+ */
+static void test_unescape_field(void) {
+    char dest[128];
+    size_t len;
+
+    /* 普通文本不变 */
+    len = RepositoryUtils_unescape_field(dest, sizeof(dest), "hello");
+    assert(len == 5);
+    assert(strcmp(dest, "hello") == 0);
+
+    /* 转义管道符还原 */
+    len = RepositoryUtils_unescape_field(dest, sizeof(dest), "a\\|b\\|c");
+    assert(strcmp(dest, "a|b|c") == 0);
+    assert(len == 5);
+
+    /* 转义反斜杠还原 */
+    len = RepositoryUtils_unescape_field(dest, sizeof(dest), "a\\\\b");
+    assert(strcmp(dest, "a\\b") == 0);
+    assert(len == 3);
+
+    /* 混合还原 */
+    len = RepositoryUtils_unescape_field(dest, sizeof(dest), "a\\|b\\\\c");
+    assert(strcmp(dest, "a|b\\c") == 0);
+    assert(len == 5);
+}
+
+/**
+ * @brief 测试含转义管道符的行拆分
+ *
+ * 转义的管道符不应被当作分隔符。
+ */
+static void test_split_pipe_line_with_escaped_pipes(void) {
+    char line[] = "field1|value\\|with\\|pipes|field3\r\n";
+    char *fields[3];
+    size_t field_count = 0;
+    Result result = RepositoryUtils_split_pipe_line(line, fields, 3, &field_count);
+
+    assert(result.success == 1);
+    assert(field_count == 3);
+    assert(strcmp(fields[0], "field1") == 0);
+    assert(strcmp(fields[1], "value|with|pipes") == 0);  /* 反转义后还原 */
+    assert(strcmp(fields[2], "field3") == 0);
+}
+
+/**
+ * @brief 测试含转义反斜杠的行拆分
+ */
+static void test_split_pipe_line_with_escaped_backslash(void) {
+    char line[] = "a\\\\b|c\\\\d\n";
+    char *fields[2];
+    size_t field_count = 0;
+    Result result = RepositoryUtils_split_pipe_line(line, fields, 2, &field_count);
+
+    assert(result.success == 1);
+    assert(field_count == 2);
+    assert(strcmp(fields[0], "a\\b") == 0);  /* 反转义后 \\\\ → \\ */
+    assert(strcmp(fields[1], "c\\d") == 0);
 }
 
 /**
@@ -227,6 +325,10 @@ int main(void) {
     test_split_pipe_line_keeps_empty_columns();
     test_validate_field_count_failure();
     test_reserved_characters_are_rejected();
+    test_escape_field();
+    test_unescape_field();
+    test_split_pipe_line_with_escaped_pipes();
+    test_split_pipe_line_with_escaped_backslash();
     test_for_each_non_empty_line_ignores_blank_lines();
     test_for_each_data_line_skips_header();
     test_missing_file_is_created_safely();

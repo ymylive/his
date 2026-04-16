@@ -80,8 +80,9 @@ static void test_demo_accounts_exist(void) {
     assert(user.role == USER_ROLE_INPATIENT_MANAGER);
     assert(UserRepository_find_by_user_id(&repository, "PHA0001", &user).success == 1);
     assert(user.role == USER_ROLE_PHARMACY);
-    assert(UserRepository_find_by_user_id(&repository, "PAT0001", &user).success == 1);
+    assert(UserRepository_find_by_user_id(&repository, "linyue", &user).success == 1);
     assert(user.role == USER_ROLE_PATIENT);
+    assert(strcmp(user.patient_id, "PAT0001") == 0);
 }
 
 static void test_demo_domain_data_has_answering_scale(void) {

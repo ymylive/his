@@ -17,10 +17,13 @@
 #include "repository/TextFileRepository.h"
 
 /** 用户数据文件的表头行 */
-#define USER_REPOSITORY_HEADER "user_id|password_hash|role"
+#define USER_REPOSITORY_HEADER "user_id|password_hash|role|patient_id|force_password_change"
 
 /** 用户记录的字段数量 */
-#define USER_REPOSITORY_FIELD_COUNT 3
+#define USER_REPOSITORY_FIELD_COUNT 5
+
+/** 旧版用户记录的字段数量（不含 force_password_change，用于向后兼容） */
+#define USER_REPOSITORY_FIELD_COUNT_LEGACY 4
 
 /**
  * @brief 用户仓储结构体

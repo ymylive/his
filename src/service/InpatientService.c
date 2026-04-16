@@ -363,10 +363,284 @@ static Result InpatientService_next_admission_sequence(
     return result;
 }
 
+/** @brief Number of repositories coordinated by save_all */
+#define INPATIENT_SERVICE_REPO_COUNT 4
+
+/** @brief Initial capacity for content buffers used during save */
+#define INPATIENT_SERVICE_CONTENT_INITIAL_CAPACITY 4096
+
+/**
+ * @brief Append a string to a dynamically growing buffer
+ *
+ * Grows the buffer as needed. On failure the caller must free *buffer.
+ *
+ * @param buffer    Pointer to the heap-allocated buffer (may be reallocated)
+ * @param size      Current used size (updated on success)
+ * @param capacity  Current buffer capacity (updated on growth)
+ * @param text      String to append
+ * @return 1 on success, 0 on allocation failure
+ */
+static int InpatientService_append_to_buffer(
+    char **buffer, size_t *size, size_t *capacity, const char *text
+) {
+    size_t text_len = strlen(text);
+    size_t needed = *size + text_len + 1;
+
+    while (needed > *capacity) {
+        size_t new_capacity = *capacity * 2;
+        char *new_buffer = (char *)realloc(*buffer, new_capacity);
+        if (new_buffer == 0) {
+            return 0;
+        }
+        *buffer = new_buffer;
+        *capacity = new_capacity;
+    }
+
+    memcpy(*buffer + *size, text, text_len);
+    *size += text_len;
+    (*buffer)[*size] = '\0';
+    return 1;
+}
+
+/**
+ * @brief Build the complete file content for the patient repository
+ *
+ * Formats header + one line per patient into a single heap-allocated string.
+ *
+ * @param patients   Patient linked list
+ * @param out_content  Output: heap-allocated content string (caller must free)
+ * @return Result
+ */
+static Result InpatientService_build_patient_content(
+    const LinkedList *patients, char **out_content
+) {
+    char line[TEXT_FILE_REPOSITORY_LINE_CAPACITY];
+    size_t capacity = INPATIENT_SERVICE_CONTENT_INITIAL_CAPACITY;
+    size_t size = 0;
+    char *buffer = 0;
+    const LinkedListNode *current = 0;
+
+    buffer = (char *)malloc(capacity);
+    if (buffer == 0) {
+        return Result_make_failure("failed to allocate patient content buffer");
+    }
+    buffer[0] = '\0';
+
+    if (!InpatientService_append_to_buffer(
+            &buffer, &size, &capacity, PATIENT_REPOSITORY_HEADER "\n")) {
+        free(buffer);
+        return Result_make_failure("failed to build patient content");
+    }
+
+    current = patients->head;
+    while (current != 0) {
+        const Patient *p = (const Patient *)current->data;
+        int written = snprintf(line, sizeof(line),
+            "%s|%s|%d|%d|%s|%s|%s|%s|%d|%s\n",
+            p->patient_id, p->name, (int)p->gender, p->age,
+            p->contact, p->id_card, p->allergy, p->medical_history,
+            p->is_inpatient, p->remarks);
+        if (written < 0 || (size_t)written >= sizeof(line)) {
+            free(buffer);
+            return Result_make_failure("patient line formatting failed");
+        }
+        if (!InpatientService_append_to_buffer(&buffer, &size, &capacity, line)) {
+            free(buffer);
+            return Result_make_failure("failed to build patient content");
+        }
+        current = current->next;
+    }
+
+    *out_content = buffer;
+    return Result_make_success("patient content built");
+}
+
+/**
+ * @brief Build the complete file content for the ward repository
+ *
+ * @param wards       Ward linked list
+ * @param out_content Output: heap-allocated content string (caller must free)
+ * @return Result
+ */
+static Result InpatientService_build_ward_content(
+    const LinkedList *wards, char **out_content
+) {
+    char line[TEXT_FILE_REPOSITORY_LINE_CAPACITY];
+    size_t capacity = INPATIENT_SERVICE_CONTENT_INITIAL_CAPACITY;
+    size_t size = 0;
+    char *buffer = 0;
+    const LinkedListNode *current = 0;
+
+    buffer = (char *)malloc(capacity);
+    if (buffer == 0) {
+        return Result_make_failure("failed to allocate ward content buffer");
+    }
+    buffer[0] = '\0';
+
+    if (!InpatientService_append_to_buffer(
+            &buffer, &size, &capacity, WARD_REPOSITORY_HEADER "\n")) {
+        free(buffer);
+        return Result_make_failure("failed to build ward content");
+    }
+
+    current = wards->head;
+    while (current != 0) {
+        const Ward *w = (const Ward *)current->data;
+        int written = snprintf(line, sizeof(line),
+            "%s|%s|%s|%s|%d|%d|%d|%d|%.2f\n",
+            w->ward_id, w->name, w->department_id, w->location,
+            w->capacity, w->occupied_beds, (int)w->status,
+            (int)w->ward_type, w->daily_fee);
+        if (written < 0 || (size_t)written >= sizeof(line)) {
+            free(buffer);
+            return Result_make_failure("ward line formatting failed");
+        }
+        if (!InpatientService_append_to_buffer(&buffer, &size, &capacity, line)) {
+            free(buffer);
+            return Result_make_failure("failed to build ward content");
+        }
+        current = current->next;
+    }
+
+    *out_content = buffer;
+    return Result_make_success("ward content built");
+}
+
+/**
+ * @brief Build the complete file content for the bed repository
+ *
+ * @param beds        Bed linked list
+ * @param out_content Output: heap-allocated content string (caller must free)
+ * @return Result
+ */
+static Result InpatientService_build_bed_content(
+    const LinkedList *beds, char **out_content
+) {
+    char line[TEXT_FILE_REPOSITORY_LINE_CAPACITY];
+    size_t capacity = INPATIENT_SERVICE_CONTENT_INITIAL_CAPACITY;
+    size_t size = 0;
+    char *buffer = 0;
+    const LinkedListNode *current = 0;
+
+    buffer = (char *)malloc(capacity);
+    if (buffer == 0) {
+        return Result_make_failure("failed to allocate bed content buffer");
+    }
+    buffer[0] = '\0';
+
+    if (!InpatientService_append_to_buffer(
+            &buffer, &size, &capacity, BED_REPOSITORY_HEADER "\n")) {
+        free(buffer);
+        return Result_make_failure("failed to build bed content");
+    }
+
+    current = beds->head;
+    while (current != 0) {
+        const Bed *b = (const Bed *)current->data;
+        int written = snprintf(line, sizeof(line),
+            "%s|%s|%s|%s|%d|%s|%s|%s\n",
+            b->bed_id, b->ward_id, b->room_no, b->bed_no,
+            (int)b->status, b->current_admission_id,
+            b->occupied_at, b->released_at);
+        if (written < 0 || (size_t)written >= sizeof(line)) {
+            free(buffer);
+            return Result_make_failure("bed line formatting failed");
+        }
+        if (!InpatientService_append_to_buffer(&buffer, &size, &capacity, line)) {
+            free(buffer);
+            return Result_make_failure("failed to build bed content");
+        }
+        current = current->next;
+    }
+
+    *out_content = buffer;
+    return Result_make_success("bed content built");
+}
+
+/**
+ * @brief Build the complete file content for the admission repository
+ *
+ * @param admissions  Admission linked list
+ * @param out_content Output: heap-allocated content string (caller must free)
+ * @return Result
+ */
+static Result InpatientService_build_admission_content(
+    const LinkedList *admissions, char **out_content
+) {
+    char line[TEXT_FILE_REPOSITORY_LINE_CAPACITY];
+    size_t capacity = INPATIENT_SERVICE_CONTENT_INITIAL_CAPACITY;
+    size_t size = 0;
+    char *buffer = 0;
+    const LinkedListNode *current = 0;
+
+    buffer = (char *)malloc(capacity);
+    if (buffer == 0) {
+        return Result_make_failure("failed to allocate admission content buffer");
+    }
+    buffer[0] = '\0';
+
+    if (!InpatientService_append_to_buffer(
+            &buffer, &size, &capacity, ADMISSION_REPOSITORY_HEADER "\n")) {
+        free(buffer);
+        return Result_make_failure("failed to build admission content");
+    }
+
+    current = admissions->head;
+    while (current != 0) {
+        const Admission *a = (const Admission *)current->data;
+        int written = snprintf(line, sizeof(line),
+            "%s|%s|%s|%s|%s|%d|%s|%s\n",
+            a->admission_id, a->patient_id, a->ward_id, a->bed_id,
+            a->admitted_at, (int)a->status, a->discharged_at, a->summary);
+        if (written < 0 || (size_t)written >= sizeof(line)) {
+            free(buffer);
+            return Result_make_failure("admission line formatting failed");
+        }
+        if (!InpatientService_append_to_buffer(&buffer, &size, &capacity, line)) {
+            free(buffer);
+            return Result_make_failure("failed to build admission content");
+        }
+        current = current->next;
+    }
+
+    *out_content = buffer;
+    return Result_make_success("admission content built");
+}
+
+/**
+ * @brief Write a content string to a temporary file
+ *
+ * @param tmp_path  Path of the temporary file to write
+ * @param content   Content string to write
+ * @return Result
+ */
+static Result InpatientService_write_temp_file(const char *tmp_path, const char *content) {
+    FILE *file = fopen(tmp_path, "w");
+    if (file == 0) {
+        return Result_make_failure("failed to open temp file for save");
+    }
+    if (fputs(content, file) == EOF) {
+        fclose(file);
+        remove(tmp_path);
+        return Result_make_failure("failed to write temp file for save");
+    }
+    if (ferror(file) != 0) {
+        fclose(file);
+        remove(tmp_path);
+        return Result_make_failure("temp file write error during save");
+    }
+    fclose(file);
+    return Result_make_success("temp file written");
+}
+
 /**
  * @brief 保存所有仓库数据（患者、病房、床位、住院记录）
  *
- * 依次保存四个仓库的全量数据，任一保存失败则返回错误。
+ * 使用"prepare then commit"模式确保跨文件一致性：
+ * 1. 在内存中构建所有4个文件的完整内容
+ * 2. 将所有内容写入临时文件（path.tmp）
+ * 3. 全部写入成功后，依次将临时文件重命名为正式文件
+ * 4. 任一步骤失败时，清理所有临时文件并返回错误
  *
  * @param service     指向住院服务结构体
  * @param patients    患者链表
@@ -382,24 +656,95 @@ static Result InpatientService_save_all(
     LinkedList *beds,
     LinkedList *admissions
 ) {
+    /* File paths and temp paths for all 4 repositories */
+    const char *paths[INPATIENT_SERVICE_REPO_COUNT];
+    char tmp_paths[INPATIENT_SERVICE_REPO_COUNT][TEXT_FILE_REPOSITORY_PATH_CAPACITY + 8];
+    char *contents[INPATIENT_SERVICE_REPO_COUNT];
+    int i = 0;
     Result result;
 
-    result = PatientRepository_save_all(&service->patient_repository, patients);
+    memset(contents, 0, sizeof(contents));
+
+    paths[0] = service->patient_repository.file_repository.path;
+    paths[1] = service->ward_repository.storage.path;
+    paths[2] = service->bed_repository.storage.path;
+    paths[3] = service->admission_repository.storage.path;
+
+    /* Build temp file paths */
+    for (i = 0; i < INPATIENT_SERVICE_REPO_COUNT; i++) {
+        if (snprintf(tmp_paths[i], sizeof(tmp_paths[i]), "%s.tmp", paths[i])
+                >= (int)sizeof(tmp_paths[i])) {
+            return Result_make_failure("repository path too long for temp file");
+        }
+    }
+
+    /* Phase 1: Build all content strings in memory */
+    result = InpatientService_build_patient_content(patients, &contents[0]);
     if (result.success == 0) {
         return result;
     }
 
-    result = WardRepository_save_all(&service->ward_repository, wards);
+    result = InpatientService_build_ward_content(wards, &contents[1]);
     if (result.success == 0) {
+        free(contents[0]);
         return result;
     }
 
-    result = BedRepository_save_all(&service->bed_repository, beds);
+    result = InpatientService_build_bed_content(beds, &contents[2]);
     if (result.success == 0) {
+        free(contents[0]);
+        free(contents[1]);
         return result;
     }
 
-    return AdmissionRepository_save_all(&service->admission_repository, admissions);
+    result = InpatientService_build_admission_content(admissions, &contents[3]);
+    if (result.success == 0) {
+        free(contents[0]);
+        free(contents[1]);
+        free(contents[2]);
+        return result;
+    }
+
+    /* Phase 2: Write all content to temp files */
+    for (i = 0; i < INPATIENT_SERVICE_REPO_COUNT; i++) {
+        result = InpatientService_write_temp_file(tmp_paths[i], contents[i]);
+        if (result.success == 0) {
+            /* Clean up: remove any temp files already written */
+            int j = 0;
+            for (j = 0; j < i; j++) {
+                remove(tmp_paths[j]);
+            }
+            for (j = 0; j < INPATIENT_SERVICE_REPO_COUNT; j++) {
+                free(contents[j]);
+            }
+            return result;
+        }
+    }
+
+    /* Phase 3: Commit - rename all temp files to final paths */
+    for (i = 0; i < INPATIENT_SERVICE_REPO_COUNT; i++) {
+#if defined(_WIN32)
+        remove(paths[i]);
+#endif
+        if (rename(tmp_paths[i], paths[i]) != 0) {
+            /* Rename failed: clean up remaining temp files */
+            int j = 0;
+            for (j = i; j < INPATIENT_SERVICE_REPO_COUNT; j++) {
+                remove(tmp_paths[j]);
+            }
+            for (j = 0; j < INPATIENT_SERVICE_REPO_COUNT; j++) {
+                free(contents[j]);
+            }
+            return Result_make_failure("failed to commit repository files");
+        }
+    }
+
+    /* Free all content buffers */
+    for (i = 0; i < INPATIENT_SERVICE_REPO_COUNT; i++) {
+        free(contents[i]);
+    }
+
+    return Result_make_success("all repositories saved");
 }
 
 /**

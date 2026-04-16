@@ -33,9 +33,11 @@ typedef enum UserRole {
  * 存储用户的认证信息和角色，用于系统登录和权限控制。
  */
 typedef struct User {
-    char user_id[HIS_DOMAIN_ID_CAPACITY];                  /* 用户唯一标识ID（同时作为登录账号） */
+    char user_id[HIS_DOMAIN_ID_CAPACITY];                  /* 用户名（登录账号） */
     char password_hash[HIS_USER_PASSWORD_HASH_CAPACITY];   /* 密码的哈希值 */
     UserRole role;                                          /* 用户角色 */
+    char patient_id[HIS_DOMAIN_ID_CAPACITY];               /* 关联的患者编号（仅患者角色使用） */
+    int force_password_change;                              /* 1 = 必须在下次登录时修改密码 */
 } User;
 
 #endif

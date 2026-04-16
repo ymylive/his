@@ -464,7 +464,6 @@ Result AdmissionRepository_save_all(
     const AdmissionRepository *repository, const LinkedList *admissions
 ) {
     const LinkedListNode *current = 0;
-    FILE *file = 0;
     Result result;
 
     if (repository == 0 || admissions == 0) {
@@ -474,34 +473,50 @@ Result AdmissionRepository_save_all(
         return Result_make_failure("admission list invalid");
     }
 
-    result = TextFileRepository_ensure_file_exists(&repository->storage);
-    if (result.success == 0) return result;
-
-    file = fopen(repository->storage.path, "w");
-    if (file == 0) return Result_make_failure("failed to rewrite admission repository");
-
-    if (fprintf(file, "%s\n", ADMISSION_REPOSITORY_HEADER) < 0) {
-        fclose(file);
-        return Result_make_failure("failed to write admission header");
-    }
-
-    current = admissions->head;
-    while (current != 0) {
+    {
         char line[TEXT_FILE_REPOSITORY_LINE_CAPACITY];
-        result = AdmissionRepository_format_line(
-            (const Admission *)current->data, line, sizeof(line)
-        );
-        if (result.success == 0) { fclose(file); return result; }
+        char *content = 0;
+        size_t capacity = (admissions->count + 2) * TEXT_FILE_REPOSITORY_LINE_CAPACITY;
+        size_t used = 0;
+        size_t len = 0;
 
-        if (fprintf(file, "%s\n", line) < 0) {
-            fclose(file);
-            return Result_make_failure("failed to write admission line");
+        content = (char *)malloc(capacity);
+        if (content == 0) {
+            return Result_make_failure("failed to allocate admission content buffer");
         }
-        current = current->next;
-    }
 
-    fclose(file);
-    return Result_make_success("admissions saved");
+        len = strlen(ADMISSION_REPOSITORY_HEADER);
+        memcpy(content + used, ADMISSION_REPOSITORY_HEADER, len);
+        used += len;
+        content[used++] = '\n';
+
+        current = admissions->head;
+        while (current != 0) {
+            result = AdmissionRepository_format_line(
+                (const Admission *)current->data, line, sizeof(line)
+            );
+            if (result.success == 0) { free(content); return result; }
+
+            len = strlen(line);
+            if (used + len + 2 > capacity) {
+                capacity *= 2;
+                content = (char *)realloc(content, capacity);
+                if (content == 0) {
+                    return Result_make_failure("failed to grow admission content buffer");
+                }
+            }
+            memcpy(content + used, line, len);
+            used += len;
+            content[used++] = '\n';
+
+            current = current->next;
+        }
+
+        content[used] = '\0';
+        result = TextFileRepository_save_file(&repository->storage, content);
+        free(content);
+        return result;
+    }
 }
 
 /** 清空并释放入院记录链表中的所有元素 */

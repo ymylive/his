@@ -26,6 +26,7 @@
 #include <stdarg.h>
 #include <stdio.h>
 #include <string.h>
+#include <time.h>
 
 #ifdef _WIN32
 #include <io.h>
@@ -1106,7 +1107,7 @@ Result MenuApplication_login(
     application->has_authenticated_user = 1;
 
     if (user.role == USER_ROLE_PATIENT) {
-        result = MenuApplication_bind_patient_session(application, user.user_id);
+        result = MenuApplication_bind_patient_session(application, user.patient_id);
         if (result.success == 0) {
             MenuApplication_clear_authenticated_user_state(application);
             return result;
@@ -6019,6 +6020,19 @@ Result MenuApplication_stats_dept_performance(
 }
 
 /**
+ * @brief 将日期转换为近似天数（用于天数差计算）
+ * 使用累积月天数查表，不考虑闰年（仅用于天数差的近似计算）
+ */
+static int MenuApplication_date_to_days(int year, int month, int day) {
+    static const int month_days[12] = {
+        0, 31, 59, 90, 120, 151, 181, 212, 243, 273, 304, 334
+    };
+    if (month < 1) month = 1;
+    if (month > 12) month = 12;
+    return year * 365 + month_days[month - 1] + day;
+}
+
+/**
  * @brief 住院周转率
  *
  * 加载所有入院记录，统计总入院数、在院/出院分布、平均住院天数、
@@ -6130,8 +6144,8 @@ Result MenuApplication_stats_admission_turnover(
                     int ay = 0, am = 0, ad = 0, dy = 0, dm = 0, dd = 0;
                     if (sscanf(a->admitted_at, "%d-%d-%d", &ay, &am, &ad) == 3 &&
                         sscanf(a->discharged_at, "%d-%d-%d", &dy, &dm, &dd) == 3) {
-                        int admit_day = ay * 365 + am * 30 + ad;
-                        int discharge_day = dy * 365 + dm * 30 + dd;
+                        int admit_day = MenuApplication_date_to_days(ay, am, ad);
+                        int discharge_day = MenuApplication_date_to_days(dy, dm, dd);
                         if (discharge_day > admit_day) {
                             total_los += (discharge_day - admit_day);
                             los_count++;
@@ -6551,24 +6565,30 @@ Result MenuApplication_query_patient_fees(
                     int dis_year = 0, dis_month = 0, dis_day = 0;
                     int adm_days_total = 0;
                     int dis_days_total = 0;
-                    static const int month_days[12] = {
-                        0, 31, 59, 90, 120, 151, 181, 212, 243, 273, 304, 334
-                    };
 
                     if (sscanf(adm->admitted_at, "%d-%d-%d",
                                &adm_year, &adm_month, &adm_day) == 3) {
-                        adm_days_total = adm_year * 365 + month_days[adm_month - 1] + adm_day;
+                        adm_days_total = MenuApplication_date_to_days(adm_year, adm_month, adm_day);
 
                         if (adm->status == ADMISSION_STATUS_DISCHARGED &&
                             adm->discharged_at[0] != '\0') {
                             if (sscanf(adm->discharged_at, "%d-%d-%d",
                                        &dis_year, &dis_month, &dis_day) == 3) {
-                                dis_days_total = dis_year * 365 + month_days[dis_month - 1] + dis_day;
+                                dis_days_total = MenuApplication_date_to_days(dis_year, dis_month, dis_day);
                                 days = dis_days_total - adm_days_total;
                             }
                         } else {
-                            /* 在院患者：计算到当前日期 2026-04-12 */
-                            dis_days_total = 2026 * 365 + month_days[3] + 12;
+                            /* 在院患者：计算到当前日期 */
+                            {
+                                time_t now = time(NULL);
+                                struct tm *tm_now = localtime(&now);
+                                if (tm_now) {
+                                    dis_days_total = MenuApplication_date_to_days(
+                                        tm_now->tm_year + 1900,
+                                        tm_now->tm_mon + 1,
+                                        tm_now->tm_mday);
+                                }
+                            }
                             days = dis_days_total - adm_days_total;
                         }
                         if (days < 1) days = 1;
@@ -6652,10 +6672,6 @@ Result MenuApplication_discharge_settlement(
     int days = 1;
     Result result;
 
-    static const int month_days[12] = {
-        0, 31, 59, 90, 120, 151, 181, 212, 243, 273, 304, 334
-    };
-
     if (app == 0 || admission_id == 0 || buffer == 0 || capacity == 0) {
         return Result_make_failure("discharge settlement arguments missing");
     }
@@ -6684,18 +6700,27 @@ Result MenuApplication_discharge_settlement(
 
         if (sscanf(admission.admitted_at, "%d-%d-%d",
                    &adm_year, &adm_month, &adm_day) == 3) {
-            adm_days_total = adm_year * 365 + month_days[adm_month - 1] + adm_day;
+            adm_days_total = MenuApplication_date_to_days(adm_year, adm_month, adm_day);
 
             if (admission.status == ADMISSION_STATUS_DISCHARGED &&
                 admission.discharged_at[0] != '\0') {
                 if (sscanf(admission.discharged_at, "%d-%d-%d",
                            &dis_year, &dis_month, &dis_day) == 3) {
-                    dis_days_total = dis_year * 365 + month_days[dis_month - 1] + dis_day;
+                    dis_days_total = MenuApplication_date_to_days(dis_year, dis_month, dis_day);
                     days = dis_days_total - adm_days_total;
                 }
             } else {
-                /* 在院患者：计算到当前日期 2026-04-12 */
-                dis_days_total = 2026 * 365 + month_days[3] + 12;
+                /* 在院患者：计算到当前日期 */
+                {
+                    time_t now = time(NULL);
+                    struct tm *tm_now = localtime(&now);
+                    if (tm_now) {
+                        dis_days_total = MenuApplication_date_to_days(
+                            tm_now->tm_year + 1900,
+                            tm_now->tm_mon + 1,
+                            tm_now->tm_mday);
+                    }
+                }
                 days = dis_days_total - adm_days_total;
             }
             if (days < 1) days = 1;
@@ -7290,6 +7315,28 @@ Result MenuApplication_execute_action(
 ) {
     if (application == 0 || input == 0 || output == 0) {
         return Result_make_failure("menu action arguments missing");
+    }
+
+    /* Role-action authorization check */
+    {
+        int action_val = (int)action;
+        UserRole required = USER_ROLE_UNKNOWN;
+        if ((action_val >= 101 && action_val <= 105) || (action_val >= 206 && action_val <= 212)) {
+            required = USER_ROLE_ADMIN;
+        } else if (action_val >= 301 && action_val <= 399) {
+            required = USER_ROLE_DOCTOR;
+        } else if (action_val >= 401 && action_val <= 499) {
+            required = USER_ROLE_PATIENT;
+        } else if (action_val >= 501 && action_val <= 599) {
+            required = USER_ROLE_INPATIENT_MANAGER;
+        } else if (action_val >= 701 && action_val <= 799) {
+            required = USER_ROLE_PHARMACY;
+        }
+        if (required != USER_ROLE_UNKNOWN && application->has_authenticated_user) {
+            if (application->authenticated_user.role != required) {
+                return Result_make_failure("permission denied: role mismatch");
+            }
+        }
     }
 
     switch (action) {

@@ -191,25 +191,27 @@ static void test_patient_binding_and_login_success(void) {
     assert(result.success == 1);
 
     /* 注册用户，绑定患者ID */
-    result = AuthService_register_user(&service, "PAT9001", "safe-pass", USER_ROLE_PATIENT);
+    result = AuthService_register_user(&service, "testuser1", "safe-pass", USER_ROLE_PATIENT, "PAT9001");
     assert(result.success == 1);
 
-    /* 验证文件中包含用户ID但不包含明文密码（密码已加密） */
+    /* 验证文件中包含用户名但不包含明文密码（密码已加密） */
     TestAuthService_read_file(saved_content, sizeof(saved_content), user_path);
-    assert(strstr(saved_content, "PAT9001") != 0);      /* 用户ID应存在 */
+    assert(strstr(saved_content, "testuser1") != 0);     /* 用户名应存在 */
+    assert(strstr(saved_content, "PAT9001") != 0);       /* 患者编号应存在 */
     assert(strstr(saved_content, "safe-pass") == 0);     /* 明文密码不应存在 */
 
-    /* 使用正确密码和角色进行认证 */
+    /* 使用用户名和正确密码进行认证 */
     result = AuthService_authenticate(
         &service,
-        "PAT9001",
+        "testuser1",
         "safe-pass",
         USER_ROLE_PATIENT,
         &user
     );
     assert(result.success == 1);
-    assert(strcmp(user.user_id, "PAT9001") == 0);  /* 验证返回的用户ID正确 */
-    assert(user.role == USER_ROLE_PATIENT);         /* 验证返回的角色正确 */
+    assert(strcmp(user.user_id, "testuser1") == 0);  /* 验证返回的用户名正确 */
+    assert(strcmp(user.patient_id, "PAT9001") == 0); /* 验证返回的患者编号正确 */
+    assert(user.role == USER_ROLE_PATIENT);           /* 验证返回的角色正确 */
 }
 
 /**
@@ -230,7 +232,7 @@ static void test_patient_registration_requires_existing_patient_record(void) {
     assert(result.success == 1);
 
     /* 尝试为不存在的患者注册账号，应当失败 */
-    result = AuthService_register_user(&service, "PAT9999", "safe-pass", USER_ROLE_PATIENT);
+    result = AuthService_register_user(&service, "testuser2", "safe-pass", USER_ROLE_PATIENT, "PAT9999");
     assert(result.success == 0);
 }
 
@@ -256,15 +258,15 @@ static void test_authenticate_rejects_wrong_password_and_role_mismatch(void) {
     assert(result.success == 1);
 
     /* 先注册用户 */
-    result = AuthService_register_user(&service, "PAT9010", "safe-pass", USER_ROLE_PATIENT);
+    result = AuthService_register_user(&service, "testuser3", "safe-pass", USER_ROLE_PATIENT, "PAT9010");
     assert(result.success == 1);
 
     /* 使用错误密码认证，应当失败 */
-    result = AuthService_authenticate(&service, "PAT9010", "wrong-pass", USER_ROLE_PATIENT, &user);
+    result = AuthService_authenticate(&service, "testuser3", "wrong-pass", USER_ROLE_PATIENT, &user);
     assert(result.success == 0);
 
     /* 使用正确密码但错误角色认证，应当失败 */
-    result = AuthService_authenticate(&service, "PAT9010", "safe-pass", USER_ROLE_DOCTOR, &user);
+    result = AuthService_authenticate(&service, "testuser3", "safe-pass", USER_ROLE_DOCTOR, &user);
     assert(result.success == 0);
 }
 
@@ -289,11 +291,11 @@ static void test_register_rejects_blank_password_and_invalid_role(void) {
     assert(result.success == 1);
 
     /* 空密码注册应当失败 */
-    result = AuthService_register_user(&service, "PAT9020", "", USER_ROLE_PATIENT);
+    result = AuthService_register_user(&service, "testuser4", "", USER_ROLE_PATIENT, "PAT9020");
     assert(result.success == 0);
 
     /* 无效角色注册应当失败 */
-    result = AuthService_register_user(&service, "PAT9020", "safe-pass", USER_ROLE_UNKNOWN);
+    result = AuthService_register_user(&service, "testuser4", "safe-pass", USER_ROLE_UNKNOWN, "PAT9020");
     assert(result.success == 0);
 }
 

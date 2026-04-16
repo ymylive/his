@@ -210,29 +210,60 @@ static Result BedRepository_collect_line(const char *line, void *context) {
     return Result_make_success("bed loaded");
 }
 
+static int BedRepository_compare_ids(const void *a, const void *b) {
+    return strcmp(*(const char *const *)a, *(const char *const *)b);
+}
+
 /**
  * @brief 校验床位链表的合法性（含ID唯一性检查）
  * @return 1 表示合法，0 表示不合法
  */
 static int BedRepository_validate_list(const LinkedList *beds) {
-    const LinkedListNode *outer = 0;
+    const LinkedListNode *current = 0;
+    const char **id_array = 0;
+    size_t count = 0;
+    size_t index = 0;
+
     if (beds == 0) return 0;
 
-    outer = beds->head;
-    while (outer != 0) {
-        const LinkedListNode *inner = outer->next;
-        const Bed *bed = (const Bed *)outer->data;
+    current = beds->head;
+    while (current != 0) {
+        const Bed *bed = (const Bed *)current->data;
         Result result = BedRepository_validate(bed);
         if (result.success == 0) return 0;
 
-        /* 检查ID唯一性 */
-        while (inner != 0) {
-            const Bed *other = (const Bed *)inner->data;
-            if (strcmp(bed->bed_id, other->bed_id) == 0) return 0;
-            inner = inner->next;
-        }
-        outer = outer->next;
+        count++;
+        current = current->next;
     }
+
+    if (count < 2) {
+        return 1;
+    }
+
+    id_array = (const char **)malloc(count * sizeof(const char *));
+    if (id_array == 0) {
+        return 0;
+    }
+
+    current = beds->head;
+    index = 0;
+    while (current != 0) {
+        const Bed *bed = (const Bed *)current->data;
+        id_array[index] = bed->bed_id;
+        index++;
+        current = current->next;
+    }
+
+    qsort(id_array, count, sizeof(const char *), BedRepository_compare_ids);
+
+    for (index = 1; index < count; index++) {
+        if (strcmp(id_array[index - 1], id_array[index]) == 0) {
+            free(id_array);
+            return 0;
+        }
+    }
+
+    free(id_array);
     return 1;
 }
 
@@ -357,7 +388,6 @@ Result BedRepository_save_all(
     const BedRepository *repository, const LinkedList *beds
 ) {
     const LinkedListNode *current = 0;
-    FILE *file = 0;
     Result result;
 
     if (repository == 0 || beds == 0) {
@@ -367,32 +397,48 @@ Result BedRepository_save_all(
         return Result_make_failure("bed list invalid");
     }
 
-    result = TextFileRepository_ensure_file_exists(&repository->storage);
-    if (result.success == 0) return result;
-
-    file = fopen(repository->storage.path, "w");
-    if (file == 0) return Result_make_failure("failed to rewrite bed repository");
-
-    if (fprintf(file, "%s\n", BED_REPOSITORY_HEADER) < 0) {
-        fclose(file);
-        return Result_make_failure("failed to write bed header");
-    }
-
-    current = beds->head;
-    while (current != 0) {
+    {
         char line[TEXT_FILE_REPOSITORY_LINE_CAPACITY];
-        result = BedRepository_format_line((const Bed *)current->data, line, sizeof(line));
-        if (result.success == 0) { fclose(file); return result; }
+        char *content = 0;
+        size_t capacity = (beds->count + 2) * TEXT_FILE_REPOSITORY_LINE_CAPACITY;
+        size_t used = 0;
+        size_t len = 0;
 
-        if (fprintf(file, "%s\n", line) < 0) {
-            fclose(file);
-            return Result_make_failure("failed to write bed line");
+        content = (char *)malloc(capacity);
+        if (content == 0) {
+            return Result_make_failure("failed to allocate bed content buffer");
         }
-        current = current->next;
-    }
 
-    fclose(file);
-    return Result_make_success("beds saved");
+        len = strlen(BED_REPOSITORY_HEADER);
+        memcpy(content + used, BED_REPOSITORY_HEADER, len);
+        used += len;
+        content[used++] = '\n';
+
+        current = beds->head;
+        while (current != 0) {
+            result = BedRepository_format_line((const Bed *)current->data, line, sizeof(line));
+            if (result.success == 0) { free(content); return result; }
+
+            len = strlen(line);
+            if (used + len + 2 > capacity) {
+                capacity *= 2;
+                content = (char *)realloc(content, capacity);
+                if (content == 0) {
+                    return Result_make_failure("failed to grow bed content buffer");
+                }
+            }
+            memcpy(content + used, line, len);
+            used += len;
+            content[used++] = '\n';
+
+            current = current->next;
+        }
+
+        content[used] = '\0';
+        result = TextFileRepository_save_file(&repository->storage, content);
+        free(content);
+        return result;
+    }
 }
 
 /** 清空并释放床位链表中的所有元素 */

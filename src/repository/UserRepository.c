@@ -63,7 +63,8 @@ static Result UserRepository_validate_user(const User *user) {
 
     /* 检查文本字段是否包含保留字符 */
     if (!RepositoryUtils_is_safe_field_text(user->user_id) ||
-        !RepositoryUtils_is_safe_field_text(user->password_hash)) {
+        !RepositoryUtils_is_safe_field_text(user->password_hash) ||
+        (user->patient_id[0] != '\0' && !RepositoryUtils_is_safe_field_text(user->patient_id))) {
         return Result_make_failure("user field contains reserved characters");
     }
 
@@ -132,16 +133,18 @@ static Result UserRepository_parse_line(const char *line, User *out_user) {
         return result;
     }
 
-    result = RepositoryUtils_validate_field_count(field_count, USER_REPOSITORY_FIELD_COUNT);
-    if (result.success == 0) {
-        return result;
+    /* 向后兼容：接受旧版4字段和新版5字段格式 */
+    if (field_count != USER_REPOSITORY_FIELD_COUNT &&
+        field_count != USER_REPOSITORY_FIELD_COUNT_LEGACY) {
+        return Result_make_failure("user field count invalid");
     }
 
     memset(out_user, 0, sizeof(*out_user));
 
     /* 检查字段长度不超过缓冲区容量 */
     if (strlen(fields[0]) >= sizeof(out_user->user_id) ||
-        strlen(fields[1]) >= sizeof(out_user->password_hash)) {
+        strlen(fields[1]) >= sizeof(out_user->password_hash) ||
+        strlen(fields[3]) >= sizeof(out_user->patient_id)) {
         return Result_make_failure("user field too long");
     }
 
@@ -158,6 +161,23 @@ static Result UserRepository_parse_line(const char *line, User *out_user) {
     }
 
     out_user->role = (UserRole)parsed_role;
+
+    /* 复制 patient_id（可为空） */
+    strncpy(out_user->patient_id, fields[3], sizeof(out_user->patient_id) - 1);
+    out_user->patient_id[sizeof(out_user->patient_id) - 1] = '\0';
+
+    /* 解析 force_password_change（新字段，旧数据默认为 0） */
+    if (field_count == USER_REPOSITORY_FIELD_COUNT) {
+        int parsed_flag = 0;
+        result = UserRepository_parse_int(fields[4], &parsed_flag);
+        if (result.success == 0) {
+            return result;
+        }
+        out_user->force_password_change = parsed_flag;
+    } else {
+        out_user->force_password_change = 0;
+    }
+
     return UserRepository_validate_user(out_user);
 }
 
@@ -169,6 +189,9 @@ static Result UserRepository_parse_line(const char *line, User *out_user) {
  * @return 成功返回 success；数据无效或缓冲区不足时返回 failure
  */
 static Result UserRepository_format_line(const User *user, char *buffer, size_t buffer_size) {
+    char esc_user_id[sizeof(((User *)0)->user_id) * 2];
+    char esc_password_hash[sizeof(((User *)0)->password_hash) * 2];
+    char esc_patient_id[sizeof(((User *)0)->patient_id) * 2];
     int written = 0;
     Result result = UserRepository_validate_user(user);
 
@@ -180,12 +203,19 @@ static Result UserRepository_format_line(const User *user, char *buffer, size_t 
         return Result_make_failure("user output buffer missing");
     }
 
+    /* 对所有文本字段进行转义 */
+    RepositoryUtils_escape_field(esc_user_id, sizeof(esc_user_id), user->user_id);
+    RepositoryUtils_escape_field(esc_password_hash, sizeof(esc_password_hash), user->password_hash);
+    RepositoryUtils_escape_field(esc_patient_id, sizeof(esc_patient_id), user->patient_id);
+
     written = snprintf(
         buffer, buffer_size,
-        "%s|%s|%d",
-        user->user_id,
-        user->password_hash,
-        (int)user->role
+        "%s|%s|%d|%s|%d",
+        esc_user_id,
+        esc_password_hash,
+        (int)user->role,
+        esc_patient_id,
+        user->force_password_change
     );
     if (written < 0 || (size_t)written >= buffer_size) {
         return Result_make_failure("user line formatting failed");
@@ -237,8 +267,9 @@ static Result UserRepository_ensure_header(const UserRepository *repository) {
         return TextFileRepository_append_line(&repository->file_repository, USER_REPOSITORY_HEADER);
     }
 
-    /* 验证表头 */
-    if (strcmp(line, USER_REPOSITORY_HEADER) != 0) {
+    /* 验证表头（兼容旧版不含 force_password_change 的表头） */
+    if (strcmp(line, USER_REPOSITORY_HEADER) != 0 &&
+        strcmp(line, "user_id|password_hash|role|patient_id") != 0) {
         return Result_make_failure("user repository header invalid");
     }
 

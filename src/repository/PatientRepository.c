@@ -288,6 +288,14 @@ static Result PatientRepository_parse_line(const char *line, Patient *out_patien
  * @return 成功返回 success；数据无效或缓冲区不足时返回 failure
  */
 static Result PatientRepository_format_line(const Patient *patient, char *buffer, size_t buffer_size) {
+    /* 转义缓冲区：每个字段最大长度翻倍（最坏情况每个字符都需要转义） */
+    char esc_patient_id[sizeof(((Patient *)0)->patient_id) * 2];
+    char esc_name[sizeof(((Patient *)0)->name) * 2];
+    char esc_contact[sizeof(((Patient *)0)->contact) * 2];
+    char esc_id_card[sizeof(((Patient *)0)->id_card) * 2];
+    char esc_allergy[sizeof(((Patient *)0)->allergy) * 2];
+    char esc_medical_history[sizeof(((Patient *)0)->medical_history) * 2];
+    char esc_remarks[sizeof(((Patient *)0)->remarks) * 2];
     int written = 0;
     Result result = PatientRepository_validate_patient(patient);
 
@@ -299,21 +307,30 @@ static Result PatientRepository_format_line(const Patient *patient, char *buffer
         return Result_make_failure("patient buffer missing");
     }
 
-    /* 将各字段按管道符分隔格式化 */
+    /* 对所有文本字段进行转义 */
+    RepositoryUtils_escape_field(esc_patient_id, sizeof(esc_patient_id), patient->patient_id);
+    RepositoryUtils_escape_field(esc_name, sizeof(esc_name), patient->name);
+    RepositoryUtils_escape_field(esc_contact, sizeof(esc_contact), patient->contact);
+    RepositoryUtils_escape_field(esc_id_card, sizeof(esc_id_card), patient->id_card);
+    RepositoryUtils_escape_field(esc_allergy, sizeof(esc_allergy), patient->allergy);
+    RepositoryUtils_escape_field(esc_medical_history, sizeof(esc_medical_history), patient->medical_history);
+    RepositoryUtils_escape_field(esc_remarks, sizeof(esc_remarks), patient->remarks);
+
+    /* 将转义后的字段按管道符分隔格式化 */
     written = snprintf(
         buffer,
         buffer_size,
         "%s|%s|%d|%d|%s|%s|%s|%s|%d|%s",
-        patient->patient_id,
-        patient->name,
+        esc_patient_id,
+        esc_name,
         (int)patient->gender,
         patient->age,
-        patient->contact,
-        patient->id_card,
-        patient->allergy,
-        patient->medical_history,
+        esc_contact,
+        esc_id_card,
+        esc_allergy,
+        esc_medical_history,
         patient->is_inpatient,
-        patient->remarks
+        esc_remarks
     );
     if (written < 0 || (size_t)written >= buffer_size) {
         return Result_make_failure("patient line formatting failed");
@@ -583,46 +600,54 @@ static Result PatientRepository_write_all_lines(
     const LinkedList *patients
 ) {
     const LinkedListNode *current = 0;
-    FILE *file = 0;
     char line[TEXT_FILE_REPOSITORY_LINE_CAPACITY];
+    char *content = 0;
+    size_t capacity = 0;
+    size_t used = 0;
+    size_t len = 0;
     Result result;
 
-    result = TextFileRepository_ensure_file_exists(&repository->file_repository);
-    if (result.success == 0) {
-        return result;
+    capacity = (patients->count + 2) * TEXT_FILE_REPOSITORY_LINE_CAPACITY;
+    content = (char *)malloc(capacity);
+    if (content == 0) {
+        return Result_make_failure("failed to allocate patient content buffer");
     }
-
-    /* 以写模式打开（覆盖已有内容） */
-    file = fopen(repository->file_repository.path, "w");
-    if (file == 0) {
-        return Result_make_failure("failed to rewrite patient repository");
-    }
+    used = 0;
 
     /* 写入表头行 */
-    if (fputs(PATIENT_REPOSITORY_HEADER "\n", file) == EOF) {
-        fclose(file);
-        return Result_make_failure("failed to write patient repository header");
-    }
+    len = strlen(PATIENT_REPOSITORY_HEADER);
+    memcpy(content + used, PATIENT_REPOSITORY_HEADER, len);
+    used += len;
+    content[used++] = '\n';
 
     /* 逐个写入患者记录 */
     current = patients->head;
     while (current != 0) {
         result = PatientRepository_format_line((const Patient *)current->data, line, sizeof(line));
         if (result.success == 0) {
-            fclose(file);
+            free(content);
             return result;
         }
 
-        if (fputs(line, file) == EOF || fputc('\n', file) == EOF) {
-            fclose(file);
-            return Result_make_failure("failed to write patient repository line");
+        len = strlen(line);
+        if (used + len + 2 > capacity) {
+            capacity *= 2;
+            content = (char *)realloc(content, capacity);
+            if (content == 0) {
+                return Result_make_failure("failed to grow patient content buffer");
+            }
         }
+        memcpy(content + used, line, len);
+        used += len;
+        content[used++] = '\n';
 
         current = current->next;
     }
 
-    fclose(file);
-    return Result_make_success("patient repository saved");
+    content[used] = '\0';
+    result = TextFileRepository_save_file(&repository->file_repository, content);
+    free(content);
+    return result;
 }
 
 /**

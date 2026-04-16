@@ -144,15 +144,12 @@ static void ExaminationRecordRepository_discard_rest_of_line(FILE *file) {
 
 /** 写入表头（覆盖） */
 static Result ExaminationRecordRepository_write_header(const ExaminationRecordRepository *repository) {
-    FILE *file = fopen(repository->storage.path, "w");
-    if (file == 0) return Result_make_failure("failed to rewrite exam storage");
-
-    if (fputs(EXAMINATION_RECORD_REPOSITORY_HEADER, file) == EOF || fputc('\n', file) == EOF) {
-        fclose(file);
-        return Result_make_failure("failed to write exam header");
+    char content[TEXT_FILE_REPOSITORY_LINE_CAPACITY];
+    int written = snprintf(content, sizeof(content), "%s\n", EXAMINATION_RECORD_REPOSITORY_HEADER);
+    if (written < 0 || (size_t)written >= sizeof(content)) {
+        return Result_make_failure("exam header too long");
     }
-    fclose(file);
-    return Result_make_success("exam header ready");
+    return TextFileRepository_save_file(&repository->storage, content);
 }
 
 /** 将检查记录序列化为文本行 */
@@ -419,38 +416,54 @@ Result ExaminationRecordRepository_save_all(
     const ExaminationRecordRepository *repository, const LinkedList *records
 ) {
     LinkedListNode *current = 0;
-    FILE *file = 0;
     Result result;
 
     if (repository == 0 || records == 0) return Result_make_failure("exam save arguments invalid");
-    result = TextFileRepository_ensure_file_exists(&repository->storage);
-    if (!result.success) return result;
 
-    file = fopen(repository->storage.path, "w");
-    if (file == 0) return Result_make_failure("failed to rewrite exam storage");
-
-    if (fputs(EXAMINATION_RECORD_REPOSITORY_HEADER, file) == EOF || fputc('\n', file) == EOF) {
-        fclose(file);
-        return Result_make_failure("failed to write exam header");
-    }
-
-    current = records->head;
-    while (current != 0) {
+    {
         char line[TEXT_FILE_REPOSITORY_LINE_CAPACITY];
-        result = ExaminationRecordRepository_serialize(
-            (const ExaminationRecord *)current->data, line, sizeof(line)
-        );
-        if (!result.success) { fclose(file); return result; }
+        char *content = 0;
+        size_t capacity = (records->count + 2) * TEXT_FILE_REPOSITORY_LINE_CAPACITY;
+        size_t used = 0;
+        size_t len = 0;
 
-        if (fputs(line, file) == EOF || fputc('\n', file) == EOF) {
-            fclose(file);
-            return Result_make_failure("failed to write exam row");
+        content = (char *)malloc(capacity);
+        if (content == 0) {
+            return Result_make_failure("failed to allocate exam content buffer");
         }
-        current = current->next;
-    }
 
-    fclose(file);
-    return Result_make_success("exam records saved");
+        len = strlen(EXAMINATION_RECORD_REPOSITORY_HEADER);
+        memcpy(content + used, EXAMINATION_RECORD_REPOSITORY_HEADER, len);
+        used += len;
+        content[used++] = '\n';
+
+        current = records->head;
+        while (current != 0) {
+            result = ExaminationRecordRepository_serialize(
+                (const ExaminationRecord *)current->data, line, sizeof(line)
+            );
+            if (!result.success) { free(content); return result; }
+
+            len = strlen(line);
+            if (used + len + 2 > capacity) {
+                capacity *= 2;
+                content = (char *)realloc(content, capacity);
+                if (content == 0) {
+                    return Result_make_failure("failed to grow exam content buffer");
+                }
+            }
+            memcpy(content + used, line, len);
+            used += len;
+            content[used++] = '\n';
+
+            current = current->next;
+        }
+
+        content[used] = '\0';
+        result = TextFileRepository_save_file(&repository->storage, content);
+        free(content);
+        return result;
+    }
 }
 
 /** 清空并释放检查记录链表中的所有元素 */

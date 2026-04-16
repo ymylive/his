@@ -45,20 +45,22 @@ Result AuthService_init(
 /**
  * @brief 注册新用户
  *
- * 验证用户ID、密码和角色的合法性，若角色为患者则检查患者记录是否存在，
+ * 验证用户名、密码和角色的合法性，若角色为患者则检查患者记录是否存在，
  * 然后生成加盐密码哈希并将用户信息追加到存储中。
  *
- * @param service   指向认证服务结构体
- * @param user_id   用户ID（不能为空，不能包含保留字符）
- * @param password  用户密码（不能为空，不能包含保留字符）
- * @param role      用户角色（必须为合法的 UserRole 枚举值）
- * @return Result   操作结果，success=1 表示注册成功
+ * @param service     指向认证服务结构体
+ * @param user_id     用户名（登录账号，不能为空，不能包含保留字符）
+ * @param password    用户密码（不能为空，不能包含保留字符）
+ * @param role        用户角色（必须为合法的 UserRole 枚举值）
+ * @param patient_id  关联的患者编号（仅患者角色需要，其他角色可传 NULL 或空字符串）
+ * @return Result     操作结果，success=1 表示注册成功
  */
 Result AuthService_register_user(
     AuthService *service,
     const char *user_id,
     const char *password,
-    UserRole role
+    UserRole role,
+    const char *patient_id
 );
 
 /**
@@ -80,6 +82,25 @@ Result AuthService_authenticate(
     const char *password,
     UserRole required_role,
     User *out_user
+);
+
+/**
+ * @brief 修改用户密码
+ *
+ * 验证旧密码后，使用新密码重新生成加盐哈希并更新存储。
+ * 同时将 force_password_change 标志清零。
+ *
+ * @param service       指向认证服务结构体
+ * @param user_id       用户ID
+ * @param old_password  当前密码（用于身份验证）
+ * @param new_password  新密码
+ * @return Result       操作结果，success=1 表示修改成功
+ */
+Result AuthService_change_password(
+    AuthService *service,
+    const char *user_id,
+    const char *old_password,
+    const char *new_password
 );
 
 #endif

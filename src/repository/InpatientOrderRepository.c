@@ -348,40 +348,55 @@ Result InpatientOrderRepository_save_all(
     const InpatientOrderRepository *repository, const LinkedList *orders
 ) {
     const LinkedListNode *current = 0;
-    FILE *file = 0;
     Result result;
 
     if (repository == 0 || orders == 0) return Result_make_failure("order save arguments missing");
     if (!InpatientOrderRepository_validate_list(orders)) return Result_make_failure("order list invalid");
 
-    result = TextFileRepository_ensure_file_exists(&repository->storage);
-    if (result.success == 0) return result;
-
-    file = fopen(repository->storage.path, "w");
-    if (file == 0) return Result_make_failure("failed to rewrite order repository");
-
-    if (fprintf(file, "%s\n", INPATIENT_ORDER_REPOSITORY_HEADER) < 0) {
-        fclose(file);
-        return Result_make_failure("failed to write order header");
-    }
-
-    current = orders->head;
-    while (current != 0) {
+    {
         char line[TEXT_FILE_REPOSITORY_LINE_CAPACITY];
-        result = InpatientOrderRepository_format_line(
-            (const InpatientOrder *)current->data, line, sizeof(line)
-        );
-        if (result.success == 0) { fclose(file); return result; }
+        char *content = 0;
+        size_t capacity = (orders->count + 2) * TEXT_FILE_REPOSITORY_LINE_CAPACITY;
+        size_t used = 0;
+        size_t len = 0;
 
-        if (fprintf(file, "%s\n", line) < 0) {
-            fclose(file);
-            return Result_make_failure("failed to write order line");
+        content = (char *)malloc(capacity);
+        if (content == 0) {
+            return Result_make_failure("failed to allocate order content buffer");
         }
-        current = current->next;
-    }
 
-    fclose(file);
-    return Result_make_success("orders saved");
+        len = strlen(INPATIENT_ORDER_REPOSITORY_HEADER);
+        memcpy(content + used, INPATIENT_ORDER_REPOSITORY_HEADER, len);
+        used += len;
+        content[used++] = '\n';
+
+        current = orders->head;
+        while (current != 0) {
+            result = InpatientOrderRepository_format_line(
+                (const InpatientOrder *)current->data, line, sizeof(line)
+            );
+            if (result.success == 0) { free(content); return result; }
+
+            len = strlen(line);
+            if (used + len + 2 > capacity) {
+                capacity *= 2;
+                content = (char *)realloc(content, capacity);
+                if (content == 0) {
+                    return Result_make_failure("failed to grow order content buffer");
+                }
+            }
+            memcpy(content + used, line, len);
+            used += len;
+            content[used++] = '\n';
+
+            current = current->next;
+        }
+
+        content[used] = '\0';
+        result = TextFileRepository_save_file(&repository->storage, content);
+        free(content);
+        return result;
+    }
 }
 
 /** 清空并释放住院医嘱链表中的所有元素 */

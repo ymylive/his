@@ -10,6 +10,7 @@
 #include "service/PharmacyService.h"
 
 #include <ctype.h>
+#include <limits.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -19,13 +20,14 @@
 #include "repository/RepositoryUtils.h"
 
 /**
- * @brief 发药记录计数上下文结构体
+ * @brief 发药记录最大序列号上下文结构体
  *
- * 用于在逐行遍历回调中计数发药记录行数，以生成下一个发药ID。
+ * 用于在逐行遍历回调中解析发药记录ID并跟踪最大序列号，
+ * 以生成下一个发药ID。
  */
-typedef struct PharmacyServiceDispenseCountContext {
-    int count;  /* 当前已有的发药记录数量 */
-} PharmacyServiceDispenseCountContext;
+typedef struct PharmacyServiceDispenseMaxSeqContext {
+    int max_sequence;  /* 当前已有的最大发药记录序列号 */
+} PharmacyServiceDispenseMaxSeqContext;
 
 
 /**
@@ -224,26 +226,58 @@ static Result PharmacyService_append_medicine_copy(
 }
 
 /**
- * @brief 逐行计数回调：统计发药记录行数
+ * @brief 逐行解析回调：提取发药记录ID并跟踪最大序列号
  *
  * 作为 TextFileRepository_for_each_data_line 的回调函数，
- * 每遍历一行有效数据，计数器加1。
+ * 从每行数据中解析第一个 '|' 分隔字段（发药ID），提取 "DSP" 前缀后的
+ * 数字序列号，并记录遍历过程中遇到的最大值。
  *
- * @param line     数据行文本（未使用）
- * @param context  计数上下文指针
+ * @param line     数据行文本
+ * @param context  最大序列号上下文指针
  * @return Result  操作结果
  */
-static Result PharmacyService_count_dispense_line(const char *line, void *context) {
-    PharmacyServiceDispenseCountContext *count_context =
-        (PharmacyServiceDispenseCountContext *)context;
+static Result PharmacyService_parse_dispense_max_seq(const char *line, void *context) {
+    PharmacyServiceDispenseMaxSeqContext *seq_context =
+        (PharmacyServiceDispenseMaxSeqContext *)context;
+    const char *separator = 0;
+    const char *suffix = 0;
+    char *end = 0;
+    long value = 0;
+    size_t prefix_len = 3;  /* strlen("DSP") */
 
-    (void)line;  /* 显式忽略未使用的参数 */
-    if (count_context == 0) {
-        return Result_make_failure("dispense count context missing");
+    if (seq_context == 0) {
+        return Result_make_failure("dispense sequence context missing");
     }
 
-    count_context->count++;
-    return Result_make_success("dispense counted");
+    if (line == 0 || line[0] == '\0') {
+        return Result_make_success("dispense line skipped");
+    }
+
+    /* 找到第一个 '|' 分隔符以界定 ID 字段 */
+    separator = strchr(line, '|');
+    if (separator == 0) {
+        return Result_make_success("dispense line skipped");
+    }
+
+    /* 验证 "DSP" 前缀 */
+    if ((size_t)(separator - line) <= prefix_len ||
+        strncmp(line, "DSP", prefix_len) != 0) {
+        return Result_make_success("dispense line skipped");
+    }
+
+    /* 提取前缀后的数字部分 */
+    suffix = line + prefix_len;
+    value = strtol(suffix, &end, 10);
+    if (end != separator || value < 0) {
+        return Result_make_success("dispense line skipped");
+    }
+
+    /* 记录最大序列号 */
+    if ((int)value > seq_context->max_sequence) {
+        seq_context->max_sequence = (int)value;
+    }
+
+    return Result_make_success("dispense sequence parsed");
 }
 
 /**
@@ -262,7 +296,7 @@ static Result PharmacyService_generate_dispense_id(
     char *buffer,
     size_t buffer_size
 ) {
-    PharmacyServiceDispenseCountContext context;
+    PharmacyServiceDispenseMaxSeqContext context;
     Result result;
 
     if (service == 0 || buffer == 0 || buffer_size == 0) {
@@ -275,11 +309,11 @@ static Result PharmacyService_generate_dispense_id(
         return result;
     }
 
-    /* 统计已有记录行数 */
-    context.count = 0;
+    /* 解析已有记录中的最大序列号 */
+    context.max_sequence = 0;
     result = TextFileRepository_for_each_data_line(
         &service->dispense_record_repository.storage,
-        PharmacyService_count_dispense_line,
+        PharmacyService_parse_dispense_max_seq,
         &context
     );
     if (result.success == 0) {
@@ -287,7 +321,7 @@ static Result PharmacyService_generate_dispense_id(
     }
 
     /* 生成格式化的发药ID */
-    if (!IdGenerator_format(buffer, buffer_size, "DSP", context.count + 1, 6)) {
+    if (!IdGenerator_format(buffer, buffer_size, "DSP", context.max_sequence + 1, 6)) {
         return Result_make_failure("failed to generate dispense id");
     }
 
@@ -471,6 +505,12 @@ Result PharmacyService_restock_medicine(
     if (medicine == 0) {
         MedicineRepository_clear_list(&medicines);
         return Result_make_failure("medicine not found");
+    }
+
+    /* 检查库存溢出 */
+    if (medicine->stock > INT_MAX - quantity) {
+        MedicineRepository_clear_list(&medicines);
+        return Result_make_failure("stock overflow: quantity too large");
     }
 
     /* 增加库存并保存全量数据 */

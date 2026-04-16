@@ -367,7 +367,6 @@ Result MedicineRepository_save(MedicineRepository *repository, const Medicine *m
 /** 全量保存药品列表到文件（覆盖写入） */
 Result MedicineRepository_save_all(MedicineRepository *repository, const LinkedList *medicines) {
     LinkedListNode *current = 0;
-    FILE *file = 0;
     Result result;
 
     if (repository == 0 || medicines == 0) {
@@ -377,34 +376,50 @@ Result MedicineRepository_save_all(MedicineRepository *repository, const LinkedL
         return Result_make_failure("medicine list contains invalid item");
     }
 
-    result = TextFileRepository_ensure_file_exists(&repository->storage);
-    if (result.success == 0) return result;
-
-    file = fopen(repository->storage.path, "w");
-    if (file == 0) return Result_make_failure("failed to rewrite medicine repository");
-
-    if (fprintf(file, "%s\n", MEDICINE_REPOSITORY_HEADER) < 0) {
-        fclose(file);
-        return Result_make_failure("failed to write medicine header");
-    }
-
-    current = medicines->head;
-    while (current != 0) {
+    {
         char line[TEXT_FILE_REPOSITORY_LINE_CAPACITY];
-        result = MedicineRepository_format_line(
-            (const Medicine *)current->data, line, sizeof(line)
-        );
-        if (result.success == 0) { fclose(file); return result; }
+        char *content = 0;
+        size_t capacity = (medicines->count + 2) * TEXT_FILE_REPOSITORY_LINE_CAPACITY;
+        size_t used = 0;
+        size_t len = 0;
 
-        if (fprintf(file, "%s\n", line) < 0) {
-            fclose(file);
-            return Result_make_failure("failed to write medicine line");
+        content = (char *)malloc(capacity);
+        if (content == 0) {
+            return Result_make_failure("failed to allocate medicine content buffer");
         }
-        current = current->next;
-    }
 
-    fclose(file);
-    return Result_make_success("medicines saved");
+        len = strlen(MEDICINE_REPOSITORY_HEADER);
+        memcpy(content + used, MEDICINE_REPOSITORY_HEADER, len);
+        used += len;
+        content[used++] = '\n';
+
+        current = medicines->head;
+        while (current != 0) {
+            result = MedicineRepository_format_line(
+                (const Medicine *)current->data, line, sizeof(line)
+            );
+            if (result.success == 0) { free(content); return result; }
+
+            len = strlen(line);
+            if (used + len + 2 > capacity) {
+                capacity *= 2;
+                content = (char *)realloc(content, capacity);
+                if (content == 0) {
+                    return Result_make_failure("failed to grow medicine content buffer");
+                }
+            }
+            memcpy(content + used, line, len);
+            used += len;
+            content[used++] = '\n';
+
+            current = current->next;
+        }
+
+        content[used] = '\0';
+        result = TextFileRepository_save_file(&repository->storage, content);
+        free(content);
+        return result;
+    }
 }
 
 /** 清空并释放药品链表中的所有元素 */

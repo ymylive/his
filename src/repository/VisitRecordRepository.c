@@ -146,15 +146,12 @@ static void VisitRecordRepository_discard_rest_of_line(FILE *file) {
 
 /** 向文件写入就诊记录表头（覆盖写入） */
 static Result VisitRecordRepository_write_header(const VisitRecordRepository *repository) {
-    FILE *file = fopen(repository->storage.path, "w");
-    if (file == 0) return Result_make_failure("failed to rewrite visit storage");
-
-    if (fputs(VISIT_RECORD_REPOSITORY_HEADER, file) == EOF || fputc('\n', file) == EOF) {
-        fclose(file);
-        return Result_make_failure("failed to write visit header");
+    char content[TEXT_FILE_REPOSITORY_LINE_CAPACITY];
+    int written = snprintf(content, sizeof(content), "%s\n", VISIT_RECORD_REPOSITORY_HEADER);
+    if (written < 0 || (size_t)written >= sizeof(content)) {
+        return Result_make_failure("visit header too long");
     }
-    fclose(file);
-    return Result_make_success("visit header ready");
+    return TextFileRepository_save_file(&repository->storage, content);
 }
 
 /** 将就诊记录序列化为管道符分隔的文本行 */
@@ -434,39 +431,54 @@ Result VisitRecordRepository_save_all(
     const VisitRecordRepository *repository, const LinkedList *records
 ) {
     LinkedListNode *current = 0;
-    FILE *file = 0;
     Result result;
 
     if (repository == 0 || records == 0) {
         return Result_make_failure("visit save arguments invalid");
     }
 
-    result = TextFileRepository_ensure_file_exists(&repository->storage);
-    if (!result.success) return result;
-
-    file = fopen(repository->storage.path, "w");
-    if (file == 0) return Result_make_failure("failed to rewrite visit storage");
-
-    if (fputs(VISIT_RECORD_REPOSITORY_HEADER, file) == EOF || fputc('\n', file) == EOF) {
-        fclose(file);
-        return Result_make_failure("failed to write visit header");
-    }
-
-    current = records->head;
-    while (current != 0) {
+    {
         char line[TEXT_FILE_REPOSITORY_LINE_CAPACITY];
-        result = VisitRecordRepository_serialize((const VisitRecord *)current->data, line, sizeof(line));
-        if (!result.success) { fclose(file); return result; }
+        char *content = 0;
+        size_t capacity = (records->count + 2) * TEXT_FILE_REPOSITORY_LINE_CAPACITY;
+        size_t used = 0;
+        size_t len = 0;
 
-        if (fputs(line, file) == EOF || fputc('\n', file) == EOF) {
-            fclose(file);
-            return Result_make_failure("failed to write visit row");
+        content = (char *)malloc(capacity);
+        if (content == 0) {
+            return Result_make_failure("failed to allocate visit content buffer");
         }
-        current = current->next;
-    }
 
-    fclose(file);
-    return Result_make_success("visit records saved");
+        len = strlen(VISIT_RECORD_REPOSITORY_HEADER);
+        memcpy(content + used, VISIT_RECORD_REPOSITORY_HEADER, len);
+        used += len;
+        content[used++] = '\n';
+
+        current = records->head;
+        while (current != 0) {
+            result = VisitRecordRepository_serialize((const VisitRecord *)current->data, line, sizeof(line));
+            if (!result.success) { free(content); return result; }
+
+            len = strlen(line);
+            if (used + len + 2 > capacity) {
+                capacity *= 2;
+                content = (char *)realloc(content, capacity);
+                if (content == 0) {
+                    return Result_make_failure("failed to grow visit content buffer");
+                }
+            }
+            memcpy(content + used, line, len);
+            used += len;
+            content[used++] = '\n';
+
+            current = current->next;
+        }
+
+        content[used] = '\0';
+        result = TextFileRepository_save_file(&repository->storage, content);
+        free(content);
+        return result;
+    }
 }
 
 /** 清空并释放就诊记录链表中的所有元素 */

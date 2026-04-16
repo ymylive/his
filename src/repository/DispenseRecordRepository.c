@@ -158,15 +158,12 @@ static void DispenseRecordRepository_discard_rest_of_line(FILE *file) {
 
 /** 写入表头（覆盖） */
 static Result DispenseRecordRepository_write_header(const DispenseRecordRepository *repository) {
-    FILE *file = fopen(repository->storage.path, "w");
-    if (file == 0) return Result_make_failure("failed to rewrite dispense storage");
-
-    if (fputs(DISPENSE_RECORD_REPOSITORY_HEADER, file) == EOF || fputc('\n', file) == EOF) {
-        fclose(file);
-        return Result_make_failure("failed to write dispense header");
+    char content[TEXT_FILE_REPOSITORY_LINE_CAPACITY];
+    int written = snprintf(content, sizeof(content), "%s\n", DISPENSE_RECORD_REPOSITORY_HEADER);
+    if (written < 0 || (size_t)written >= sizeof(content)) {
+        return Result_make_failure("dispense header too long");
     }
-    fclose(file);
-    return Result_make_success("dispense header ready");
+    return TextFileRepository_save_file(&repository->storage, content);
 }
 
 /** 将发药记录序列化为文本行 */
@@ -459,38 +456,54 @@ Result DispenseRecordRepository_save_all(
     const DispenseRecordRepository *repository, const LinkedList *records
 ) {
     LinkedListNode *current = 0;
-    FILE *file = 0;
     Result result;
 
     if (repository == 0 || records == 0) return Result_make_failure("dispense save arguments invalid");
-    result = TextFileRepository_ensure_file_exists(&repository->storage);
-    if (!result.success) return result;
 
-    file = fopen(repository->storage.path, "w");
-    if (file == 0) return Result_make_failure("failed to rewrite dispense storage");
-
-    if (fputs(DISPENSE_RECORD_REPOSITORY_HEADER, file) == EOF || fputc('\n', file) == EOF) {
-        fclose(file);
-        return Result_make_failure("failed to write dispense header");
-    }
-
-    current = records->head;
-    while (current != 0) {
+    {
         char line[TEXT_FILE_REPOSITORY_LINE_CAPACITY];
-        result = DispenseRecordRepository_serialize(
-            (const DispenseRecord *)current->data, line, sizeof(line)
-        );
-        if (!result.success) { fclose(file); return result; }
+        char *content = 0;
+        size_t capacity = (records->count + 2) * TEXT_FILE_REPOSITORY_LINE_CAPACITY;
+        size_t used = 0;
+        size_t len = 0;
 
-        if (fputs(line, file) == EOF || fputc('\n', file) == EOF) {
-            fclose(file);
-            return Result_make_failure("failed to write dispense row");
+        content = (char *)malloc(capacity);
+        if (content == 0) {
+            return Result_make_failure("failed to allocate dispense content buffer");
         }
-        current = current->next;
-    }
 
-    fclose(file);
-    return Result_make_success("dispense records saved");
+        len = strlen(DISPENSE_RECORD_REPOSITORY_HEADER);
+        memcpy(content + used, DISPENSE_RECORD_REPOSITORY_HEADER, len);
+        used += len;
+        content[used++] = '\n';
+
+        current = records->head;
+        while (current != 0) {
+            result = DispenseRecordRepository_serialize(
+                (const DispenseRecord *)current->data, line, sizeof(line)
+            );
+            if (!result.success) { free(content); return result; }
+
+            len = strlen(line);
+            if (used + len + 2 > capacity) {
+                capacity *= 2;
+                content = (char *)realloc(content, capacity);
+                if (content == 0) {
+                    return Result_make_failure("failed to grow dispense content buffer");
+                }
+            }
+            memcpy(content + used, line, len);
+            used += len;
+            content[used++] = '\n';
+
+            current = current->next;
+        }
+
+        content[used] = '\0';
+        result = TextFileRepository_save_file(&repository->storage, content);
+        free(content);
+        return result;
+    }
 }
 
 /** 清空并释放发药记录链表中的所有元素 */
