@@ -270,7 +270,7 @@ static int http_fetch_to_buffer(const char *url, char *buf, size_t bufsz, size_t
     SetHandleInformation(rd, HANDLE_FLAG_INHERIT, 0);
 
     snprintf(cmdline, sizeof(cmdline),
-        "curl -s -m 10 --proto =https --tlsv1.2 "
+        "curl -sL -m 10 --proto =https --tlsv1.2 "
         "-H \"Accept: application/vnd.github.v3+json\" "
         "-H \"User-Agent: his-updater\" \"%s\"", url);
 
@@ -328,7 +328,7 @@ static int http_fetch_to_buffer(const char *url, char *buf, size_t bufsz, size_t
         }
         {
             const char *argv[] = {
-                "curl", "-s", "-m", "10",
+                "curl", "-sL", "-m", "10",
                 "--proto", "=https", "--tlsv1.2",
                 "-H", "Accept: application/vnd.github.v3+json",
                 "-H", "User-Agent: his-updater",

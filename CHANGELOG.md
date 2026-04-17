@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## [7.2.1] - 2026-04-17
+
+### Fixed
+
+- **自动更新校验失败 "未找到 SHA256SUMS"** — `http_fetch_to_buffer` 的 curl 漏加 `-L`，GitHub Release 资源 302 重定向到 `objects.githubusercontent.com` 时拿到 0 字节，触发"未找到发布者签署的 SHA256SUMS"错误；Windows / POSIX 两条分支同时修复
+
 ## [7.2.0] - 2026-04-16
 
 ### Added
