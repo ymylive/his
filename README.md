@@ -40,6 +40,22 @@ curl -fsSL https://raw.githubusercontent.com/ymylive/his/main/install.sh | bash 
 
 > install.sh 自动识别 macOS / Linux，无需区分。
 
+### 一键升级
+
+如果程序内置的"检查更新"失败（例如 v7.2.0 存在 SHA256SUMS 302 重定向问题），可以直接运行独立更新脚本：
+
+**macOS / Linux**
+```bash
+curl -fsSL https://raw.githubusercontent.com/ymylive/his/main/scripts/update.sh | bash
+```
+
+**Windows PowerShell**
+```powershell
+irm https://raw.githubusercontent.com/ymylive/his/main/scripts/update.ps1 | iex
+```
+
+脚本会自动识别平台、下载最新 release、校验 SHA256、备份旧二进制（`his.bak.<timestamp>`）后替换。可以用 `--tag vX.Y.Z` / `--target /path/to/his` 指定版本和路径。
+
 ### 手动安装
 
 从 [最新 Release](https://github.com/ymylive/his/releases/latest) 下载对应平台的 zip 包：
