@@ -48,39 +48,6 @@ typedef struct DoctorRepositoryFilterContext {
 } DoctorRepositoryFilterContext;
 
 /**
- * @brief 判断文本是否非空
- * @param text 待检查的文本
- * @return 1 表示非空，0 表示空指针或空字符串
- */
-static int DoctorRepository_has_text(const char *text) {
-    return text != 0 && text[0] != '\0';
-}
-
-/**
- * @brief 安全复制字符串到目标缓冲区
- * @param destination 目标缓冲区
- * @param capacity    目标缓冲区容量
- * @param source      源字符串（可为 NULL）
- */
-static void DoctorRepository_copy_string(
-    char *destination,
-    size_t capacity,
-    const char *source
-) {
-    if (destination == 0 || capacity == 0) {
-        return;
-    }
-
-    if (source == 0) {
-        destination[0] = '\0';
-        return;
-    }
-
-    strncpy(destination, source, capacity - 1);
-    destination[capacity - 1] = '\0'; /* 确保终止符 */
-}
-
-/**
  * @brief 校验医生数据的合法性
  *
  * 检查必填字段、状态枚举值域、保留字符等。
@@ -93,15 +60,15 @@ static Result DoctorRepository_validate(const Doctor *doctor) {
         return Result_make_failure("doctor missing");
     }
 
-    if (!DoctorRepository_has_text(doctor->doctor_id)) {
+    if (!RepositoryUtils_has_text(doctor->doctor_id)) {
         return Result_make_failure("doctor id missing");
     }
 
-    if (!DoctorRepository_has_text(doctor->name)) {
+    if (!RepositoryUtils_has_text(doctor->name)) {
         return Result_make_failure("doctor name missing");
     }
 
-    if (!DoctorRepository_has_text(doctor->department_id)) {
+    if (!RepositoryUtils_has_text(doctor->department_id)) {
         return Result_make_failure("doctor department missing");
     }
 
@@ -212,7 +179,7 @@ static Result DoctorRepository_parse_line(const char *line, Doctor *doctor) {
     }
 
     /* 复制到可修改缓冲区 */
-    DoctorRepository_copy_string(mutable_line, sizeof(mutable_line), line);
+    RepositoryUtils_copy_text(mutable_line, sizeof(mutable_line), line);
     result = RepositoryUtils_split_pipe_line(
         mutable_line,
         fields,
@@ -233,11 +200,11 @@ static Result DoctorRepository_parse_line(const char *line, Doctor *doctor) {
 
     /* 逐字段解析 */
     memset(doctor, 0, sizeof(*doctor));
-    DoctorRepository_copy_string(doctor->doctor_id, sizeof(doctor->doctor_id), fields[0]);
-    DoctorRepository_copy_string(doctor->name, sizeof(doctor->name), fields[1]);
-    DoctorRepository_copy_string(doctor->title, sizeof(doctor->title), fields[2]);
-    DoctorRepository_copy_string(doctor->department_id, sizeof(doctor->department_id), fields[3]);
-    DoctorRepository_copy_string(doctor->schedule, sizeof(doctor->schedule), fields[4]);
+    RepositoryUtils_copy_text(doctor->doctor_id, sizeof(doctor->doctor_id), fields[0]);
+    RepositoryUtils_copy_text(doctor->name, sizeof(doctor->name), fields[1]);
+    RepositoryUtils_copy_text(doctor->title, sizeof(doctor->title), fields[2]);
+    RepositoryUtils_copy_text(doctor->department_id, sizeof(doctor->department_id), fields[3]);
+    RepositoryUtils_copy_text(doctor->schedule, sizeof(doctor->schedule), fields[4]);
 
     /* 解析状态字段 */
     result = DoctorRepository_parse_status(fields[5], &doctor->status);
@@ -516,7 +483,7 @@ Result DoctorRepository_find_by_doctor_id(
     DoctorRepositoryFindContext context;
     Result result;
 
-    if (!DoctorRepository_has_text(doctor_id) || out_doctor == 0) {
+    if (!RepositoryUtils_has_text(doctor_id) || out_doctor == 0) {
         return Result_make_failure("doctor query arguments missing");
     }
 
@@ -562,7 +529,7 @@ Result DoctorRepository_find_by_department_id(
     DoctorRepositoryFilterContext context;
     Result result;
 
-    if (!DoctorRepository_has_text(department_id) || out_doctors == 0) {
+    if (!RepositoryUtils_has_text(department_id) || out_doctors == 0) {
         return Result_make_failure("doctor filter arguments missing");
     }
 

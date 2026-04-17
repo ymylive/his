@@ -76,30 +76,6 @@ static Result UserRepository_validate_user(const User *user) {
 }
 
 /**
- * @brief 解析整数字段（带溢出检查）
- * @param text      待解析的文本
- * @param out_value 输出参数，解析得到的整数值
- * @return 成功返回 success；格式不合法或溢出时返回 failure
- */
-static Result UserRepository_parse_int(const char *text, int *out_value) {
-    char *end = 0;
-    long value = 0;
-
-    if (text == 0 || out_value == 0 || text[0] == '\0') {
-        return Result_make_failure("integer field missing");
-    }
-
-    errno = 0;
-    value = strtol(text, &end, 10);
-    if (errno != 0 || end == text || *end != '\0' || value < INT_MIN || value > INT_MAX) {
-        return Result_make_failure("integer field invalid");
-    }
-
-    *out_value = (int)value;
-    return Result_make_success("integer field parsed");
-}
-
-/**
  * @brief 解析 long 字段（用于 Unix 时间戳）
  */
 static Result UserRepository_parse_long(const char *text, long *out_value) {
@@ -177,7 +153,7 @@ static Result UserRepository_parse_line(const char *line, User *out_user) {
     out_user->password_hash[sizeof(out_user->password_hash) - 1] = '\0';
 
     /* 解析角色字段 */
-    result = UserRepository_parse_int(fields[2], &parsed_role);
+    result = RepositoryUtils_parse_int(fields[2], &parsed_role, "user role");
     if (result.success == 0) {
         return result;
     }
@@ -191,7 +167,7 @@ static Result UserRepository_parse_line(const char *line, User *out_user) {
     /* V2+ 字段：force_password_change（旧数据默认为 0） */
     if (field_count >= USER_REPOSITORY_FIELD_COUNT_V2) {
         int parsed_flag = 0;
-        result = UserRepository_parse_int(fields[4], &parsed_flag);
+        result = RepositoryUtils_parse_int(fields[4], &parsed_flag, "user force_password_change");
         if (result.success == 0) {
             return result;
         }
@@ -204,7 +180,7 @@ static Result UserRepository_parse_line(const char *line, User *out_user) {
     if (field_count == USER_REPOSITORY_FIELD_COUNT) {
         int parsed_failed = 0;
         long parsed_locked = 0;
-        result = UserRepository_parse_int(fields[5], &parsed_failed);
+        result = RepositoryUtils_parse_int(fields[5], &parsed_failed, "user failed_count");
         if (result.success == 0) {
             return result;
         }

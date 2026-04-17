@@ -280,6 +280,38 @@ target_link_libraries(test_audit_service PRIVATE his_common)
 
 add_test(NAME test_audit_service COMMAND test_audit_service)
 
+add_executable(test_prescription_service
+    tests/test_prescription_service.c
+)
+
+target_link_libraries(test_prescription_service PRIVATE his_common)
+
+add_test(NAME test_prescription_service COMMAND test_prescription_service)
+
+add_executable(test_inpatient_order_service
+    tests/test_inpatient_order_service.c
+)
+
+target_link_libraries(test_inpatient_order_service PRIVATE his_common)
+
+add_test(NAME test_inpatient_order_service COMMAND test_inpatient_order_service)
+
+add_executable(test_nursing_record_service
+    tests/test_nursing_record_service.c
+)
+
+target_link_libraries(test_nursing_record_service PRIVATE his_common)
+
+add_test(NAME test_nursing_record_service COMMAND test_nursing_record_service)
+
+add_executable(test_round_record_service
+    tests/test_round_record_service.c
+)
+
+target_link_libraries(test_round_record_service PRIVATE his_common)
+
+add_test(NAME test_round_record_service COMMAND test_round_record_service)
+
 set(HIS_TEST_TARGETS
     test_result
     test_common
@@ -305,6 +337,10 @@ set(HIS_TEST_TARGETS
     test_ward
     test_admission
     test_audit_service
+    test_prescription_service
+    test_inpatient_order_service
+    test_nursing_record_service
+    test_round_record_service
 )
 
 foreach(test_target IN LISTS HIS_TEST_TARGETS)

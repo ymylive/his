@@ -11,8 +11,6 @@
 
 #include "repository/PatientRepository.h"
 
-#include <errno.h>
-#include <limits.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -82,31 +80,6 @@ static Result PatientRepository_validate_patient(const Patient *patient) {
     }
 
     return Result_make_success("patient valid");
-}
-
-/**
- * @brief 将文本解析为整数
- * @param text      待解析的文本
- * @param out_value 输出参数，解析得到的整数值
- * @return 成功返回 success；格式不合法时返回 failure
- */
-static Result PatientRepository_parse_int(const char *text, int *out_value) {
-    char *end = 0;
-    long value = 0;
-
-    if (text == 0 || out_value == 0 || text[0] == '\0') {
-        return Result_make_failure("integer field missing");
-    }
-
-    errno = 0;
-    value = strtol(text, &end, 10);
-    /* 检查转换错误、未完整转换、溢出等情况 */
-    if (errno != 0 || end == text || *end != '\0' || value < INT_MIN || value > INT_MAX) {
-        return Result_make_failure("integer field invalid");
-    }
-
-    *out_value = (int)value;
-    return Result_make_success("integer field parsed");
 }
 
 /**
@@ -206,14 +179,14 @@ static Result PatientRepository_parse_line(const char *line, Patient *out_patien
     }
 
     /* 字段2: gender（整数枚举） */
-    result = PatientRepository_parse_int(fields[2], &parsed_value);
+    result = RepositoryUtils_parse_int(fields[2], &parsed_value, "patient gender");
     if (result.success == 0) {
         return result;
     }
     out_patient->gender = (PatientGender)parsed_value;
 
     /* 字段3: age */
-    result = PatientRepository_parse_int(fields[3], &parsed_value);
+    result = RepositoryUtils_parse_int(fields[3], &parsed_value, "patient age");
     if (result.success == 0) {
         return result;
     }
@@ -260,7 +233,7 @@ static Result PatientRepository_parse_line(const char *line, Patient *out_patien
     }
 
     /* 字段8: is_inpatient（住院标志） */
-    result = PatientRepository_parse_int(fields[8], &parsed_value);
+    result = RepositoryUtils_parse_int(fields[8], &parsed_value, "patient is_inpatient");
     if (result.success == 0) {
         return result;
     }

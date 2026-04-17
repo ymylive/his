@@ -47,23 +47,6 @@ static int RegistrationRepository_is_empty_text(const char *text) {
 }
 
 /**
- * @brief 安全复制字符串
- */
-static void RegistrationRepository_copy_text(char *destination, size_t capacity, const char *source) {
-    if (destination == 0 || capacity == 0) {
-        return;
-    }
-
-    if (source == 0) {
-        destination[0] = '\0';
-        return;
-    }
-
-    strncpy(destination, source, capacity - 1);
-    destination[capacity - 1] = '\0';
-}
-
-/**
  * @brief 生成字段校验失败消息
  * @param field_name 字段名称
  * @param suffix     错误后缀描述
@@ -413,19 +396,19 @@ static Result RegistrationRepository_parse_line(const char *line, Registration *
 
     /* 逐字段解析 */
     memset(out_registration, 0, sizeof(*out_registration));
-    RegistrationRepository_copy_text(
+    RepositoryUtils_copy_text(
         out_registration->registration_id, sizeof(out_registration->registration_id), fields[0]
     );
-    RegistrationRepository_copy_text(
+    RepositoryUtils_copy_text(
         out_registration->patient_id, sizeof(out_registration->patient_id), fields[1]
     );
-    RegistrationRepository_copy_text(
+    RepositoryUtils_copy_text(
         out_registration->doctor_id, sizeof(out_registration->doctor_id), fields[2]
     );
-    RegistrationRepository_copy_text(
+    RepositoryUtils_copy_text(
         out_registration->department_id, sizeof(out_registration->department_id), fields[3]
     );
-    RegistrationRepository_copy_text(
+    RepositoryUtils_copy_text(
         out_registration->registered_at, sizeof(out_registration->registered_at), fields[4]
     );
 
@@ -435,10 +418,10 @@ static Result RegistrationRepository_parse_line(const char *line, Registration *
         return result;
     }
 
-    RegistrationRepository_copy_text(
+    RepositoryUtils_copy_text(
         out_registration->diagnosed_at, sizeof(out_registration->diagnosed_at), fields[6]
     );
-    RegistrationRepository_copy_text(
+    RepositoryUtils_copy_text(
         out_registration->cancelled_at, sizeof(out_registration->cancelled_at), fields[7]
     );
 

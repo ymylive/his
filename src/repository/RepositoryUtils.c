@@ -9,7 +9,11 @@
 #include "repository/RepositoryUtils.h"
 
 #include <ctype.h>
+#include <errno.h>
+#include <limits.h>
 #include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 
 /**
  * @brief 判断文本是否为非空字符串
@@ -18,6 +22,87 @@
  */
 int RepositoryUtils_has_text(const char *text) {
     return text != 0 && text[0] != '\0';
+}
+
+/**
+ * @brief 安全复制字符串到目标缓冲区
+ *
+ * 始终保证目标以 '\0' 结尾。source 为空指针时目标写入空字符串。
+ */
+void RepositoryUtils_copy_text(char *destination, size_t capacity, const char *source) {
+    if (destination == 0 || capacity == 0) {
+        return;
+    }
+    if (source == 0) {
+        destination[0] = '\0';
+        return;
+    }
+    strncpy(destination, source, capacity - 1);
+    destination[capacity - 1] = '\0';
+}
+
+/**
+ * @brief 将文本解析为整数（严格模式）
+ *
+ * 要求文本整体就是一个可转换的整数，不允许前后有额外字符。
+ * 同时检查 INT 溢出。错误消息以 field_name 作前缀，便于定位。
+ */
+Result RepositoryUtils_parse_int(const char *text, int *out_value, const char *field_name) {
+    char message[RESULT_MESSAGE_CAPACITY];
+    const char *name = (field_name != 0 && field_name[0] != '\0') ? field_name : "integer field";
+    char *end_pointer = 0;
+    long value = 0;
+
+    if (text == 0 || out_value == 0 || text[0] == '\0') {
+        snprintf(message, sizeof(message), "%s must be integer", name);
+        return Result_make_failure(message);
+    }
+
+    errno = 0;
+    value = strtol(text, &end_pointer, 10);
+    if (end_pointer == text || end_pointer == 0 || *end_pointer != '\0') {
+        snprintf(message, sizeof(message), "%s must be integer", name);
+        return Result_make_failure(message);
+    }
+    if (errno == ERANGE || value < INT_MIN || value > INT_MAX) {
+        snprintf(message, sizeof(message), "%s is out of range", name);
+        return Result_make_failure(message);
+    }
+
+    *out_value = (int)value;
+    return Result_make_success("integer parsed");
+}
+
+/**
+ * @brief 将文本解析为双精度浮点数（严格模式）
+ *
+ * 要求文本整体就是一个可转换的浮点数，不允许前后有额外字符。
+ * 错误消息以 field_name 作前缀，便于定位。
+ */
+Result RepositoryUtils_parse_double(const char *text, double *out_value, const char *field_name) {
+    char message[RESULT_MESSAGE_CAPACITY];
+    const char *name = (field_name != 0 && field_name[0] != '\0') ? field_name : "number field";
+    char *end_pointer = 0;
+    double value = 0.0;
+
+    if (text == 0 || out_value == 0 || text[0] == '\0') {
+        snprintf(message, sizeof(message), "%s must be number", name);
+        return Result_make_failure(message);
+    }
+
+    errno = 0;
+    value = strtod(text, &end_pointer);
+    if (end_pointer == text || end_pointer == 0 || *end_pointer != '\0') {
+        snprintf(message, sizeof(message), "%s must be number", name);
+        return Result_make_failure(message);
+    }
+    if (errno == ERANGE) {
+        snprintf(message, sizeof(message), "%s is out of range", name);
+        return Result_make_failure(message);
+    }
+
+    *out_value = value;
+    return Result_make_success("number parsed");
 }
 
 /**

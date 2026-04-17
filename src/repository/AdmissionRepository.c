@@ -22,37 +22,6 @@ typedef struct AdmissionRepositoryLoadContext {
     LinkedList *admissions; /**< 用于存放加载结果的链表 */
 } AdmissionRepositoryLoadContext;
 
-/** 判断文本是否非空 */
-static int AdmissionRepository_has_text(const char *text) {
-    return text != 0 && text[0] != '\0';
-}
-
-/** 安全复制字符串 */
-static void AdmissionRepository_copy_text(
-    char *destination, size_t capacity, const char *source
-) {
-    if (destination == 0 || capacity == 0) return;
-    if (source == 0) { destination[0] = '\0'; return; }
-    strncpy(destination, source, capacity - 1);
-    destination[capacity - 1] = '\0';
-}
-
-/** 解析整数字段 */
-static Result AdmissionRepository_parse_int(const char *field, int *out_value) {
-    char *end_pointer = 0;
-    long value = 0;
-
-    if (field == 0 || out_value == 0 || field[0] == '\0') {
-        return Result_make_failure("admission integer missing");
-    }
-    value = strtol(field, &end_pointer, 10);
-    if (end_pointer == field || end_pointer == 0 || *end_pointer != '\0') {
-        return Result_make_failure("admission integer invalid");
-    }
-    *out_value = (int)value;
-    return Result_make_success("admission integer parsed");
-}
-
 /**
  * @brief 校验入院记录的合法性
  *
@@ -63,11 +32,11 @@ static Result AdmissionRepository_parse_int(const char *field, int *out_value) {
 static Result AdmissionRepository_validate(const Admission *admission) {
     if (admission == 0) return Result_make_failure("admission missing");
 
-    if (!AdmissionRepository_has_text(admission->admission_id) ||
-        !AdmissionRepository_has_text(admission->patient_id) ||
-        !AdmissionRepository_has_text(admission->ward_id) ||
-        !AdmissionRepository_has_text(admission->bed_id) ||
-        !AdmissionRepository_has_text(admission->admitted_at)) {
+    if (!RepositoryUtils_has_text(admission->admission_id) ||
+        !RepositoryUtils_has_text(admission->patient_id) ||
+        !RepositoryUtils_has_text(admission->ward_id) ||
+        !RepositoryUtils_has_text(admission->bed_id) ||
+        !RepositoryUtils_has_text(admission->admitted_at)) {
         return Result_make_failure("admission required field missing");
     }
 
@@ -88,13 +57,13 @@ static Result AdmissionRepository_validate(const Admission *admission) {
 
     /* 活跃入院不能有出院时间 */
     if (admission->status == ADMISSION_STATUS_ACTIVE &&
-        AdmissionRepository_has_text(admission->discharged_at)) {
+        RepositoryUtils_has_text(admission->discharged_at)) {
         return Result_make_failure("active admission has discharge time");
     }
 
     /* 已出院必须有出院时间 */
     if (admission->status == ADMISSION_STATUS_DISCHARGED &&
-        !AdmissionRepository_has_text(admission->discharged_at)) {
+        !RepositoryUtils_has_text(admission->discharged_at)) {
         return Result_make_failure("discharged admission missing discharge time");
     }
 
@@ -130,7 +99,7 @@ static Result AdmissionRepository_parse_line(const char *line, Admission *admiss
 
     if (line == 0 || admission == 0) return Result_make_failure("admission line missing");
 
-    AdmissionRepository_copy_text(mutable_line, sizeof(mutable_line), line);
+    RepositoryUtils_copy_text(mutable_line, sizeof(mutable_line), line);
     result = RepositoryUtils_split_pipe_line(
         mutable_line, fields, ADMISSION_REPOSITORY_FIELD_COUNT, &field_count
     );
@@ -140,18 +109,18 @@ static Result AdmissionRepository_parse_line(const char *line, Admission *admiss
     if (result.success == 0) return result;
 
     memset(admission, 0, sizeof(*admission));
-    AdmissionRepository_copy_text(admission->admission_id, sizeof(admission->admission_id), fields[0]);
-    AdmissionRepository_copy_text(admission->patient_id, sizeof(admission->patient_id), fields[1]);
-    AdmissionRepository_copy_text(admission->ward_id, sizeof(admission->ward_id), fields[2]);
-    AdmissionRepository_copy_text(admission->bed_id, sizeof(admission->bed_id), fields[3]);
-    AdmissionRepository_copy_text(admission->admitted_at, sizeof(admission->admitted_at), fields[4]);
+    RepositoryUtils_copy_text(admission->admission_id, sizeof(admission->admission_id), fields[0]);
+    RepositoryUtils_copy_text(admission->patient_id, sizeof(admission->patient_id), fields[1]);
+    RepositoryUtils_copy_text(admission->ward_id, sizeof(admission->ward_id), fields[2]);
+    RepositoryUtils_copy_text(admission->bed_id, sizeof(admission->bed_id), fields[3]);
+    RepositoryUtils_copy_text(admission->admitted_at, sizeof(admission->admitted_at), fields[4]);
 
-    result = AdmissionRepository_parse_int(fields[5], &status_value);
+    result = RepositoryUtils_parse_int(fields[5], &status_value, "admission status");
     if (result.success == 0) return result;
     admission->status = (AdmissionStatus)status_value;
 
-    AdmissionRepository_copy_text(admission->discharged_at, sizeof(admission->discharged_at), fields[6]);
-    AdmissionRepository_copy_text(admission->summary, sizeof(admission->summary), fields[7]);
+    RepositoryUtils_copy_text(admission->discharged_at, sizeof(admission->discharged_at), fields[6]);
+    RepositoryUtils_copy_text(admission->summary, sizeof(admission->summary), fields[7]);
 
     return AdmissionRepository_validate(admission);
 }
@@ -364,7 +333,7 @@ Result AdmissionRepository_find_by_id(
     Admission *admission = 0;
     Result result;
 
-    if (!AdmissionRepository_has_text(admission_id) || out_admission == 0) {
+    if (!RepositoryUtils_has_text(admission_id) || out_admission == 0) {
         return Result_make_failure("admission query arguments missing");
     }
 
@@ -390,7 +359,7 @@ Result AdmissionRepository_find_active_by_patient_id(
     Admission *admission = 0;
     Result result;
 
-    if (!AdmissionRepository_has_text(patient_id) || out_admission == 0) {
+    if (!RepositoryUtils_has_text(patient_id) || out_admission == 0) {
         return Result_make_failure("active admission query arguments missing");
     }
 
@@ -416,7 +385,7 @@ Result AdmissionRepository_find_active_by_bed_id(
     Admission *admission = 0;
     Result result;
 
-    if (!AdmissionRepository_has_text(bed_id) || out_admission == 0) {
+    if (!RepositoryUtils_has_text(bed_id) || out_admission == 0) {
         return Result_make_failure("active admission query arguments missing");
     }
 

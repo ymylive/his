@@ -40,34 +40,6 @@ typedef struct DepartmentRepositoryFindContext {
 } DepartmentRepositoryFindContext;
 
 /**
- * @brief 判断文本是否非空
- */
-static int DepartmentRepository_has_text(const char *text) {
-    return text != 0 && text[0] != '\0';
-}
-
-/**
- * @brief 安全复制字符串到目标缓冲区
- */
-static void DepartmentRepository_copy_string(
-    char *destination,
-    size_t capacity,
-    const char *source
-) {
-    if (destination == 0 || capacity == 0) {
-        return;
-    }
-
-    if (source == 0) {
-        destination[0] = '\0';
-        return;
-    }
-
-    strncpy(destination, source, capacity - 1);
-    destination[capacity - 1] = '\0';
-}
-
-/**
  * @brief 校验科室数据的合法性
  * @param department 待校验的科室数据
  * @return 合法返回 success；不合法返回 failure
@@ -77,11 +49,11 @@ static Result DepartmentRepository_validate(const Department *department) {
         return Result_make_failure("department missing");
     }
 
-    if (!DepartmentRepository_has_text(department->department_id)) {
+    if (!RepositoryUtils_has_text(department->department_id)) {
         return Result_make_failure("department id missing");
     }
 
-    if (!DepartmentRepository_has_text(department->name)) {
+    if (!RepositoryUtils_has_text(department->name)) {
         return Result_make_failure("department name missing");
     }
 
@@ -154,7 +126,7 @@ static Result DepartmentRepository_parse_line(
         return Result_make_failure("department line missing");
     }
 
-    DepartmentRepository_copy_string(mutable_line, sizeof(mutable_line), line);
+    RepositoryUtils_copy_text(mutable_line, sizeof(mutable_line), line);
     result = RepositoryUtils_split_pipe_line(
         mutable_line,
         fields,
@@ -175,16 +147,16 @@ static Result DepartmentRepository_parse_line(
 
     /* 逐字段复制 */
     memset(department, 0, sizeof(*department));
-    DepartmentRepository_copy_string(
+    RepositoryUtils_copy_text(
         department->department_id, sizeof(department->department_id), fields[0]
     );
-    DepartmentRepository_copy_string(
+    RepositoryUtils_copy_text(
         department->name, sizeof(department->name), fields[1]
     );
-    DepartmentRepository_copy_string(
+    RepositoryUtils_copy_text(
         department->location, sizeof(department->location), fields[2]
     );
-    DepartmentRepository_copy_string(
+    RepositoryUtils_copy_text(
         department->description, sizeof(department->description), fields[3]
     );
 
@@ -407,7 +379,7 @@ Result DepartmentRepository_find_by_department_id(
     DepartmentRepositoryFindContext context;
     Result result;
 
-    if (!DepartmentRepository_has_text(department_id) || out_department == 0) {
+    if (!RepositoryUtils_has_text(department_id) || out_department == 0) {
         return Result_make_failure("department query arguments missing");
     }
 

@@ -21,53 +21,6 @@ typedef struct WardRepositoryLoadContext {
     LinkedList *wards; /**< 用于存放加载结果的链表 */
 } WardRepositoryLoadContext;
 
-/** 判断文本是否非空 */
-static int WardRepository_has_text(const char *text) {
-    return text != 0 && text[0] != '\0';
-}
-
-/** 安全复制字符串 */
-static void WardRepository_copy_text(
-    char *destination, size_t capacity, const char *source
-) {
-    if (destination == 0 || capacity == 0) return;
-    if (source == 0) { destination[0] = '\0'; return; }
-    strncpy(destination, source, capacity - 1);
-    destination[capacity - 1] = '\0';
-}
-
-/** 解析浮点数字段 */
-static Result WardRepository_parse_double(const char *field, double *out_value) {
-    char *end_pointer = 0;
-    double value = 0.0;
-
-    if (field == 0 || out_value == 0 || field[0] == '\0') {
-        return Result_make_failure("ward double missing");
-    }
-    value = strtod(field, &end_pointer);
-    if (end_pointer == field || end_pointer == 0 || *end_pointer != '\0') {
-        return Result_make_failure("ward double invalid");
-    }
-    *out_value = value;
-    return Result_make_success("ward double parsed");
-}
-
-/** 解析整数字段 */
-static Result WardRepository_parse_int(const char *field, int *out_value) {
-    char *end_pointer = 0;
-    long value = 0;
-
-    if (field == 0 || out_value == 0 || field[0] == '\0') {
-        return Result_make_failure("ward integer missing");
-    }
-    value = strtol(field, &end_pointer, 10);
-    if (end_pointer == field || end_pointer == 0 || *end_pointer != '\0') {
-        return Result_make_failure("ward integer invalid");
-    }
-    *out_value = (int)value;
-    return Result_make_success("ward integer parsed");
-}
-
 /**
  * @brief 校验病区数据的合法性
  *
@@ -76,10 +29,10 @@ static Result WardRepository_parse_int(const char *field, int *out_value) {
 static Result WardRepository_validate(const Ward *ward) {
     if (ward == 0) return Result_make_failure("ward missing");
 
-    if (!WardRepository_has_text(ward->ward_id) ||
-        !WardRepository_has_text(ward->name) ||
-        !WardRepository_has_text(ward->department_id) ||
-        !WardRepository_has_text(ward->location)) {
+    if (!RepositoryUtils_has_text(ward->ward_id) ||
+        !RepositoryUtils_has_text(ward->name) ||
+        !RepositoryUtils_has_text(ward->department_id) ||
+        !RepositoryUtils_has_text(ward->location)) {
         return Result_make_failure("ward required field missing");
     }
 
@@ -139,7 +92,7 @@ static Result WardRepository_parse_line(const char *line, Ward *ward) {
 
     if (line == 0 || ward == 0) return Result_make_failure("ward line missing");
 
-    WardRepository_copy_text(mutable_line, sizeof(mutable_line), line);
+    RepositoryUtils_copy_text(mutable_line, sizeof(mutable_line), line);
     result = RepositoryUtils_split_pipe_line(mutable_line, fields, WARD_REPOSITORY_FIELD_COUNT, &field_count);
     if (result.success == 0) return result;
 
@@ -147,29 +100,29 @@ static Result WardRepository_parse_line(const char *line, Ward *ward) {
     if (result.success == 0) return result;
 
     memset(ward, 0, sizeof(*ward));
-    WardRepository_copy_text(ward->ward_id, sizeof(ward->ward_id), fields[0]);
-    WardRepository_copy_text(ward->name, sizeof(ward->name), fields[1]);
-    WardRepository_copy_text(ward->department_id, sizeof(ward->department_id), fields[2]);
-    WardRepository_copy_text(ward->location, sizeof(ward->location), fields[3]);
+    RepositoryUtils_copy_text(ward->ward_id, sizeof(ward->ward_id), fields[0]);
+    RepositoryUtils_copy_text(ward->name, sizeof(ward->name), fields[1]);
+    RepositoryUtils_copy_text(ward->department_id, sizeof(ward->department_id), fields[2]);
+    RepositoryUtils_copy_text(ward->location, sizeof(ward->location), fields[3]);
 
-    result = WardRepository_parse_int(fields[4], &ward->capacity);
+    result = RepositoryUtils_parse_int(fields[4], &ward->capacity, "ward capacity");
     if (result.success == 0) return result;
 
-    result = WardRepository_parse_int(fields[5], &ward->occupied_beds);
+    result = RepositoryUtils_parse_int(fields[5], &ward->occupied_beds, "ward occupied_beds");
     if (result.success == 0) return result;
 
-    result = WardRepository_parse_int(fields[6], &status_value);
+    result = RepositoryUtils_parse_int(fields[6], &status_value, "ward status");
     if (result.success == 0) return result;
     ward->status = (WardStatus)status_value;
 
     {
         int ward_type_value = 0;
-        result = WardRepository_parse_int(fields[7], &ward_type_value);
+        result = RepositoryUtils_parse_int(fields[7], &ward_type_value, "ward type");
         if (result.success == 0) return result;
         ward->ward_type = (WardType)ward_type_value;
     }
 
-    result = WardRepository_parse_double(fields[8], &ward->daily_fee);
+    result = RepositoryUtils_parse_double(fields[8], &ward->daily_fee, "ward daily_fee");
     if (result.success == 0) return result;
 
     return WardRepository_validate(ward);
@@ -313,7 +266,7 @@ Result WardRepository_find_by_id(
     Ward *ward = 0;
     Result result;
 
-    if (!WardRepository_has_text(ward_id) || out_ward == 0) {
+    if (!RepositoryUtils_has_text(ward_id) || out_ward == 0) {
         return Result_make_failure("ward query arguments missing");
     }
 

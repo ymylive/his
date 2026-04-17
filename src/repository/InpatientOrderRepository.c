@@ -21,34 +21,6 @@ typedef struct InpatientOrderRepositoryLoadContext {
     LinkedList *orders;
 } InpatientOrderRepositoryLoadContext;
 
-/** 判断文本是否非空 */
-static int InpatientOrderRepository_has_text(const char *text) {
-    return text != 0 && text[0] != '\0';
-}
-
-/** 安全复制字符串 */
-static void InpatientOrderRepository_copy_text(
-    char *destination, size_t capacity, const char *source
-) {
-    if (destination == 0 || capacity == 0) return;
-    if (source == 0) { destination[0] = '\0'; return; }
-    strncpy(destination, source, capacity - 1);
-    destination[capacity - 1] = '\0';
-}
-
-/** 解析整数字段 */
-static Result InpatientOrderRepository_parse_int(const char *field, int *out_value) {
-    char *end_pointer = 0;
-    long value = 0;
-    if (field == 0 || out_value == 0 || field[0] == '\0') return Result_make_failure("order integer missing");
-    value = strtol(field, &end_pointer, 10);
-    if (end_pointer == field || end_pointer == 0 || *end_pointer != '\0') {
-        return Result_make_failure("order integer invalid");
-    }
-    *out_value = (int)value;
-    return Result_make_success("order integer parsed");
-}
-
 /**
  * @brief 校验住院医嘱数据的合法性
  *
@@ -60,11 +32,11 @@ static Result InpatientOrderRepository_parse_int(const char *field, int *out_val
 static Result InpatientOrderRepository_validate(const InpatientOrder *order) {
     if (order == 0) return Result_make_failure("inpatient order missing");
 
-    if (!InpatientOrderRepository_has_text(order->order_id) ||
-        !InpatientOrderRepository_has_text(order->admission_id) ||
-        !InpatientOrderRepository_has_text(order->order_type) ||
-        !InpatientOrderRepository_has_text(order->content) ||
-        !InpatientOrderRepository_has_text(order->ordered_at)) {
+    if (!RepositoryUtils_has_text(order->order_id) ||
+        !RepositoryUtils_has_text(order->admission_id) ||
+        !RepositoryUtils_has_text(order->order_type) ||
+        !RepositoryUtils_has_text(order->content) ||
+        !RepositoryUtils_has_text(order->ordered_at)) {
         return Result_make_failure("inpatient order required field missing");
     }
 
@@ -85,22 +57,22 @@ static Result InpatientOrderRepository_validate(const InpatientOrder *order) {
 
     /* 待执行：不能有结束时间 */
     if (order->status == INPATIENT_ORDER_STATUS_PENDING &&
-        (InpatientOrderRepository_has_text(order->executed_at) ||
-         InpatientOrderRepository_has_text(order->cancelled_at))) {
+        (RepositoryUtils_has_text(order->executed_at) ||
+         RepositoryUtils_has_text(order->cancelled_at))) {
         return Result_make_failure("pending inpatient order has close time");
     }
 
     /* 已执行：必须有执行时间，不能有取消时间 */
     if (order->status == INPATIENT_ORDER_STATUS_EXECUTED &&
-        (!InpatientOrderRepository_has_text(order->executed_at) ||
-         InpatientOrderRepository_has_text(order->cancelled_at))) {
+        (!RepositoryUtils_has_text(order->executed_at) ||
+         RepositoryUtils_has_text(order->cancelled_at))) {
         return Result_make_failure("executed inpatient order invalid");
     }
 
     /* 已取消：必须有取消时间，不能有执行时间 */
     if (order->status == INPATIENT_ORDER_STATUS_CANCELLED &&
-        (!InpatientOrderRepository_has_text(order->cancelled_at) ||
-         InpatientOrderRepository_has_text(order->executed_at))) {
+        (!RepositoryUtils_has_text(order->cancelled_at) ||
+         RepositoryUtils_has_text(order->executed_at))) {
         return Result_make_failure("cancelled inpatient order invalid");
     }
 
@@ -134,7 +106,7 @@ static Result InpatientOrderRepository_parse_line(const char *line, InpatientOrd
 
     if (line == 0 || order == 0) return Result_make_failure("order line missing");
 
-    InpatientOrderRepository_copy_text(mutable_line, sizeof(mutable_line), line);
+    RepositoryUtils_copy_text(mutable_line, sizeof(mutable_line), line);
     result = RepositoryUtils_split_pipe_line(
         mutable_line, fields, INPATIENT_ORDER_REPOSITORY_FIELD_COUNT, &field_count
     );
@@ -144,18 +116,18 @@ static Result InpatientOrderRepository_parse_line(const char *line, InpatientOrd
     if (result.success == 0) return result;
 
     memset(order, 0, sizeof(*order));
-    InpatientOrderRepository_copy_text(order->order_id, sizeof(order->order_id), fields[0]);
-    InpatientOrderRepository_copy_text(order->admission_id, sizeof(order->admission_id), fields[1]);
-    InpatientOrderRepository_copy_text(order->order_type, sizeof(order->order_type), fields[2]);
-    InpatientOrderRepository_copy_text(order->content, sizeof(order->content), fields[3]);
-    InpatientOrderRepository_copy_text(order->ordered_at, sizeof(order->ordered_at), fields[4]);
+    RepositoryUtils_copy_text(order->order_id, sizeof(order->order_id), fields[0]);
+    RepositoryUtils_copy_text(order->admission_id, sizeof(order->admission_id), fields[1]);
+    RepositoryUtils_copy_text(order->order_type, sizeof(order->order_type), fields[2]);
+    RepositoryUtils_copy_text(order->content, sizeof(order->content), fields[3]);
+    RepositoryUtils_copy_text(order->ordered_at, sizeof(order->ordered_at), fields[4]);
 
-    result = InpatientOrderRepository_parse_int(fields[5], &status_value);
+    result = RepositoryUtils_parse_int(fields[5], &status_value, "inpatient order status");
     if (result.success == 0) return result;
     order->status = (InpatientOrderStatus)status_value;
 
-    InpatientOrderRepository_copy_text(order->executed_at, sizeof(order->executed_at), fields[6]);
-    InpatientOrderRepository_copy_text(order->cancelled_at, sizeof(order->cancelled_at), fields[7]);
+    RepositoryUtils_copy_text(order->executed_at, sizeof(order->executed_at), fields[6]);
+    RepositoryUtils_copy_text(order->cancelled_at, sizeof(order->cancelled_at), fields[7]);
 
     return InpatientOrderRepository_validate(order);
 }
@@ -300,7 +272,7 @@ Result InpatientOrderRepository_find_by_id(
     InpatientOrder *order = 0;
     Result result;
 
-    if (!InpatientOrderRepository_has_text(order_id) || out_order == 0) {
+    if (!RepositoryUtils_has_text(order_id) || out_order == 0) {
         return Result_make_failure("order query arguments missing");
     }
 

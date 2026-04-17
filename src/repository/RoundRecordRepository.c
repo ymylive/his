@@ -36,16 +36,6 @@ static int RoundRecordRepository_is_empty_text(const char *text) {
     return text == 0 || text[0] == '\0';
 }
 
-/** 安全复制字符串 */
-static void RoundRecordRepository_copy_text(
-    char *destination, size_t capacity, const char *source
-) {
-    if (destination == 0 || capacity == 0) return;
-    if (source == 0) { destination[0] = '\0'; return; }
-    strncpy(destination, source, capacity - 1);
-    destination[capacity - 1] = '\0';
-}
-
 /** 校验单个文本字段 */
 static Result RoundRecordRepository_validate_text_field(
     const char *text, const char *field_name, int allow_empty
@@ -136,12 +126,12 @@ static Result RoundRecordRepository_parse_line(const char *line, RoundRecord *ou
     if (!result.success) return result;
 
     memset(out_record, 0, sizeof(*out_record));
-    RoundRecordRepository_copy_text(out_record->round_id, sizeof(out_record->round_id), fields[0]);
-    RoundRecordRepository_copy_text(out_record->admission_id, sizeof(out_record->admission_id), fields[1]);
-    RoundRecordRepository_copy_text(out_record->doctor_id, sizeof(out_record->doctor_id), fields[2]);
-    RoundRecordRepository_copy_text(out_record->findings, sizeof(out_record->findings), fields[3]);
-    RoundRecordRepository_copy_text(out_record->plan, sizeof(out_record->plan), fields[4]);
-    RoundRecordRepository_copy_text(out_record->rounded_at, sizeof(out_record->rounded_at), fields[5]);
+    RepositoryUtils_copy_text(out_record->round_id, sizeof(out_record->round_id), fields[0]);
+    RepositoryUtils_copy_text(out_record->admission_id, sizeof(out_record->admission_id), fields[1]);
+    RepositoryUtils_copy_text(out_record->doctor_id, sizeof(out_record->doctor_id), fields[2]);
+    RepositoryUtils_copy_text(out_record->findings, sizeof(out_record->findings), fields[3]);
+    RepositoryUtils_copy_text(out_record->plan, sizeof(out_record->plan), fields[4]);
+    RepositoryUtils_copy_text(out_record->rounded_at, sizeof(out_record->rounded_at), fields[5]);
 
     return RoundRecordRepository_validate(out_record);
 }

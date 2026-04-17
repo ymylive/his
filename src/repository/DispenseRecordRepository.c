@@ -49,16 +49,6 @@ static int DispenseRecordRepository_is_empty_text(const char *text) {
     return text == 0 || text[0] == '\0';
 }
 
-/** 安全复制字符串 */
-static void DispenseRecordRepository_copy_text(
-    char *destination, size_t capacity, const char *source
-) {
-    if (destination == 0 || capacity == 0) return;
-    if (source == 0) { destination[0] = '\0'; return; }
-    strncpy(destination, source, capacity - 1);
-    destination[capacity - 1] = '\0';
-}
-
 /** 校验单个文本字段 */
 static Result DispenseRecordRepository_validate_text_field(
     const char *text, const char *field_name, int allow_empty
@@ -75,21 +65,10 @@ static Result DispenseRecordRepository_validate_text_field(
     return Result_make_success("dispense text field ok");
 }
 
-/** 解析整数字段 */
-static Result DispenseRecordRepository_parse_int(const char *field, int *out_value) {
-    char *end = 0;
-    long value = 0;
-    if (field == 0 || out_value == 0 || field[0] == '\0') return Result_make_failure("dispense integer missing");
-    value = strtol(field, &end, 10);
-    if (end == 0 || *end != '\0') return Result_make_failure("dispense integer invalid");
-    *out_value = (int)value;
-    return Result_make_success("dispense integer parsed");
-}
-
 /** 解析发药状态枚举值 */
 static Result DispenseRecordRepository_parse_status(const char *field, DispenseStatus *out_status) {
     int value = 0;
-    Result result = DispenseRecordRepository_parse_int(field, &value);
+    Result result = RepositoryUtils_parse_int(field, &value, "dispense status");
     if (!result.success) return result;
 
     if (value < DISPENSE_STATUS_PENDING || value > DISPENSE_STATUS_COMPLETED) {
@@ -200,16 +179,16 @@ static Result DispenseRecordRepository_parse_line(const char *line, DispenseReco
     if (!result.success) return result;
 
     memset(out_record, 0, sizeof(*out_record));
-    DispenseRecordRepository_copy_text(out_record->dispense_id, sizeof(out_record->dispense_id), fields[0]);
-    DispenseRecordRepository_copy_text(out_record->patient_id, sizeof(out_record->patient_id), fields[1]);
-    DispenseRecordRepository_copy_text(out_record->prescription_id, sizeof(out_record->prescription_id), fields[2]);
-    DispenseRecordRepository_copy_text(out_record->medicine_id, sizeof(out_record->medicine_id), fields[3]);
+    RepositoryUtils_copy_text(out_record->dispense_id, sizeof(out_record->dispense_id), fields[0]);
+    RepositoryUtils_copy_text(out_record->patient_id, sizeof(out_record->patient_id), fields[1]);
+    RepositoryUtils_copy_text(out_record->prescription_id, sizeof(out_record->prescription_id), fields[2]);
+    RepositoryUtils_copy_text(out_record->medicine_id, sizeof(out_record->medicine_id), fields[3]);
 
-    result = DispenseRecordRepository_parse_int(fields[4], &out_record->quantity);
+    result = RepositoryUtils_parse_int(fields[4], &out_record->quantity, "dispense quantity");
     if (!result.success) return result;
 
-    DispenseRecordRepository_copy_text(out_record->pharmacist_id, sizeof(out_record->pharmacist_id), fields[5]);
-    DispenseRecordRepository_copy_text(out_record->dispensed_at, sizeof(out_record->dispensed_at), fields[6]);
+    RepositoryUtils_copy_text(out_record->pharmacist_id, sizeof(out_record->pharmacist_id), fields[5]);
+    RepositoryUtils_copy_text(out_record->dispensed_at, sizeof(out_record->dispensed_at), fields[6]);
 
     result = DispenseRecordRepository_parse_status(fields[7], &out_record->status);
     if (!result.success) return result;

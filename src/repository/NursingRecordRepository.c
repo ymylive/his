@@ -36,16 +36,6 @@ static int NursingRecordRepository_is_empty_text(const char *text) {
     return text == 0 || text[0] == '\0';
 }
 
-/** 安全复制字符串 */
-static void NursingRecordRepository_copy_text(
-    char *destination, size_t capacity, const char *source
-) {
-    if (destination == 0 || capacity == 0) return;
-    if (source == 0) { destination[0] = '\0'; return; }
-    strncpy(destination, source, capacity - 1);
-    destination[capacity - 1] = '\0';
-}
-
 /** 校验单个文本字段 */
 static Result NursingRecordRepository_validate_text_field(
     const char *text, const char *field_name, int allow_empty
@@ -138,12 +128,12 @@ static Result NursingRecordRepository_parse_line(const char *line, NursingRecord
     if (!result.success) return result;
 
     memset(out_record, 0, sizeof(*out_record));
-    NursingRecordRepository_copy_text(out_record->nursing_id, sizeof(out_record->nursing_id), fields[0]);
-    NursingRecordRepository_copy_text(out_record->admission_id, sizeof(out_record->admission_id), fields[1]);
-    NursingRecordRepository_copy_text(out_record->nurse_name, sizeof(out_record->nurse_name), fields[2]);
-    NursingRecordRepository_copy_text(out_record->record_type, sizeof(out_record->record_type), fields[3]);
-    NursingRecordRepository_copy_text(out_record->content, sizeof(out_record->content), fields[4]);
-    NursingRecordRepository_copy_text(out_record->recorded_at, sizeof(out_record->recorded_at), fields[5]);
+    RepositoryUtils_copy_text(out_record->nursing_id, sizeof(out_record->nursing_id), fields[0]);
+    RepositoryUtils_copy_text(out_record->admission_id, sizeof(out_record->admission_id), fields[1]);
+    RepositoryUtils_copy_text(out_record->nurse_name, sizeof(out_record->nurse_name), fields[2]);
+    RepositoryUtils_copy_text(out_record->record_type, sizeof(out_record->record_type), fields[3]);
+    RepositoryUtils_copy_text(out_record->content, sizeof(out_record->content), fields[4]);
+    RepositoryUtils_copy_text(out_record->recorded_at, sizeof(out_record->recorded_at), fields[5]);
 
     return NursingRecordRepository_validate(out_record);
 }

@@ -44,16 +44,6 @@ static int ExaminationRecordRepository_is_empty_text(const char *text) {
     return text == 0 || text[0] == '\0';
 }
 
-/** 安全复制字符串 */
-static void ExaminationRecordRepository_copy_text(
-    char *destination, size_t capacity, const char *source
-) {
-    if (destination == 0 || capacity == 0) return;
-    if (source == 0) { destination[0] = '\0'; return; }
-    strncpy(destination, source, capacity - 1);
-    destination[capacity - 1] = '\0';
-}
-
 /** 校验单个文本字段 */
 static Result ExaminationRecordRepository_validate_text_field(
     const char *text, const char *field_name, int allow_empty
@@ -189,17 +179,17 @@ static Result ExaminationRecordRepository_parse_line(const char *line, Examinati
     if (!result.success) return result;
 
     memset(out_record, 0, sizeof(*out_record));
-    ExaminationRecordRepository_copy_text(out_record->examination_id, sizeof(out_record->examination_id), fields[0]);
-    ExaminationRecordRepository_copy_text(out_record->visit_id, sizeof(out_record->visit_id), fields[1]);
-    ExaminationRecordRepository_copy_text(out_record->patient_id, sizeof(out_record->patient_id), fields[2]);
-    ExaminationRecordRepository_copy_text(out_record->doctor_id, sizeof(out_record->doctor_id), fields[3]);
-    ExaminationRecordRepository_copy_text(out_record->exam_item, sizeof(out_record->exam_item), fields[4]);
-    ExaminationRecordRepository_copy_text(out_record->exam_type, sizeof(out_record->exam_type), fields[5]);
+    RepositoryUtils_copy_text(out_record->examination_id, sizeof(out_record->examination_id), fields[0]);
+    RepositoryUtils_copy_text(out_record->visit_id, sizeof(out_record->visit_id), fields[1]);
+    RepositoryUtils_copy_text(out_record->patient_id, sizeof(out_record->patient_id), fields[2]);
+    RepositoryUtils_copy_text(out_record->doctor_id, sizeof(out_record->doctor_id), fields[3]);
+    RepositoryUtils_copy_text(out_record->exam_item, sizeof(out_record->exam_item), fields[4]);
+    RepositoryUtils_copy_text(out_record->exam_type, sizeof(out_record->exam_type), fields[5]);
 
     result = ExaminationRecordRepository_parse_status(fields[6], &out_record->status);
     if (!result.success) return result;
 
-    ExaminationRecordRepository_copy_text(out_record->result, sizeof(out_record->result), fields[7]);
+    RepositoryUtils_copy_text(out_record->result, sizeof(out_record->result), fields[7]);
 
     /* 解析检查费用 */
     {
@@ -214,8 +204,8 @@ static Result ExaminationRecordRepository_parse_line(const char *line, Examinati
         }
     }
 
-    ExaminationRecordRepository_copy_text(out_record->requested_at, sizeof(out_record->requested_at), fields[9]);
-    ExaminationRecordRepository_copy_text(out_record->completed_at, sizeof(out_record->completed_at), fields[10]);
+    RepositoryUtils_copy_text(out_record->requested_at, sizeof(out_record->requested_at), fields[9]);
+    RepositoryUtils_copy_text(out_record->completed_at, sizeof(out_record->completed_at), fields[10]);
     return ExaminationRecordRepository_validate(out_record);
 }
 

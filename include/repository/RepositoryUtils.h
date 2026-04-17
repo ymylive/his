@@ -36,6 +36,44 @@
 int RepositoryUtils_has_text(const char *text);
 
 /**
+ * @brief 安全复制字符串到目标缓冲区
+ *
+ * 等价于各仓储文件中重复实现的 _copy_text()/_copy_string() 内部函数。
+ * 始终以 '\0' 结尾。源为空指针时，目标写入空字符串。
+ *
+ * @param destination 目标缓冲区
+ * @param capacity    目标缓冲区容量
+ * @param source      源字符串，可为 NULL
+ */
+void RepositoryUtils_copy_text(char *destination, size_t capacity, const char *source);
+
+/**
+ * @brief 将文本解析为整数
+ *
+ * 替代各仓储文件中重复实现的 _parse_int() 内部函数。
+ * 要求整行正是一个整数（前后不允许额外字符），并检查 int 范围溢出。
+ *
+ * @param text       待解析的文本
+ * @param out_value  输出参数，解析得到的整数
+ * @param field_name 字段名，用于构造可读的错误消息
+ * @return 成功返回 success；为空、格式不合法或溢出时返回 failure
+ */
+Result RepositoryUtils_parse_int(const char *text, int *out_value, const char *field_name);
+
+/**
+ * @brief 将文本解析为双精度浮点数
+ *
+ * 替代各仓储文件中重复实现的 _parse_double() 内部函数。
+ * 要求整行正是一个浮点数（前后不允许额外字符）。
+ *
+ * @param text       待解析的文本
+ * @param out_value  输出参数，解析得到的浮点数
+ * @param field_name 字段名，用于构造可读的错误消息
+ * @return 成功返回 success；为空或格式不合法时返回 failure
+ */
+Result RepositoryUtils_parse_double(const char *text, double *out_value, const char *field_name);
+
+/**
  * @brief 剥离字符串末尾的换行符（\n 和 \r）
  * @param line 待处理的字符串（原地修改）
  */

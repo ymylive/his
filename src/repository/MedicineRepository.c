@@ -41,20 +41,6 @@ typedef struct MedicineRepositoryFindContext {
     int found;
 } MedicineRepositoryFindContext;
 
-/** 判断文本是否非空 */
-static int MedicineRepository_has_text(const char *text) {
-    return text != 0 && text[0] != '\0';
-}
-
-/** 安全复制字符串 */
-static void MedicineRepository_copy_string(
-    char *destination, size_t capacity, const char *source
-) {
-    if (destination == 0 || capacity == 0) return;
-    if (source == 0) { destination[0] = '\0'; return; }
-    strncpy(destination, source, capacity - 1);
-    destination[capacity - 1] = '\0';
-}
 
 /**
  * @brief 校验药品数据的合法性
@@ -63,8 +49,8 @@ static void MedicineRepository_copy_string(
  */
 static Result MedicineRepository_validate(const Medicine *medicine) {
     if (medicine == 0) return Result_make_failure("medicine missing");
-    if (!MedicineRepository_has_text(medicine->medicine_id)) return Result_make_failure("medicine id missing");
-    if (!MedicineRepository_has_text(medicine->name)) return Result_make_failure("medicine name missing");
+    if (!RepositoryUtils_has_text(medicine->medicine_id)) return Result_make_failure("medicine id missing");
+    if (!RepositoryUtils_has_text(medicine->name)) return Result_make_failure("medicine name missing");
 
     /* 通过领域层函数校验库存数据 */
     if (!Medicine_has_valid_inventory(medicine)) return Result_make_failure("medicine inventory invalid");
@@ -77,34 +63,6 @@ static Result MedicineRepository_validate(const Medicine *medicine) {
         return Result_make_failure("medicine field contains reserved character");
     }
     return Result_make_success("medicine valid");
-}
-
-/** 解析浮点数字段 */
-static Result MedicineRepository_parse_double(const char *field, double *out_value) {
-    char *end_pointer = 0;
-    double value = 0.0;
-
-    if (field == 0 || out_value == 0 || field[0] == '\0') return Result_make_failure("medicine number missing");
-    value = strtod(field, &end_pointer);
-    if (end_pointer == field || end_pointer == 0 || *end_pointer != '\0') {
-        return Result_make_failure("medicine number invalid");
-    }
-    *out_value = value;
-    return Result_make_success("medicine number parsed");
-}
-
-/** 解析整数字段 */
-static Result MedicineRepository_parse_int(const char *field, int *out_value) {
-    char *end_pointer = 0;
-    long value = 0;
-
-    if (field == 0 || out_value == 0 || field[0] == '\0') return Result_make_failure("medicine integer missing");
-    value = strtol(field, &end_pointer, 10);
-    if (end_pointer == field || end_pointer == 0 || *end_pointer != '\0') {
-        return Result_make_failure("medicine integer invalid");
-    }
-    *out_value = (int)value;
-    return Result_make_success("medicine integer parsed");
 }
 
 /** 将药品结构体格式化为文本行（价格保留两位小数） */
@@ -136,7 +94,7 @@ static Result MedicineRepository_parse_line(const char *line, Medicine *medicine
 
     if (line == 0 || medicine == 0) return Result_make_failure("medicine line missing");
 
-    MedicineRepository_copy_string(mutable_line, sizeof(mutable_line), line);
+    RepositoryUtils_copy_text(mutable_line, sizeof(mutable_line), line);
     result = RepositoryUtils_split_pipe_line(mutable_line, fields, MEDICINE_REPOSITORY_FIELD_COUNT, &field_count);
     if (result.success == 0) return result;
 
@@ -148,20 +106,20 @@ static Result MedicineRepository_parse_line(const char *line, Medicine *medicine
     }
 
     memset(medicine, 0, sizeof(*medicine));
-    MedicineRepository_copy_string(medicine->medicine_id, sizeof(medicine->medicine_id), fields[0]);
-    MedicineRepository_copy_string(medicine->name, sizeof(medicine->name), fields[1]);
+    RepositoryUtils_copy_text(medicine->medicine_id, sizeof(medicine->medicine_id), fields[0]);
+    RepositoryUtils_copy_text(medicine->name, sizeof(medicine->name), fields[1]);
 
     if (field_count == MEDICINE_REPOSITORY_FIELD_COUNT) {
         /* 新格式: medicine_id|name|alias|category|price|stock|department_id|low_stock_threshold */
-        MedicineRepository_copy_string(medicine->alias, sizeof(medicine->alias), fields[2]);
-        MedicineRepository_copy_string(medicine->category, sizeof(medicine->category), fields[3]);
+        RepositoryUtils_copy_text(medicine->alias, sizeof(medicine->alias), fields[2]);
+        RepositoryUtils_copy_text(medicine->category, sizeof(medicine->category), fields[3]);
         price_idx = 4;
         stock_idx = 5;
         dept_idx = 6;
         threshold_idx = 7;
     } else if (field_count == MEDICINE_REPOSITORY_LEGACY_FIELD_COUNT_V2) {
         /* v2格式: medicine_id|name|alias|price|stock|department_id|low_stock_threshold */
-        MedicineRepository_copy_string(medicine->alias, sizeof(medicine->alias), fields[2]);
+        RepositoryUtils_copy_text(medicine->alias, sizeof(medicine->alias), fields[2]);
         medicine->category[0] = '\0';
         price_idx = 3;
         stock_idx = 4;
@@ -178,17 +136,17 @@ static Result MedicineRepository_parse_line(const char *line, Medicine *medicine
     }
 
     /* 解析价格（浮点数） */
-    result = MedicineRepository_parse_double(fields[price_idx], &medicine->price);
+    result = RepositoryUtils_parse_double(fields[price_idx], &medicine->price, "medicine price");
     if (result.success == 0) return result;
 
     /* 解析库存（整数） */
-    result = MedicineRepository_parse_int(fields[stock_idx], &medicine->stock);
+    result = RepositoryUtils_parse_int(fields[stock_idx], &medicine->stock, "medicine stock");
     if (result.success == 0) return result;
 
-    MedicineRepository_copy_string(medicine->department_id, sizeof(medicine->department_id), fields[dept_idx]);
+    RepositoryUtils_copy_text(medicine->department_id, sizeof(medicine->department_id), fields[dept_idx]);
 
     /* 解析低库存阈值 */
-    result = MedicineRepository_parse_int(fields[threshold_idx], &medicine->low_stock_threshold);
+    result = RepositoryUtils_parse_int(fields[threshold_idx], &medicine->low_stock_threshold, "medicine low_stock_threshold");
     if (result.success == 0) return result;
 
     return MedicineRepository_validate(medicine);
@@ -331,7 +289,7 @@ Result MedicineRepository_find_by_medicine_id(
     MedicineRepositoryFindContext context;
     Result result;
 
-    if (!MedicineRepository_has_text(medicine_id) || out_medicine == 0) {
+    if (!RepositoryUtils_has_text(medicine_id) || out_medicine == 0) {
         return Result_make_failure("medicine query arguments missing");
     }
 

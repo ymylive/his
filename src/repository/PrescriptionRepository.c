@@ -43,16 +43,6 @@ static int PrescriptionRepository_is_empty_text(const char *text) {
     return text == 0 || text[0] == '\0';
 }
 
-/** 安全复制字符串 */
-static void PrescriptionRepository_copy_text(
-    char *destination, size_t capacity, const char *source
-) {
-    if (destination == 0 || capacity == 0) return;
-    if (source == 0) { destination[0] = '\0'; return; }
-    strncpy(destination, source, capacity - 1);
-    destination[capacity - 1] = '\0';
-}
-
 /** 校验单个文本字段 */
 static Result PrescriptionRepository_validate_text_field(
     const char *text, const char *field_name, int allow_empty
@@ -67,17 +57,6 @@ static Result PrescriptionRepository_validate_text_field(
         return Result_make_failure(message);
     }
     return Result_make_success("prescription text field ok");
-}
-
-/** 解析整数字段 */
-static Result PrescriptionRepository_parse_int(const char *field, int *out_value) {
-    char *end = 0;
-    long value = 0;
-    if (field == 0 || out_value == 0 || field[0] == '\0') return Result_make_failure("prescription integer missing");
-    value = strtol(field, &end, 10);
-    if (end == 0 || *end != '\0') return Result_make_failure("prescription integer invalid");
-    *out_value = (int)value;
-    return Result_make_success("prescription integer parsed");
 }
 
 /**
@@ -154,14 +133,14 @@ static Result PrescriptionRepository_parse_line(const char *line, Prescription *
     if (!result.success) return result;
 
     memset(out_prescription, 0, sizeof(*out_prescription));
-    PrescriptionRepository_copy_text(out_prescription->prescription_id, sizeof(out_prescription->prescription_id), fields[0]);
-    PrescriptionRepository_copy_text(out_prescription->visit_id, sizeof(out_prescription->visit_id), fields[1]);
-    PrescriptionRepository_copy_text(out_prescription->medicine_id, sizeof(out_prescription->medicine_id), fields[2]);
+    RepositoryUtils_copy_text(out_prescription->prescription_id, sizeof(out_prescription->prescription_id), fields[0]);
+    RepositoryUtils_copy_text(out_prescription->visit_id, sizeof(out_prescription->visit_id), fields[1]);
+    RepositoryUtils_copy_text(out_prescription->medicine_id, sizeof(out_prescription->medicine_id), fields[2]);
 
-    result = PrescriptionRepository_parse_int(fields[3], &out_prescription->quantity);
+    result = RepositoryUtils_parse_int(fields[3], &out_prescription->quantity, "prescription quantity");
     if (!result.success) return result;
 
-    PrescriptionRepository_copy_text(out_prescription->usage, sizeof(out_prescription->usage), fields[4]);
+    RepositoryUtils_copy_text(out_prescription->usage, sizeof(out_prescription->usage), fields[4]);
 
     return PrescriptionRepository_validate(out_prescription);
 }

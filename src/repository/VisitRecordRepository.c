@@ -43,14 +43,6 @@ static int VisitRecordRepository_is_empty_text(const char *text) {
     return text == 0 || text[0] == '\0';
 }
 
-/** 安全复制字符串 */
-static void VisitRecordRepository_copy_text(char *destination, size_t capacity, const char *source) {
-    if (destination == 0 || capacity == 0) return;
-    if (source == 0) { destination[0] = '\0'; return; }
-    strncpy(destination, source, capacity - 1);
-    destination[capacity - 1] = '\0';
-}
-
 /** 校验单个文本字段 */
 static Result VisitRecordRepository_validate_text_field(
     const char *text, const char *field_name, int allow_empty
@@ -193,14 +185,14 @@ static Result VisitRecordRepository_parse_line(const char *line, VisitRecord *ou
 
     /* 逐字段解析 */
     memset(out_record, 0, sizeof(*out_record));
-    VisitRecordRepository_copy_text(out_record->visit_id, sizeof(out_record->visit_id), fields[0]);
-    VisitRecordRepository_copy_text(out_record->registration_id, sizeof(out_record->registration_id), fields[1]);
-    VisitRecordRepository_copy_text(out_record->patient_id, sizeof(out_record->patient_id), fields[2]);
-    VisitRecordRepository_copy_text(out_record->doctor_id, sizeof(out_record->doctor_id), fields[3]);
-    VisitRecordRepository_copy_text(out_record->department_id, sizeof(out_record->department_id), fields[4]);
-    VisitRecordRepository_copy_text(out_record->chief_complaint, sizeof(out_record->chief_complaint), fields[5]);
-    VisitRecordRepository_copy_text(out_record->diagnosis, sizeof(out_record->diagnosis), fields[6]);
-    VisitRecordRepository_copy_text(out_record->advice, sizeof(out_record->advice), fields[7]);
+    RepositoryUtils_copy_text(out_record->visit_id, sizeof(out_record->visit_id), fields[0]);
+    RepositoryUtils_copy_text(out_record->registration_id, sizeof(out_record->registration_id), fields[1]);
+    RepositoryUtils_copy_text(out_record->patient_id, sizeof(out_record->patient_id), fields[2]);
+    RepositoryUtils_copy_text(out_record->doctor_id, sizeof(out_record->doctor_id), fields[3]);
+    RepositoryUtils_copy_text(out_record->department_id, sizeof(out_record->department_id), fields[4]);
+    RepositoryUtils_copy_text(out_record->chief_complaint, sizeof(out_record->chief_complaint), fields[5]);
+    RepositoryUtils_copy_text(out_record->diagnosis, sizeof(out_record->diagnosis), fields[6]);
+    RepositoryUtils_copy_text(out_record->advice, sizeof(out_record->advice), fields[7]);
 
     /* 解析三个布尔标志 */
     result = VisitRecordRepository_parse_flag(fields[8], &out_record->need_exam);
@@ -210,7 +202,7 @@ static Result VisitRecordRepository_parse_line(const char *line, VisitRecord *ou
     result = VisitRecordRepository_parse_flag(fields[10], &out_record->need_medicine);
     if (!result.success) return result;
 
-    VisitRecordRepository_copy_text(out_record->visit_time, sizeof(out_record->visit_time), fields[11]);
+    RepositoryUtils_copy_text(out_record->visit_time, sizeof(out_record->visit_time), fields[11]);
     return VisitRecordRepository_validate(out_record);
 }
 

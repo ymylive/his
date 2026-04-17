@@ -21,42 +21,6 @@ typedef struct BedRepositoryLoadContext {
     LinkedList *beds; /**< 用于存放加载结果的链表 */
 } BedRepositoryLoadContext;
 
-/** 判断文本是否非空 */
-static int BedRepository_has_text(const char *text) {
-    return text != 0 && text[0] != '\0';
-}
-
-/** 安全复制字符串 */
-static void BedRepository_copy_text(
-    char *destination, size_t capacity, const char *source
-) {
-    if (destination == 0 || capacity == 0) {
-        return;
-    }
-    if (source == 0) {
-        destination[0] = '\0';
-        return;
-    }
-    strncpy(destination, source, capacity - 1);
-    destination[capacity - 1] = '\0';
-}
-
-/** 解析整数字段 */
-static Result BedRepository_parse_int(const char *field, int *out_value) {
-    char *end_pointer = 0;
-    long value = 0;
-
-    if (field == 0 || out_value == 0 || field[0] == '\0') {
-        return Result_make_failure("bed integer missing");
-    }
-    value = strtol(field, &end_pointer, 10);
-    if (end_pointer == field || end_pointer == 0 || *end_pointer != '\0') {
-        return Result_make_failure("bed integer invalid");
-    }
-    *out_value = (int)value;
-    return Result_make_success("bed integer parsed");
-}
-
 /**
  * @brief 校验床位数据的合法性
  *
@@ -69,10 +33,10 @@ static Result BedRepository_validate(const Bed *bed) {
         return Result_make_failure("bed missing");
     }
 
-    if (!BedRepository_has_text(bed->bed_id) ||
-        !BedRepository_has_text(bed->ward_id) ||
-        !BedRepository_has_text(bed->room_no) ||
-        !BedRepository_has_text(bed->bed_no)) {
+    if (!RepositoryUtils_has_text(bed->bed_id) ||
+        !RepositoryUtils_has_text(bed->ward_id) ||
+        !RepositoryUtils_has_text(bed->room_no) ||
+        !RepositoryUtils_has_text(bed->bed_no)) {
         return Result_make_failure("bed required field missing");
     }
 
@@ -92,12 +56,12 @@ static Result BedRepository_validate(const Bed *bed) {
 
     /* 占用状态必须有入院信息 */
     if (bed->status == BED_STATUS_OCCUPIED) {
-        if (!BedRepository_has_text(bed->current_admission_id) ||
-            !BedRepository_has_text(bed->occupied_at)) {
+        if (!RepositoryUtils_has_text(bed->current_admission_id) ||
+            !RepositoryUtils_has_text(bed->occupied_at)) {
             return Result_make_failure("occupied bed missing admission data");
         }
-    } else if (BedRepository_has_text(bed->current_admission_id) ||
-               BedRepository_has_text(bed->occupied_at)) {
+    } else if (RepositoryUtils_has_text(bed->current_admission_id) ||
+               RepositoryUtils_has_text(bed->occupied_at)) {
         return Result_make_failure("non-occupied bed has admission data");
     }
 
@@ -133,7 +97,7 @@ static Result BedRepository_parse_line(const char *line, Bed *bed) {
 
     if (line == 0 || bed == 0) return Result_make_failure("bed line missing");
 
-    BedRepository_copy_text(mutable_line, sizeof(mutable_line), line);
+    RepositoryUtils_copy_text(mutable_line, sizeof(mutable_line), line);
     result = RepositoryUtils_split_pipe_line(mutable_line, fields, BED_REPOSITORY_FIELD_COUNT, &field_count);
     if (result.success == 0) return result;
 
@@ -142,18 +106,18 @@ static Result BedRepository_parse_line(const char *line, Bed *bed) {
 
     /* 逐字段解析 */
     memset(bed, 0, sizeof(*bed));
-    BedRepository_copy_text(bed->bed_id, sizeof(bed->bed_id), fields[0]);
-    BedRepository_copy_text(bed->ward_id, sizeof(bed->ward_id), fields[1]);
-    BedRepository_copy_text(bed->room_no, sizeof(bed->room_no), fields[2]);
-    BedRepository_copy_text(bed->bed_no, sizeof(bed->bed_no), fields[3]);
+    RepositoryUtils_copy_text(bed->bed_id, sizeof(bed->bed_id), fields[0]);
+    RepositoryUtils_copy_text(bed->ward_id, sizeof(bed->ward_id), fields[1]);
+    RepositoryUtils_copy_text(bed->room_no, sizeof(bed->room_no), fields[2]);
+    RepositoryUtils_copy_text(bed->bed_no, sizeof(bed->bed_no), fields[3]);
 
-    result = BedRepository_parse_int(fields[4], &status_value);
+    result = RepositoryUtils_parse_int(fields[4], &status_value, "bed status");
     if (result.success == 0) return result;
     bed->status = (BedStatus)status_value;
 
-    BedRepository_copy_text(bed->current_admission_id, sizeof(bed->current_admission_id), fields[5]);
-    BedRepository_copy_text(bed->occupied_at, sizeof(bed->occupied_at), fields[6]);
-    BedRepository_copy_text(bed->released_at, sizeof(bed->released_at), fields[7]);
+    RepositoryUtils_copy_text(bed->current_admission_id, sizeof(bed->current_admission_id), fields[5]);
+    RepositoryUtils_copy_text(bed->occupied_at, sizeof(bed->occupied_at), fields[6]);
+    RepositoryUtils_copy_text(bed->released_at, sizeof(bed->released_at), fields[7]);
 
     return BedRepository_validate(bed);
 }
@@ -340,7 +304,7 @@ Result BedRepository_find_by_id(
     Bed *bed = 0;
     Result result;
 
-    if (!BedRepository_has_text(bed_id) || out_bed == 0) {
+    if (!RepositoryUtils_has_text(bed_id) || out_bed == 0) {
         return Result_make_failure("bed query arguments missing");
     }
 
