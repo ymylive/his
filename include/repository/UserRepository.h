@@ -17,12 +17,16 @@
 #include "repository/TextFileRepository.h"
 
 /** 用户数据文件的表头行 */
-#define USER_REPOSITORY_HEADER "user_id|password_hash|role|patient_id|force_password_change"
+#define USER_REPOSITORY_HEADER \
+    "user_id|password_hash|role|patient_id|force_password_change|failed_count|locked_until"
 
-/** 用户记录的字段数量 */
-#define USER_REPOSITORY_FIELD_COUNT 5
+/** 用户记录的字段数量（当前版本） */
+#define USER_REPOSITORY_FIELD_COUNT 7
 
-/** 旧版用户记录的字段数量（不含 force_password_change，用于向后兼容） */
+/** V2 兼容格式：含 force_password_change，缺锁定计数字段 */
+#define USER_REPOSITORY_FIELD_COUNT_V2 5
+
+/** V1 兼容格式：基础 4 字段，不含 force_password_change 与锁定计数 */
 #define USER_REPOSITORY_FIELD_COUNT_LEGACY 4
 
 /**

@@ -14,6 +14,10 @@
 
 #ifdef _WIN32
 #include <windows.h>
+#else
+#include <dirent.h>
+#include <sys/stat.h>
+#include <sys/types.h>
 #endif
 
 /**
@@ -41,8 +45,58 @@
 
 /* ── 配置常量 ── */
 #define HIS_DATA_DIR           "data/"
+#define HIS_DEMO_SEED_DIR      "data/demo_seed/"
 #define HIS_MENU_BUFFER_SIZE   8192
 #define HIS_INPUT_BUFFER_SIZE  128
+
+/**
+ * @brief 启动时收紧数据目录与 *.txt 文件权限，防止 PHI 泄露
+ *
+ * 合规（HIPAA / 个保法）：`data/*.txt` 含身份证、手机号、病史等 PHI。
+ * 仓库内 demo fixture 以 0644 入 git，首次启动时必须收紧到 0600；
+ * 目录收紧到 0700。仅处理 HIS 项目自己的 data/ 与 data/demo_seed/。
+ * Windows 上无等效 POSIX 权限位，保留 TODO 以 ACL 方式实现。
+ */
+static void his_harden_data_permissions(void) {
+#ifdef _WIN32
+    /* TODO(security): Windows 下通过 SetNamedSecurityInfo 设置 ACL，
+       限制只有当前用户可读写 data/*.txt。当前版本跳过。 */
+    return;
+#else
+    const char *directories[] = { HIS_DATA_DIR, HIS_DEMO_SEED_DIR };
+    size_t i;
+
+    for (i = 0; i < sizeof(directories) / sizeof(directories[0]); i++) {
+        const char *dir_path = directories[i];
+        DIR *dir = opendir(dir_path);
+        struct dirent *entry;
+        char file_path[512];
+
+        if (dir == NULL) {
+            continue; /* 目录不存在（例如首次运行）由仓储按需创建 */
+        }
+
+        /* 先收紧目录本身到 0700 */
+        (void)chmod(dir_path, 0700);
+
+        while ((entry = readdir(dir)) != NULL) {
+            const char *name = entry->d_name;
+            size_t len = strlen(name);
+
+            /* 只处理 *.txt，跳过 . / .. 与子目录 */
+            if (len < 5 || strcmp(name + len - 4, ".txt") != 0) {
+                continue;
+            }
+            if (snprintf(file_path, sizeof(file_path), "%s%s", dir_path, name)
+                >= (int)sizeof(file_path)) {
+                continue;
+            }
+            (void)chmod(file_path, 0600);
+        }
+        closedir(dir);
+    }
+#endif
+}
 
 #ifdef _WIN32
 /**
@@ -278,7 +332,6 @@ static int handle_login_flow(MenuApplication *application,
     char password[HIS_INPUT_BUFFER_SIZE];
     char prompt_buf[256];
     Result result;
-    int attempts = 0;
 
     for (;;) {
         int read_result = 0;
@@ -314,20 +367,14 @@ static int handle_login_flow(MenuApplication *application,
             continue; /* retry from user-ID */
         }
 
-        /* 尝试登录验证 */
+        /* 尝试登录验证。失败计数与锁定由 AuthService 持久化处理， */
+        /* 不再依赖内存中的计数器（防止通过返回角色选择重置攻击）。 */
         result = MenuApplication_login(application, input, password, required_role);
         /* 安全清除敏感缓冲区：密码和用户输入 */
         secure_zero(password, sizeof(password));
 
         if (result.success == 0) {
             secure_zero(input, sizeof(input));
-            attempts++;
-            if (attempts >= 5) {
-                tui_animate_error(output_stream,
-                    "登录失败次数过多，请稍后再试");
-                tui_delay(3000);
-                return 0; /* back to role selection */
-            }
             tui_animate_error(output_stream, result.message);
             tui_delay(500);
             continue; /* retry from user-ID */
@@ -402,6 +449,21 @@ static void handle_role_menu_loop(MenuApplication *application,
     for (;;) {
         MenuAction action = MENU_ACTION_INVALID;
 
+        /* 会话空闲超时检查：超过阈值则强制登出并返回主菜单 */
+        if (MenuApplication_is_session_idle(application, time(NULL))) {
+            tui_clear_screen();
+            tui_show_cursor(output_stream);
+            tui_animate_error(output_stream,
+                "\xe4\xbc\x9a\xe8\xaf\x9d\xe8\xb6\x85\xe6\x97\xb6\xef\xbc\x8c"
+                "\xe8\xaf\xb7\xe9\x87\x8d\xe6\x96\xb0\xe7\x99\xbb\xe5\xbd\x95"
+                /* 会话超时，请重新登录 */);
+            fprintf(stderr,
+                "AUDIT: LOGOUT user=%s reason=idle_timeout\n",
+                user_id != 0 ? user_id : "<unknown>");
+            tui_delay(1200);
+            break;
+        }
+
         /* 每次回到菜单前，完整重绘分屏界面 */
         tui_clear_screen();
         tui_hide_cursor(output_stream);
@@ -432,6 +494,9 @@ static void handle_role_menu_loop(MenuApplication *application,
             break;
         }
 
+        /* 成功读取到一次菜单选择 → 刷新活动时间 */
+        MenuApplication_touch_activity(application);
+
         /* 全屏显示操作内容 */
         tui_clear_screen();
         tui_show_cursor(output_stream);
@@ -450,6 +515,7 @@ static void handle_role_menu_loop(MenuApplication *application,
         tui_print_info(output_stream, "\xe6\x8c\x89\xe5\x9b\x9e\xe8\xbd\xa6\xe8\xbf\x94\xe5\x9b\x9e\xe8\x8f\x9c\xe5\x8d\x95..." /* 按回车返回菜单... */);
         fflush(output_stream);
         InputHelper_read_line(input_stream, input, sizeof(input));
+        MenuApplication_touch_activity(application);
     }
 
     tui_show_cursor(output_stream);
@@ -475,6 +541,9 @@ int main(void) {
     init_windows_console();
 #endif
 
+    /* 合规：启动时收紧 data/ 目录与 *.txt 权限（防御 git checkout 留下的 0644） */
+    his_harden_data_permissions();
+
     /* 配置所有数据文件的路径 */
     paths = (MenuApplicationPaths){
         HIS_DATA_DIR "users.txt",
@@ -492,7 +561,8 @@ int main(void) {
         HIS_DATA_DIR "prescriptions.txt",
         HIS_DATA_DIR "inpatient_orders.txt",
         HIS_DATA_DIR "nursing_records.txt",
-        HIS_DATA_DIR "round_records.txt"
+        HIS_DATA_DIR "round_records.txt",
+        HIS_DATA_DIR
     };
 
     /* 初始化应用程序（加载所有业务服务） */
@@ -716,11 +786,31 @@ int main(void) {
                     secure_zero(confirm_pw, sizeof(confirm_pw));
 
                     if (pw_result.success == 0) {
+                        /* 审计：密码修改失败 */
+                        (void)AuditService_record(
+                            &application.audit_service,
+                            AUDIT_EVENT_PASSWORD_CHANGE,
+                            user_id,
+                            0,
+                            "USER",
+                            user_id,
+                            "FAIL",
+                            pw_result.message);
                         tui_animate_error(stdout, pw_result.message);
                         tui_delay(500);
                         continue;
                     }
 
+                    /* 审计：密码修改成功 */
+                    (void)AuditService_record(
+                        &application.audit_service,
+                        AUDIT_EVENT_PASSWORD_CHANGE,
+                        user_id,
+                        0,
+                        "USER",
+                        user_id,
+                        "OK",
+                        0);
                     application.authenticated_user.force_password_change = 0;
                     pw_changed = 1;
                     tui_animate_success(stdout,

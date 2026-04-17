@@ -6,13 +6,25 @@
  * 1. 通过 curl 调用 GitHub Releases API 获取最新版本信息
  * 2. 解析 JSON 响应提取版本号和下载链接
  * 3. 比较版本号判断是否有可用更新
- * 4. 支持自动下载 zip 包并安装到当前目录
+ * 4. 下载 SHA256SUMS + 安装包并校验摘要，确保供应链完整性
  * 5. 支持 Windows、macOS 和 Linux 三个平台
+ *
+ * 安全加固（2026-04 安全审查遗留）：
+ * - 所有外部命令改为 argv 数组形式（fork+execvp / CreateProcess），
+ *   不再经过 shell，消除命令注入风险（不再调用 system()）。
+ * - 所有 URL 采用白名单校验，必须以 https://github.com/ 或
+ *   https://api.github.com/ 开头且仅含受限字符集。
+ * - 下载产物按 SHA-256 校验；若 SHA256SUMS 缺失或摘要不匹配，
+ *   安装流程中止并清理临时文件。
+ * - JSON 解析器增加长度边界检查，拒绝 \u 转义以降低手写解析风险。
  */
 
 #include "common/UpdateChecker.h"
 #include "ui/TuiStyle.h"
 
+#include "../../third_party/sha256/sha256.h"
+
+#include <ctype.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -21,11 +33,13 @@
 #include <direct.h>
 #include <windows.h>
 #include <shellapi.h>
-#define popen  _popen
-#define pclose _pclose
 #else
 #include <unistd.h>
 #include <sys/wait.h>
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <fcntl.h>
+#include <dirent.h>
 #ifdef __APPLE__
 #include <mach-o/dyld.h>
 #endif
@@ -33,66 +47,52 @@
 
 /** GitHub Releases API 地址 */
 #define GITHUB_API_URL "https://api.github.com/repos/ymylive/his/releases/latest"
-/** GitHub 仓库标识 */
-#define GITHUB_REPO    "ymylive/his"
 /** API 响应缓冲区最大大小（字节） */
 #define MAX_RESPONSE   16384
 /** URL 最大允许长度 */
 #define MAX_URL_LENGTH 2048
-/** 文件路径最大允许长度 */
-#define MAX_PATH_LENGTH 512
 
-/* ── 安全验证函数 ───────────────────────────────────────── */
+/* ── URL / 路径 安全校验（白名单） ───────────────────────── */
 
 /**
- * @brief 检查字符串是否包含 shell 元字符
+ * @brief 判断字符是否在 HTTPS URL 白名单字符集内
  *
- * 拒绝可被用于命令注入的危险字符，包括：
- * ; | & $ ` ( ) { } < > ! # ' \n \r \\ (反斜杠)
- *
- * @param str    要检查的字符串
- * @param errbuf 错误信息输出缓冲区（可为 NULL）
- * @param errsz  错误缓冲区大小
- * @return 安全返回 1，包含危险字符返回 0
+ * 合法 URL 仅包含：字母数字 + / : . - _ ~ ? = & % + @ #
+ * 任何其他字符（含空格、shell 元字符、控制字符）一律拒绝。
  */
-static int check_no_shell_metachar(const char *str, char *errbuf, size_t errsz) {
-    /* 禁止的 shell 元字符集合 */
-    static const char forbidden[] = ";|&$`(){}[]<>!#'\"\n\r\\";
-    size_t i;
-
-    if (str == NULL) {
-        if (errbuf) snprintf(errbuf, errsz, "输入字符串为空指针");
-        return 0;
-    }
-
-    for (i = 0; str[i] != '\0'; i++) {
-        if (strchr(forbidden, str[i]) != NULL) {
-            if (errbuf) {
-                snprintf(errbuf, errsz,
-                    "检测到危险字符 0x%02X 在位置 %zu",
-                    (unsigned char)str[i], i);
-            }
+static int is_url_char(unsigned char c) {
+    if (c >= 'a' && c <= 'z') return 1;
+    if (c >= 'A' && c <= 'Z') return 1;
+    if (c >= '0' && c <= '9') return 1;
+    switch (c) {
+        case '/': case ':': case '.': case '-': case '_':
+        case '~': case '?': case '=': case '&': case '%':
+        case '+': case '@': case '#':
+            return 1;
+        default:
             return 0;
-        }
     }
-    return 1;
 }
 
 /**
- * @brief 验证 URL 是否安全可用于 shell 命令
+ * @brief 白名单校验 URL，仅接受受信 GitHub 前缀 + 受限字符
  *
- * 执行以下安全检查：
- * 1. 非空且长度不超过 MAX_URL_LENGTH
- * 2. 必须以 "https://" 开头（禁止 http、file、ftp 等协议）
- * 3. 不得包含任何 shell 元字符（防止命令注入）
- *
- * @param url    要验证的 URL 字符串
- * @param errbuf 错误信息输出缓冲区（可为 NULL）
+ * @param url    待校验 URL
+ * @param errbuf 错误信息（可 NULL）
  * @param errsz  错误缓冲区大小
- * @return URL 安全返回 1，不安全返回 0
+ * @return 1 通过，0 拒绝
  */
-static int validate_url_for_shell(const char *url, char *errbuf, size_t errsz) {
+static int validate_url(const char *url, char *errbuf, size_t errsz) {
+    static const char *const kTrustedPrefixes[] = {
+        "https://github.com/",
+        "https://api.github.com/",
+        "https://objects.githubusercontent.com/",
+        "https://codeload.github.com/",
+        NULL
+    };
     size_t len;
+    size_t i;
+    int prefix_ok = 0;
 
     if (url == NULL || url[0] == '\0') {
         if (errbuf) snprintf(errbuf, errsz, "URL 为空");
@@ -105,118 +105,323 @@ static int validate_url_for_shell(const char *url, char *errbuf, size_t errsz) {
         return 0;
     }
 
-    /* 强制要求 HTTPS 协议 */
-    if (strncmp(url, "https://", 8) != 0) {
-        if (errbuf) snprintf(errbuf, errsz, "URL 必须以 https:// 开头");
+    for (i = 0; kTrustedPrefixes[i] != NULL; ++i) {
+        size_t plen = strlen(kTrustedPrefixes[i]);
+        if (len > plen && strncmp(url, kTrustedPrefixes[i], plen) == 0) {
+            prefix_ok = 1;
+            break;
+        }
+    }
+    if (!prefix_ok) {
+        if (errbuf) snprintf(errbuf, errsz, "URL 不在受信前缀白名单内");
         return 0;
     }
 
-    /* 检查 URL 中不含 shell 元字符。
-     * 注意：合法的 HTTPS URL 仅由字母、数字和 /:.-_~?=&%+@ 组成，
-     * 这里采用黑名单方式拒绝已知的危险字符。 */
-    if (!check_no_shell_metachar(url, errbuf, errsz)) {
-        return 0;
-    }
-
-    return 1;
-}
-
-/**
- * @brief 验证文件路径是否安全可用于 shell 命令
- *
- * 执行以下安全检查：
- * 1. 非空且长度不超过 MAX_PATH_LENGTH
- * 2. 不得包含 shell 元字符（防止命令注入）
- * 3. 仅允许字母、数字、/ \ . _ - 和空格（白名单方式）
- *
- * @param path   要验证的路径字符串
- * @param errbuf 错误信息输出缓冲区（可为 NULL）
- * @param errsz  错误缓冲区大小
- * @return 路径安全返回 1，不安全返回 0
- */
-static int validate_path_for_shell(const char *path, char *errbuf, size_t errsz) {
-    size_t len;
-    size_t i;
-
-    if (path == NULL || path[0] == '\0') {
-        if (errbuf) snprintf(errbuf, errsz, "路径为空");
-        return 0;
-    }
-
-    len = strlen(path);
-    if (len > MAX_PATH_LENGTH) {
-        if (errbuf) snprintf(errbuf, errsz, "路径过长（%zu > %d）", len, MAX_PATH_LENGTH);
-        return 0;
-    }
-
-    /* 路径白名单：仅允许安全字符 */
-    for (i = 0; i < len; i++) {
-        char c = path[i];
-        int safe = 0;
-        if (c >= 'a' && c <= 'z') safe = 1;
-        else if (c >= 'A' && c <= 'Z') safe = 1;
-        else if (c >= '0' && c <= '9') safe = 1;
-        else if (c == '/' || c == '\\' || c == '.' || c == '_' || c == '-' || c == ' ' || c == ':') safe = 1;
-        if (!safe) {
+    for (i = 0; i < len; ++i) {
+        if (!is_url_char((unsigned char)url[i])) {
             if (errbuf) {
                 snprintf(errbuf, errsz,
-                    "路径包含不允许的字符 0x%02X 在位置 %zu",
-                    (unsigned char)c, i);
+                    "URL 第 %zu 位包含非法字符 0x%02X",
+                    i, (unsigned char)url[i]);
             }
             return 0;
         }
     }
-
     return 1;
 }
 
-/* ── JSON 辅助解析函数 ───────────────────────────────────── */
+/* ── 进程执行封装（不经过 shell） ───────────────────────── */
+
+/**
+ * @brief 执行外部程序并等待其结束（不经过 shell）。
+ *
+ * 参数以 argv 数组形式直接传递给 execvp/CreateProcess，
+ * 因此空格、shell 元字符等均不会被解释，彻底消除命令注入。
+ *
+ * @param argv 以 NULL 结尾的参数数组，argv[0] 为程序名
+ * @return 成功 0；子进程非 0 退出返回其退出码；其它错误返回 -1
+ */
+static int run_process(const char *const argv[]) {
+    if (argv == NULL || argv[0] == NULL) return -1;
+
+#ifdef _WIN32
+    /* 将 argv 拼接成 CreateProcessA 需要的单字符串命令行；
+     * 参数按 CommandLineToArgvW 的规则加引号 / 转义反斜杠。
+     * 注意：拼接发生在进程创建内核路径而非 shell，不会被 shell 解释。 */
+    char cmdline[4096];
+    size_t pos = 0;
+    size_t i;
+    STARTUPINFOA si;
+    PROCESS_INFORMATION pi;
+    DWORD exit_code = 0;
+
+    cmdline[0] = '\0';
+    for (i = 0; argv[i] != NULL; ++i) {
+        const char *a = argv[i];
+        int needs_quote = (a[0] == '\0') || strpbrk(a, " \t\"\\") != NULL;
+        size_t j;
+
+        if (i > 0 && pos < sizeof(cmdline) - 1) {
+            cmdline[pos++] = ' ';
+            cmdline[pos] = '\0';
+        }
+        if (needs_quote && pos < sizeof(cmdline) - 1) {
+            cmdline[pos++] = '"';
+        }
+        for (j = 0; a[j] != '\0'; ++j) {
+            if (pos >= sizeof(cmdline) - 3) return -1;
+            if (a[j] == '"' || a[j] == '\\') {
+                cmdline[pos++] = '\\';
+            }
+            cmdline[pos++] = a[j];
+        }
+        if (needs_quote && pos < sizeof(cmdline) - 1) {
+            cmdline[pos++] = '"';
+        }
+        cmdline[pos] = '\0';
+    }
+
+    ZeroMemory(&si, sizeof(si));
+    si.cb = sizeof(si);
+    ZeroMemory(&pi, sizeof(pi));
+
+    if (!CreateProcessA(NULL, cmdline, NULL, NULL, FALSE, 0, NULL, NULL, &si, &pi)) {
+        return -1;
+    }
+    WaitForSingleObject(pi.hProcess, INFINITE);
+    GetExitCodeProcess(pi.hProcess, &exit_code);
+    CloseHandle(pi.hProcess);
+    CloseHandle(pi.hThread);
+    return (int)exit_code;
+#else
+    pid_t pid = fork();
+    if (pid < 0) return -1;
+    if (pid == 0) {
+        /* 子进程：静音 stderr 降低噪声（保留 stdout 让 curl 的进度可见） */
+        execvp(argv[0], (char *const *)argv);
+        _exit(127); /* exec 失败 */
+    }
+    {
+        int status = 0;
+        if (waitpid(pid, &status, 0) < 0) return -1;
+        if (WIFEXITED(status)) return WEXITSTATUS(status);
+        return -1;
+    }
+#endif
+}
+
+#ifndef _WIN32
+/**
+ * @brief fork+execvp，但把子进程 stderr 重定向到 /dev/null
+ *
+ * 用于原本 2>/dev/null 的命令（例如 xattr / chmod 失败时不打扰用户）。
+ */
+static int run_process_quiet(const char *const argv[]) {
+    if (argv == NULL || argv[0] == NULL) return -1;
+    pid_t pid = fork();
+    if (pid < 0) return -1;
+    if (pid == 0) {
+        int devnull = open("/dev/null", O_WRONLY);
+        if (devnull >= 0) {
+            dup2(devnull, STDERR_FILENO);
+            close(devnull);
+        }
+        execvp(argv[0], (char *const *)argv);
+        _exit(127);
+    }
+    {
+        int status = 0;
+        if (waitpid(pid, &status, 0) < 0) return -1;
+        if (WIFEXITED(status)) return WEXITSTATUS(status);
+        return -1;
+    }
+}
+#endif
+
+/**
+ * @brief 通过 curl 捕获指定 URL 的响应到内存缓冲区
+ *
+ * 使用 pipe + fork + execvp（Windows 下用 _pipe + CreateProcess），
+ * 避免 shell 拼接。curl 参数全部通过 argv 直接传递。
+ *
+ * @param url  待下载的 URL
+ * @param buf  输出缓冲区
+ * @param bufsz 缓冲区大小（返回内容包含尾部 '\0'）
+ * @param nread 实际读取字节数（可 NULL）
+ * @return 1 成功，0 失败
+ */
+static int http_fetch_to_buffer(const char *url, char *buf, size_t bufsz, size_t *nread) {
+    if (url == NULL || buf == NULL || bufsz == 0) return 0;
+
+#ifdef _WIN32
+    /* Windows: CreateProcess + 匿名管道读取 curl stdout */
+    HANDLE rd = NULL, wr = NULL;
+    SECURITY_ATTRIBUTES sa;
+    STARTUPINFOA si;
+    PROCESS_INFORMATION pi;
+    char cmdline[4096];
+    size_t total = 0;
+    DWORD exit_code = 0;
+
+    sa.nLength = sizeof(sa);
+    sa.bInheritHandle = TRUE;
+    sa.lpSecurityDescriptor = NULL;
+    if (!CreatePipe(&rd, &wr, &sa, 0)) return 0;
+    SetHandleInformation(rd, HANDLE_FLAG_INHERIT, 0);
+
+    snprintf(cmdline, sizeof(cmdline),
+        "curl -s -m 10 --proto =https --tlsv1.2 "
+        "-H \"Accept: application/vnd.github.v3+json\" "
+        "-H \"User-Agent: his-updater\" \"%s\"", url);
+
+    ZeroMemory(&si, sizeof(si));
+    si.cb = sizeof(si);
+    si.dwFlags = STARTF_USESTDHANDLES;
+    si.hStdOutput = wr;
+    si.hStdError  = GetStdHandle(STD_ERROR_HANDLE);
+    si.hStdInput  = GetStdHandle(STD_INPUT_HANDLE);
+    ZeroMemory(&pi, sizeof(pi));
+
+    if (!CreateProcessA(NULL, cmdline, NULL, NULL, TRUE, 0, NULL, NULL, &si, &pi)) {
+        CloseHandle(rd); CloseHandle(wr);
+        return 0;
+    }
+    CloseHandle(wr); /* 父进程只读 */
+
+    for (;;) {
+        DWORD got = 0;
+        if (total + 1 >= bufsz) break;
+        if (!ReadFile(rd, buf + total, (DWORD)(bufsz - total - 1), &got, NULL) || got == 0) {
+            break;
+        }
+        total += got;
+    }
+    buf[total] = '\0';
+    CloseHandle(rd);
+    WaitForSingleObject(pi.hProcess, INFINITE);
+    GetExitCodeProcess(pi.hProcess, &exit_code);
+    CloseHandle(pi.hProcess);
+    CloseHandle(pi.hThread);
+    if (nread) *nread = total;
+    return (exit_code == 0 && total > 0) ? 1 : 0;
+#else
+    int fds[2];
+    pid_t pid;
+    size_t total = 0;
+    ssize_t got;
+    int status = 0;
+
+    if (pipe(fds) != 0) return 0;
+    pid = fork();
+    if (pid < 0) {
+        close(fds[0]); close(fds[1]);
+        return 0;
+    }
+    if (pid == 0) {
+        close(fds[0]);
+        dup2(fds[1], STDOUT_FILENO);
+        close(fds[1]);
+        /* 静音 stderr，curl 默认不打印进度到 stderr */
+        {
+            int devnull = open("/dev/null", O_WRONLY);
+            if (devnull >= 0) { dup2(devnull, STDERR_FILENO); close(devnull); }
+        }
+        {
+            const char *argv[] = {
+                "curl", "-s", "-m", "10",
+                "--proto", "=https", "--tlsv1.2",
+                "-H", "Accept: application/vnd.github.v3+json",
+                "-H", "User-Agent: his-updater",
+                url, NULL
+            };
+            execvp(argv[0], (char *const *)argv);
+            _exit(127);
+        }
+    }
+    close(fds[1]);
+    while (total + 1 < bufsz) {
+        got = read(fds[0], buf + total, bufsz - total - 1);
+        if (got <= 0) break;
+        total += (size_t)got;
+    }
+    buf[total] = '\0';
+    close(fds[0]);
+    if (waitpid(pid, &status, 0) < 0) return 0;
+    if (nread) *nread = total;
+    if (!WIFEXITED(status) || WEXITSTATUS(status) != 0) return 0;
+    return total > 0 ? 1 : 0;
+#endif
+}
+
+/**
+ * @brief 用 curl 将 URL 下载到文件（argv 模式，不经过 shell）。
+ *
+ * @return 0 成功；其它值为 curl 退出码或 -1。
+ */
+static int http_download_to_file(const char *url, const char *out_path) {
+    const char *argv[] = {
+        "curl", "-L", "-s", "-f",
+        "--proto", "=https", "--tlsv1.2",
+        "-H", "User-Agent: his-updater",
+        "-o", out_path,
+        url, NULL
+    };
+    return run_process(argv);
+}
+
+/* ── JSON 辅助解析函数（手写，已加长度边界与 \u 拒绝） ── */
 
 /**
  * @brief 从 JSON 字符串中提取指定键的字符串值
  *
- * 简易 JSON 解析器，通过字符串匹配定位键名，然后提取对应的字符串值。
- * 不依赖第三方 JSON 库，适用于结构简单的 GitHub API 响应。
- *
- * @param json     JSON 字符串
- * @param key      要提取的键名
- * @param buf      输出缓冲区
- * @param buf_size 输出缓冲区大小
- * @return 成功提取返回 1，未找到返回 0
+ * 简易 JSON 解析器：按 "key" 文本匹配定位，然后提取双引号包围的值。
+ * 加固点：
+ *   1. 搜索范围限定在 [json, json + json_len)，避免越过缓冲区。
+ *   2. 字符串值遇到 `\u` Unicode 转义直接视为解析失败，
+ *      防止手写实现对 Unicode 边界处理不鲁棒。
+ *   3. 截断时保留 NUL，输出长度永不超过 buf_size - 1。
  */
 static int json_extract_string(
-    const char *json, const char *key,
+    const char *json, size_t json_len, const char *key,
     char *buf, size_t buf_size
 ) {
     char pattern[64];
-    const char *start = 0;
-    const char *end = 0;
-    size_t len = 0;
+    const char *hay_end;
+    const char *start;
+    const char *end;
+    size_t plen;
+    size_t out_len;
 
-    /* 构造搜索模式 "key" */
-    snprintf(pattern, sizeof(pattern), "\"%s\"", key);
+    if (json == NULL || key == NULL || buf == NULL || buf_size == 0) return 0;
+    hay_end = json + json_len;
+
+    plen = (size_t)snprintf(pattern, sizeof(pattern), "\"%s\"", key);
+    if (plen == 0 || plen >= sizeof(pattern)) return 0;
+
     start = strstr(json, pattern);
-    if (start == 0) return 0;
+    if (start == NULL || start >= hay_end) return 0;
 
-    /* 跳过键名及冒号、空白等分隔字符 */
-    start += strlen(pattern);
-    while (*start == ' ' || *start == ':' || *start == '\t') start++;
-    /* 期望值以双引号开头 */
-    if (*start != '"') return 0;
-    start++; /* 跳过开头双引号 */
+    start += plen;
+    while (start < hay_end && (*start == ' ' || *start == ':' || *start == '\t')) start++;
+    if (start >= hay_end || *start != '"') return 0;
+    start++;
 
-    /* 找到值的结束位置（匹配闭合双引号，处理转义字符） */
     end = start;
-    while (*end != '\0' && *end != '"') {
-        if (*end == '\\') { end++; } /* 跳过转义字符 */
-        if (*end != '\0') end++;
+    while (end < hay_end && *end != '"') {
+        if (*end == '\\') {
+            if (end + 1 >= hay_end) return 0;
+            if (end[1] == 'u') return 0; /* 拒绝 Unicode 转义 */
+            end += 2;
+            continue;
+        }
+        end++;
     }
+    if (end >= hay_end) return 0;
 
-    /* 将提取的值复制到输出缓冲区 */
-    len = (size_t)(end - start);
-    if (len >= buf_size) len = buf_size - 1;
-    memcpy(buf, start, len);
-    buf[len] = '\0';
+    out_len = (size_t)(end - start);
+    if (out_len >= buf_size) out_len = buf_size - 1;
+    memcpy(buf, start, out_len);
+    buf[out_len] = '\0';
     return 1;
 }
 
@@ -225,52 +430,50 @@ static int json_extract_string(
  *
  * 遍历 JSON 中所有 "name" 字段，找到同时包含指定关键字和 ".zip"
  * 后缀的资源，然后提取其 "browser_download_url" 字段。
- *
- * @param json    JSON 字符串
- * @param keyword 平台关键字（如 "win64"、"macos-arm64" 等）
- * @param url_buf 输出 URL 缓冲区
- * @param url_size 输出缓冲区大小
- * @return 找到匹配的资源返回 1，未找到返回 0
  */
 static int json_find_asset_url(
-    const char *json, const char *keyword,
+    const char *json, size_t json_len, const char *keyword,
     char *url_buf, size_t url_size
 ) {
     const char *cursor = json;
-    const char *name_pos = 0;
-    const char *url_pos = 0;
+    const char *hay_end = json + json_len;
+    const char *name_pos;
 
-    /* 遍历所有 "name" 字段 */
-    while ((name_pos = strstr(cursor, "\"name\"")) != 0) {
+    while ((name_pos = strstr(cursor, "\"name\"")) != NULL && name_pos < hay_end) {
         char name[256];
-        const char *ns = name_pos + 6; /* 跳过 "name" */
-        const char *ne = 0;
-        size_t nlen = 0;
+        const char *ns = name_pos + 6;
+        const char *ne;
+        size_t nlen;
 
-        /* 跳过分隔符，提取 name 的值 */
-        while (*ns == ' ' || *ns == ':' || *ns == '\t') ns++;
-        if (*ns != '"') { cursor = ns; continue; }
+        while (ns < hay_end && (*ns == ' ' || *ns == ':' || *ns == '\t')) ns++;
+        if (ns >= hay_end || *ns != '"') { cursor = ns; continue; }
         ns++;
         ne = ns;
-        while (*ne != '\0' && *ne != '"') ne++;
+        while (ne < hay_end && *ne != '"') {
+            if (*ne == '\\' && ne + 1 < hay_end) { ne += 2; continue; }
+            ne++;
+        }
+        if (ne >= hay_end) return 0;
         nlen = (size_t)(ne - ns);
         if (nlen >= sizeof(name)) nlen = sizeof(name) - 1;
         memcpy(name, ns, nlen);
         name[nlen] = '\0';
 
-        /* 检查文件名是否同时包含平台关键字和 .zip 后缀 */
-        if (strstr(name, keyword) != 0 && strstr(name, ".zip") != 0) {
-            /* 找到匹配的资源文件，在附近查找 browser_download_url */
-            url_pos = strstr(name_pos, "\"browser_download_url\"");
-            if (url_pos != 0) {
-                const char *us = url_pos + 22; /* 跳过 "browser_download_url" */
-                const char *ue = 0;
-                size_t ulen = 0;
-                while (*us == ' ' || *us == ':' || *us == '\t') us++;
-                if (*us != '"') { cursor = ne; continue; }
+        if (strstr(name, keyword) != NULL && strstr(name, ".zip") != NULL) {
+            const char *url_pos = strstr(name_pos, "\"browser_download_url\"");
+            if (url_pos != NULL && url_pos < hay_end) {
+                const char *us = url_pos + 22;
+                const char *ue;
+                size_t ulen;
+                while (us < hay_end && (*us == ' ' || *us == ':' || *us == '\t')) us++;
+                if (us >= hay_end || *us != '"') { cursor = ne; continue; }
                 us++;
                 ue = us;
-                while (*ue != '\0' && *ue != '"') ue++;
+                while (ue < hay_end && *ue != '"') {
+                    if (*ue == '\\' && ue + 1 < hay_end) { ue += 2; continue; }
+                    ue++;
+                }
+                if (ue >= hay_end) return 0;
                 ulen = (size_t)(ue - us);
                 if (ulen >= url_size) ulen = url_size - 1;
                 memcpy(url_buf, us, ulen);
@@ -283,23 +486,97 @@ static int json_find_asset_url(
     return 0;
 }
 
-/* ── 版本号比较 ──────────────────────────────────────────── */
+/* ── SHA256SUMS 解析与校验 ──────────────────────────────── */
 
 /**
- * @brief 比较两个语义化版本号字符串（major.minor.patch）
+ * @brief 从 SHA256SUMS 文本中查找指定文件名对应的 64 位 16 进制摘要
  *
- * @param a 版本号字符串 A
- * @param b 版本号字符串 B
- * @return a > b 返回正数，a < b 返回负数，相等返回 0
+ * SHA256SUMS 的每一行格式约定：`<hex(64)>  <filename>`（两个空格）
+ * 或 `<hex(64)> *<filename>` （二进制模式）。本函数对两种格式都兼容。
+ *
+ * @param sums_text SHA256SUMS 文本（NUL 结尾）
+ * @param filename  待匹配的文件名（不含路径）
+ * @param hex_out   输出 65 字节缓冲区（64 位 + NUL）
+ * @return 1 找到，0 未找到
  */
+static int sha256sums_lookup(const char *sums_text, const char *filename, char hex_out[65]) {
+    const char *p;
+    size_t name_len;
+    size_t i;
+
+    if (sums_text == NULL || filename == NULL || filename[0] == '\0') return 0;
+    name_len = strlen(filename);
+
+    p = sums_text;
+    while (*p != '\0') {
+        const char *line_start = p;
+        const char *line_end = strchr(p, '\n');
+        size_t line_len = (line_end != NULL) ? (size_t)(line_end - line_start)
+                                             : strlen(line_start);
+        const char *q = line_start;
+        const char *file_part;
+
+        /* 最少 64 hex + 两个分隔 + 至少 1 个文件名字符 */
+        if (line_len < 64 + 2 + 1) {
+            p = (line_end != NULL) ? (line_end + 1) : line_start + line_len;
+            if (line_end == NULL) break;
+            continue;
+        }
+
+        /* 前 64 个字符必须全部是十六进制 */
+        for (i = 0; i < 64; ++i) {
+            char c = q[i];
+            int hex = (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F');
+            if (!hex) break;
+        }
+        if (i != 64) {
+            p = (line_end != NULL) ? (line_end + 1) : line_start + line_len;
+            if (line_end == NULL) break;
+            continue;
+        }
+
+        file_part = q + 64;
+        /* 跳过空格 / tab / 二进制模式的 '*' 标记 */
+        while (file_part < line_start + line_len &&
+               (*file_part == ' ' || *file_part == '\t' || *file_part == '*')) {
+            file_part++;
+        }
+
+        if ((size_t)((line_start + line_len) - file_part) == name_len &&
+            strncmp(file_part, filename, name_len) == 0) {
+            /* 命中：复制前 64 字符为 hex_out（统一小写） */
+            for (i = 0; i < 64; ++i) {
+                char c = q[i];
+                if (c >= 'A' && c <= 'F') c = (char)(c - 'A' + 'a');
+                hex_out[i] = c;
+            }
+            hex_out[64] = '\0';
+            return 1;
+        }
+
+        p = (line_end != NULL) ? (line_end + 1) : line_start + line_len;
+        if (line_end == NULL) break;
+    }
+    return 0;
+}
+
+/**
+ * @brief 返回 URL 中最后一个 '/' 之后的文件名部分（忽略 query string）。
+ */
+static const char *url_basename(const char *url) {
+    const char *slash = strrchr(url, '/');
+    return (slash != NULL) ? slash + 1 : url;
+}
+
+/* ── 版本号比较 ──────────────────────────────────────────── */
+
 static int version_compare(const char *a, const char *b) {
-    int a1 = 0, a2 = 0, a3 = 0; /* A 的主版本、次版本、补丁版本 */
-    int b1 = 0, b2 = 0, b3 = 0; /* B 的主版本、次版本、补丁版本 */
+    int a1 = 0, a2 = 0, a3 = 0;
+    int b1 = 0, b2 = 0, b3 = 0;
 
     sscanf(a, "%d.%d.%d", &a1, &a2, &a3);
     sscanf(b, "%d.%d.%d", &b1, &b2, &b3);
 
-    /* 依次比较主版本、次版本、补丁版本 */
     if (a1 != b1) return a1 - b1;
     if (a2 != b2) return a2 - b2;
     return a3 - b3;
@@ -307,14 +584,6 @@ static int version_compare(const char *a, const char *b) {
 
 /* ── 平台检测 ────────────────────────────────────────────── */
 
-/**
- * @brief 获取当前平台的关键字标识
- *
- * 根据编译期宏定义返回对应平台的关键字字符串，
- * 用于在 GitHub Release 资源中匹配对应平台的下载包。
- *
- * @return 平台关键字字符串（如 "win64"、"macos-arm64"、"linux" 等）
- */
 static const char *get_platform_keyword(void) {
 #if defined(_WIN32)
     #if defined(_WIN64) || defined(__x86_64__) || defined(__amd64__)
@@ -337,83 +606,57 @@ static const char *get_platform_keyword(void) {
 
 /* ── 全局变量：缓存 API 响应的原始 JSON ─────────────────── */
 
-/** 用于存储 GitHub API 返回的原始 JSON 响应 */
 static char g_api_response[MAX_RESPONSE];
+static size_t g_api_response_len = 0;
 
 /* ── 公开接口实现 ────────────────────────────────────────── */
 
-/**
- * @brief 检查 GitHub 上是否有新版本
- *
- * 通过 curl 调用 GitHub API 获取最新发布信息，解析 JSON
- * 响应提取版本号、下载页面 URL 和平台对应的安装包 URL，
- * 最后与当前版本号比较判断是否需要更新。
- *
- * @param info 输出参数，用于存储检查结果
- * @return 检查成功返回 1，失败返回 0
- */
 int UpdateChecker_check(UpdateInfo *info) {
-    FILE *pipe = 0;
-    size_t total = 0;
-    size_t bytes_read = 0;
     char tag_name[32];
-    const char *ver = 0;
+    const char *ver;
+    size_t total = 0;
 
-    if (info == 0) return 0;
+    if (info == NULL) return 0;
 
-    /* 初始化更新信息结构体 */
     memset(info, 0, sizeof(UpdateInfo));
     strncpy(info->current_version, HIS_VERSION, sizeof(info->current_version) - 1);
 
-    /* 通过 popen 执行 curl 命令获取 GitHub API 响应 */
-#ifdef _WIN32
-    pipe = popen(
-        "curl -s -m 5 --proto =https --tlsv1.2 "
-        "-H \"Accept: application/vnd.github.v3+json\" "
-        "\"" GITHUB_API_URL "\" 2>NUL",
-        "r"
-    );
-#else
-    pipe = popen(
-        "curl -s -m 5 --proto =https --tlsv1.2 "
-        "-H \"Accept: application/vnd.github.v3+json\" "
-        "\"" GITHUB_API_URL "\" 2>/dev/null",
-        "r"
-    );
-#endif
-    if (pipe == 0) return 0;
-
-    /* 读取 API 响应内容到全局缓冲区 */
-    while ((bytes_read = fread(g_api_response + total, 1,
-                               sizeof(g_api_response) - total - 1, pipe)) > 0) {
-        total += bytes_read;
-        if (total >= sizeof(g_api_response) - 1) break;
+    /* 通过 argv 直接 exec curl；URL 是编译期常量，无注入风险 */
+    if (!http_fetch_to_buffer(GITHUB_API_URL, g_api_response, sizeof(g_api_response), &total)) {
+        g_api_response_len = 0;
+        return 0;
     }
-    g_api_response[total] = '\0';
-    pclose(pipe);
+    g_api_response_len = total;
+    if (total == 0) return 0;
 
-    if (total == 0) return 0; /* 无响应数据，检查失败 */
-
-    /* 从 JSON 中提取 tag_name（如 "v3.1.0"） */
-    if (!json_extract_string(g_api_response, "tag_name", tag_name, sizeof(tag_name))) {
+    if (!json_extract_string(g_api_response, g_api_response_len,
+                             "tag_name", tag_name, sizeof(tag_name))) {
         return 0;
     }
 
-    /* 去除版本号前导的 'v' 或 'V' */
     ver = tag_name;
     if (ver[0] == 'v' || ver[0] == 'V') ver++;
-
     strncpy(info->latest_version, ver, sizeof(info->latest_version) - 1);
 
-    /* 提取 GitHub 发布页面 URL */
-    json_extract_string(g_api_response, "html_url",
-                        info->download_url, sizeof(info->download_url));
+    json_extract_string(g_api_response, g_api_response_len,
+                        "html_url", info->download_url, sizeof(info->download_url));
 
-    /* 查找当前平台对应的安装包直接下载 URL */
-    json_find_asset_url(g_api_response, get_platform_keyword(),
-                        info->asset_url, sizeof(info->asset_url));
+    json_find_asset_url(g_api_response, g_api_response_len,
+                        get_platform_keyword(), info->asset_url, sizeof(info->asset_url));
 
-    /* 比较版本号，判断是否有新版本 */
+    /* 验证从 JSON 提取的 URL 均处于白名单，防止恶意 Release 元数据 */
+    {
+        char err[128];
+        if (info->download_url[0] != '\0' &&
+            !validate_url(info->download_url, err, sizeof(err))) {
+            info->download_url[0] = '\0';
+        }
+        if (info->asset_url[0] != '\0' &&
+            !validate_url(info->asset_url, err, sizeof(err))) {
+            info->asset_url[0] = '\0';
+        }
+    }
+
     if (version_compare(info->latest_version, info->current_version) > 0) {
         info->has_update = 1;
     }
@@ -424,204 +667,251 @@ int UpdateChecker_check(UpdateInfo *info) {
 /* ── 下载并安装更新 ──────────────────────────────────────── */
 
 /**
- * @brief 打印更新对话框的一行（带左右边框）
+ * @brief 解析当前 asset_url 所在 release 的 SHA256SUMS URL
  *
- * 内部辅助函数，用于绘制 TUI 样式的对话框行。
+ * GitHub Release 资源 URL 形如：
+ *   https://github.com/<owner>/<repo>/releases/download/<tag>/<file>
+ * 将最后一段 <file> 替换为 "SHA256SUMS" 即为摘要清单 URL。
  *
- * @param out   输出流
- * @param left  行左侧内容
- * @param right 行右侧边框字符
- * @param width 行的总宽度（用于空格填充）
+ * @return 1 成功组装出 out_buf，0 失败
  */
-static void print_box_line(FILE *out, const char *left, const char *right, int width) {
-    int used = (int)strlen(left);
-    int i = 0;
-    fprintf(out, TUI_BOLD_YELLOW "  %s" TUI_RESET, left);
-    /* 用空格填充至指定宽度 */
-    for (i = used; i < width; i++) fprintf(out, " ");
-    fprintf(out, TUI_BOLD_YELLOW "%s" TUI_RESET "\n", right);
+static int derive_sha256sums_url(const char *asset_url, char *out_buf, size_t bufsz) {
+    const char *slash = strrchr(asset_url, '/');
+    size_t prefix_len;
+    if (slash == NULL) return 0;
+    prefix_len = (size_t)(slash - asset_url) + 1;
+    if (prefix_len + strlen("SHA256SUMS") >= bufsz) return 0;
+    memcpy(out_buf, asset_url, prefix_len);
+    memcpy(out_buf + prefix_len, "SHA256SUMS", strlen("SHA256SUMS") + 1);
+    return 1;
 }
 
 /**
- * @brief 执行下载和安装更新的核心逻辑
+ * @brief 下载 SHA256SUMS，计算本地 zip 的摘要并对比
  *
- * 根据平台分别实现：
- * - Windows: 下载 zip -> 解压 -> 创建批处理脚本 -> 退出后自动覆盖安装
- * - macOS/Linux: 下载 zip -> 解压 -> 直接覆盖安装 -> 修复权限
- *
- * @param out  输出流，用于显示进度信息
- * @param info 更新信息结构体（包含下载 URL）
- * @return 成功返回 1，失败返回 0
+ * @return 1 校验通过；0 校验失败 / SHA256SUMS 不存在等。
  */
+static int verify_download_sha256(
+    FILE *out, const char *asset_url, const char *zip_path
+) {
+    char sums_url[MAX_URL_LENGTH];
+    char sums_text[8192];
+    size_t sums_len = 0;
+    uint8_t digest[SHA256_BLOCK_SIZE];
+    char local_hex[65];
+    char expected_hex[65];
+    char err[128];
+    const char *fname;
+
+    if (!derive_sha256sums_url(asset_url, sums_url, sizeof(sums_url))) {
+        tui_print_error(out, "无法推导 SHA256SUMS 下载地址。");
+        return 0;
+    }
+    if (!validate_url(sums_url, err, sizeof(err))) {
+        tui_print_error(out, "SHA256SUMS URL 安全校验失败：");
+        tui_print_error(out, err);
+        return 0;
+    }
+
+    if (!http_fetch_to_buffer(sums_url, sums_text, sizeof(sums_text), &sums_len) ||
+        sums_len == 0) {
+        tui_print_error(out, "未找到发布者签署的 SHA256SUMS，拒绝安装未校验的更新包。");
+        return 0;
+    }
+
+    fname = url_basename(asset_url);
+    if (!sha256sums_lookup(sums_text, fname, expected_hex)) {
+        tui_print_error(out, "SHA256SUMS 中缺少当前平台安装包的摘要记录。");
+        return 0;
+    }
+
+    if (!sha256_file(zip_path, digest)) {
+        tui_print_error(out, "无法读取下载的安装包以计算摘要。");
+        return 0;
+    }
+    sha256_hex(digest, local_hex);
+
+    if (strcmp(local_hex, expected_hex) != 0) {
+        tui_print_error(out, "SHA-256 校验失败！下载的文件可能已被篡改，更新中止。");
+        return 0;
+    }
+    tui_print_success(out, "SHA-256 校验通过。");
+    return 1;
+}
+
+/**
+ * @brief 校验下载的 zip 文件是否非空且不过小
+ */
+static int sanity_check_zip(FILE *out, const char *zip_path) {
+    FILE *fcheck = fopen(zip_path, "rb");
+    long fsize;
+    if (fcheck == NULL) {
+        tui_print_error(out, "下载的文件不存在。");
+        return 0;
+    }
+    fseek(fcheck, 0, SEEK_END);
+    fsize = ftell(fcheck);
+    fclose(fcheck);
+    if (fsize <= 0) {
+        tui_print_error(out, "下载的文件为空，更新中止。");
+        return 0;
+    }
+    if (fsize < 1024) {
+        tui_print_error(out, "下载的文件过小，可能已损坏，更新中止。");
+        return 0;
+    }
+    return 1;
+}
+
 static int do_download_and_install(FILE *out, const UpdateInfo *info) {
-    char cmd[1024];
-    int ret = 0;
+    int ret;
 
 #ifdef _WIN32
     /* ===== Windows 平台更新流程 ===== */
-    const char *tmp_zip = "%TEMP%\\his_update.zip";
-    const char *tmp_dir = "%TEMP%\\his_update";
+    char tmp_zip[MAX_PATH];
+    char tmp_dir[MAX_PATH];
+    const char *tmp_env = getenv("TEMP");
+    char err[128];
+    if (tmp_env == NULL || tmp_env[0] == '\0') tmp_env = ".";
 
-    /* 安全验证：在执行任何 shell 命令前，验证所有外部输入 */
-    {
-        char security_err[256];
-        if (!validate_url_for_shell(info->asset_url, security_err, sizeof(security_err))) {
-            tui_print_error(out, "下载链接安全验证失败：");
-            tui_print_error(out, security_err);
-            return 0;
-        }
+    if (!validate_url(info->asset_url, err, sizeof(err))) {
+        tui_print_error(out, "下载链接安全验证失败：");
+        tui_print_error(out, err);
+        return 0;
     }
+
+    snprintf(tmp_zip, sizeof(tmp_zip), "%s\\his_update.zip", tmp_env);
+    snprintf(tmp_dir, sizeof(tmp_dir), "%s\\his_update", tmp_env);
 
     fprintf(out, "\n");
     tui_print_info(out, "正在下载更新包...");
     fflush(out);
 
-    /* 第一步：使用 curl 下载 zip 安装包 */
-    snprintf(cmd, sizeof(cmd),
-        "curl -L -s -f --proto =https --tlsv1.2 --progress-bar -o \"%s\" \"%s\"",
-        tmp_zip, info->asset_url);
-    ret = system(cmd);
+    ret = http_download_to_file(info->asset_url, tmp_zip);
     if (ret != 0) {
         tui_print_error(out, "下载失败，请检查网络连接。");
         return 0;
     }
     tui_print_success(out, "下载完成");
 
-    /* 验证下载文件的完整性 */
-    {
-        const char *tmp_env = getenv("TEMP");
-        char zip_path[512];
-        FILE *fcheck = NULL;
-        long fsize = 0;
-        if (tmp_env == NULL) tmp_env = ".";
-        snprintf(zip_path, sizeof(zip_path), "%s\\his_update.zip", tmp_env);
-        fcheck = fopen(zip_path, "rb");
-        if (fcheck == NULL) {
-            tui_print_error(out, "下载的文件不存在。");
-            return 0;
-        }
-        fseek(fcheck, 0, SEEK_END);
-        fsize = ftell(fcheck);
-        fclose(fcheck);
-        if (fsize <= 0) {
-            tui_print_error(out, "下载的文件为空，更新中止。");
-            return 0;
-        }
-        if (fsize < 1024) {
-            tui_print_error(out, "下载的文件过小，可能已损坏，更新中止。");
-            return 0;
-        }
+    if (!sanity_check_zip(out, tmp_zip)) {
+        remove(tmp_zip);
+        return 0;
     }
 
-    /* 第二步：使用 PowerShell 解压 zip 文件 */
+    tui_print_info(out, "正在校验文件完整性 (SHA-256)...");
+    fflush(out);
+    if (!verify_download_sha256(out, info->asset_url, tmp_zip)) {
+        remove(tmp_zip);
+        return 0;
+    }
+
+    /* 清理旧的解压目录（argv 模式调用 cmd.exe /c rd） */
     tui_print_info(out, "正在解压更新包...");
     fflush(out);
+    {
+        const char *rd_argv[] = { "cmd.exe", "/c", "rd", "/s", "/q", tmp_dir, NULL };
+        (void)run_process(rd_argv); /* 目录可能不存在，忽略返回值 */
+    }
 
-    snprintf(cmd, sizeof(cmd),
-        "if exist \"%s\" rd /s /q \"%s\" && "
-        "powershell -NoProfile -Command \""
-        "Expand-Archive -Path '%s' -DestinationPath '%s' -Force"
-        "\"",
-        tmp_dir, tmp_dir, tmp_zip, tmp_dir);
-    ret = system(cmd);
-    if (ret != 0) {
-        tui_print_error(out, "解压失败。");
-        return 0;
+    /* 用 PowerShell 的 Expand-Archive 解压；-Path / -DestinationPath
+     * 由 PowerShell 参数解析器处理，不经过 shell 字符串拼接。 */
+    {
+        char ps_cmd[1024];
+        snprintf(ps_cmd, sizeof(ps_cmd),
+            "Expand-Archive -LiteralPath \"$env:TEMP\\his_update.zip\" "
+            "-DestinationPath \"$env:TEMP\\his_update\" -Force");
+        const char *ps_argv[] = {
+            "powershell.exe", "-NoProfile",
+            "-ExecutionPolicy", "Bypass",
+            "-Command", ps_cmd, NULL
+        };
+        ret = run_process(ps_argv);
+        if (ret != 0) {
+            tui_print_error(out, "解压失败。");
+            return 0;
+        }
     }
     tui_print_success(out, "解压完成");
 
-    /* 第三步：创建更新批处理脚本 */
     tui_print_info(out, "正在安装更新...");
     fflush(out);
-
-    /*
-     * Windows 下无法直接覆盖正在运行的可执行文件，
-     * 因此创建一个批处理脚本，在当前进程退出后自动执行覆盖安装。
-     * 脚本流程：等待 HIS 退出 -> 复制文件 -> 重新启动 -> 清理临时文件
-     */
     {
-        char bat_path[512];
-        FILE *bat = 0;
-        char exe_dir[512];
-        DWORD len = GetModuleFileNameA(NULL, exe_dir, sizeof(exe_dir));
-        char *last_slash = 0;
+        char bat_path[MAX_PATH];
+        char exe_dir[MAX_PATH];
+        FILE *bat;
+        DWORD len;
+        char *last_slash;
 
+        len = GetModuleFileNameA(NULL, exe_dir, sizeof(exe_dir));
         if (len == 0) {
             tui_print_error(out, "无法获取程序路径。");
             return 0;
         }
-        /* 从完整路径中截取目录部分 */
         last_slash = strrchr(exe_dir, '\\');
         if (last_slash) *(last_slash + 1) = '\0';
 
-        /* 拼接批处理脚本路径 */
-        {
-            const char *tmp_env = getenv("TEMP");
-            if (tmp_env == 0) tmp_env = ".";
-            if (strlen(tmp_env) + 40 > sizeof(bat_path)) {
-                tui_print_error(out, "TEMP路径过长。");
-                return 0;
-            }
-            snprintf(bat_path, sizeof(bat_path), "%s\\his_update\\his_updater.bat", tmp_env);
+        if ((size_t)(strlen(tmp_env) + 40) > sizeof(bat_path)) {
+            tui_print_error(out, "TEMP 路径过长。");
+            return 0;
         }
+        snprintf(bat_path, sizeof(bat_path), "%s\\his_update\\his_updater.bat", tmp_env);
+
         bat = fopen(bat_path, "w");
-        if (bat == 0) {
+        if (bat == NULL) {
             tui_print_error(out, "无法创建更新脚本。");
             return 0;
         }
-
-        /* 写入批处理脚本内容 */
         fprintf(bat, "@echo off\r\n");
-        fprintf(bat, "chcp 65001 >NUL 2>&1\r\n");         /* 设置 UTF-8 编码 */
+        fprintf(bat, "chcp 65001 >NUL 2>&1\r\n");
         fprintf(bat, "echo 正在等待 HIS 退出...\r\n");
-        fprintf(bat, "timeout /t 2 /nobreak >NUL\r\n");    /* 等待 2 秒让旧进程退出 */
+        fprintf(bat, "timeout /t 2 /nobreak >NUL\r\n");
         fprintf(bat, "echo 正在安装更新...\r\n");
-        /* 遍历解压目录的子文件夹，将内容复制到程序目录 */
         fprintf(bat, "for /d %%%%D in (\"%%TEMP%%\\his_update\\*\") do (\r\n");
         fprintf(bat, "    xcopy /E /Y /Q \"%%%%D\\*\" \"%s\"\r\n", exe_dir);
         fprintf(bat, ")\r\n");
         fprintf(bat, "echo 更新完成！正在重新启动...\r\n");
         fprintf(bat, "timeout /t 1 /nobreak >NUL\r\n");
-        fprintf(bat, "start \"\" \"%shis.exe\"\r\n", exe_dir); /* 启动新版本 */
-        fprintf(bat, "rd /s /q \"%%TEMP%%\\his_update\" 2>NUL\r\n"); /* 清理解压目录 */
-        fprintf(bat, "del \"%%TEMP%%\\his_update.zip\" 2>NUL\r\n");  /* 清理 zip 文件 */
-        fprintf(bat, "del \"%%~f0\" 2>NUL\r\n");           /* 删除批处理脚本自身 */
+        fprintf(bat, "start \"\" \"%shis.exe\"\r\n", exe_dir);
+        fprintf(bat, "rd /s /q \"%%TEMP%%\\his_update\" 2>NUL\r\n");
+        fprintf(bat, "del \"%%TEMP%%\\his_update.zip\" 2>NUL\r\n");
+        fprintf(bat, "del \"%%~f0\" 2>NUL\r\n");
         fclose(bat);
 
         tui_print_success(out, "更新准备就绪");
         tui_print_info(out, "系统将自动退出并完成更新...");
         fflush(out);
 
-        /* 以最小化窗口方式启动更新脚本 */
+        /* 异步启动批处理：argv 模式调用 cmd.exe */
         {
-            char security_err[256];
-            if (!validate_path_for_shell(bat_path, security_err, sizeof(security_err))) {
-                tui_print_error(out, "更新脚本路径安全验证失败：");
-                tui_print_error(out, security_err);
-                return 0;
-            }
+            const char *bat_argv[] = {
+                "cmd.exe", "/c", "start", "HIS Updater", "/MIN",
+                "cmd.exe", "/c", bat_path, NULL
+            };
+            (void)run_process(bat_argv);
         }
-        snprintf(cmd, sizeof(cmd), "start \"HIS Updater\" /MIN cmd /c \"%s\"", bat_path);
-        system(cmd);
     }
-
     return 1;
 
 #else
     /* ===== macOS / Linux 平台更新流程 ===== */
-    char tmp_zip[256];
-    char tmp_dir[256];
+    const char *tmp_zip = "/tmp/his_update.zip";
+    const char *tmp_dir = "/tmp/his_update";
     char exe_dir[512];
-    ssize_t rlen = 0;
-    char *last_slash = 0;
+    char exe_path[512];
+    char desktop_path[512];
+    ssize_t rlen;
+    char *last_slash;
+    char err[128];
 
-    snprintf(tmp_zip, sizeof(tmp_zip), "/tmp/his_update.zip");
-    snprintf(tmp_dir, sizeof(tmp_dir), "/tmp/his_update");
+    if (!validate_url(info->asset_url, err, sizeof(err))) {
+        tui_print_error(out, "下载链接安全验证失败：");
+        tui_print_error(out, err);
+        return 0;
+    }
 
-    /* 检测当前可执行文件所在目录 */
 #ifdef __APPLE__
     {
-        /* macOS 使用 _NSGetExecutablePath 获取可执行文件路径 */
         uint32_t bsize = sizeof(exe_dir);
         if (_NSGetExecutablePath(exe_dir, &bsize) != 0) {
             tui_print_error(out, "无法获取程序路径。");
@@ -629,7 +919,6 @@ static int do_download_and_install(FILE *out, const UpdateInfo *info) {
         }
     }
 #else
-    /* Linux 通过 /proc/self/exe 软链接获取可执行文件路径 */
     rlen = readlink("/proc/self/exe", exe_dir, sizeof(exe_dir) - 1);
     if (rlen < 0) {
         tui_print_error(out, "无法获取程序路径。");
@@ -637,154 +926,145 @@ static int do_download_and_install(FILE *out, const UpdateInfo *info) {
     }
     exe_dir[rlen] = '\0';
 #endif
-    /* 从完整路径中截取目录部分 */
     last_slash = strrchr(exe_dir, '/');
     if (last_slash) *(last_slash + 1) = '\0';
 
-    /* 安全验证：在执行任何 shell 命令前，验证所有外部输入 */
-    {
-        char security_err[256];
-        if (!validate_url_for_shell(info->asset_url, security_err, sizeof(security_err))) {
-            tui_print_error(out, "下载链接安全验证失败：");
-            tui_print_error(out, security_err);
-            return 0;
-        }
-        if (!validate_path_for_shell(exe_dir, security_err, sizeof(security_err))) {
-            tui_print_error(out, "程序路径安全验证失败：");
-            tui_print_error(out, security_err);
-            return 0;
-        }
-    }
+    snprintf(exe_path, sizeof(exe_path), "%shis", exe_dir);
+    snprintf(desktop_path, sizeof(desktop_path), "%shis_desktop", exe_dir);
 
     fprintf(out, "\n");
     tui_print_info(out, "正在下载更新包...");
     fflush(out);
 
-    /* 第一步：使用 curl 下载 zip 安装包（-L 跟随重定向） */
-    snprintf(cmd, sizeof(cmd),
-        "curl -L -s -f --proto =https --tlsv1.2 --progress-bar -o \"%s\" \"%s\" 2>&1",
-        tmp_zip, info->asset_url);
-    ret = system(cmd);
+    ret = http_download_to_file(info->asset_url, tmp_zip);
     if (ret != 0) {
         tui_print_error(out, "下载失败，请检查网络连接。");
         return 0;
     }
     tui_print_success(out, "下载完成");
 
-    /* 验证下载文件的完整性 */
-    {
-        FILE *fcheck = fopen(tmp_zip, "rb");
-        long fsize = 0;
-        if (fcheck == NULL) {
-            tui_print_error(out, "下载的文件不存在。");
-            return 0;
-        }
-        fseek(fcheck, 0, SEEK_END);
-        fsize = ftell(fcheck);
-        fclose(fcheck);
-        if (fsize <= 0) {
-            tui_print_error(out, "下载的文件为空，更新中止。");
-            remove(tmp_zip);
-            return 0;
-        }
-        if (fsize < 1024) {
-            tui_print_error(out, "下载的文件过小，可能已损坏，更新中止。");
-            remove(tmp_zip);
-            return 0;
-        }
+    if (!sanity_check_zip(out, tmp_zip)) {
+        remove(tmp_zip);
+        return 0;
     }
 
-    /* 第二步：清理旧的临时目录并解压 zip 文件 */
+    tui_print_info(out, "正在校验文件完整性 (SHA-256)...");
+    fflush(out);
+    if (!verify_download_sha256(out, info->asset_url, tmp_zip)) {
+        remove(tmp_zip);
+        return 0;
+    }
+
     tui_print_info(out, "正在解压更新包...");
     fflush(out);
 
-    snprintf(cmd, sizeof(cmd),
-        "rm -rf \"%s\" && mkdir -p \"%s\" && unzip -q -o \"%s\" -d \"%s\"",
-        tmp_dir, tmp_dir, tmp_zip, tmp_dir);
-    ret = system(cmd);
-    if (ret != 0) {
-        tui_print_error(out, "解压失败。");
-        return 0;
+    /* rm -rf tmp_dir（目录可能不存在，忽略返回码） */
+    {
+        const char *rm_argv[] = { "rm", "-rf", tmp_dir, NULL };
+        (void)run_process_quiet(rm_argv);
+    }
+    /* mkdir -p tmp_dir */
+    {
+        const char *mk_argv[] = { "mkdir", "-p", tmp_dir, NULL };
+        if (run_process_quiet(mk_argv) != 0) {
+            tui_print_error(out, "无法创建临时解压目录。");
+            return 0;
+        }
+    }
+    /* unzip -q -o tmp_zip -d tmp_dir */
+    {
+        const char *uz_argv[] = { "unzip", "-q", "-o", tmp_zip, "-d", tmp_dir, NULL };
+        ret = run_process(uz_argv);
+        if (ret != 0) {
+            tui_print_error(out, "解压失败。");
+            return 0;
+        }
     }
     tui_print_success(out, "解压完成");
 
-    /* 第三步：先删除旧的可执行文件，再复制新文件到安装目录
-     *
-     * 关键：不能直接 cp 覆盖正在运行的二进制文件！
-     * 在 macOS/Linux 上，cp 会就地覆写文件内容，导致内核缓存的代码页失效，
-     * 进程被 SIGKILL (zsh: killed)。正确做法是先 rm 旧文件（Unix 会保留
-     * inode 直到进程退出），再 cp 新文件（创建新 inode），这样当前进程
-     * 继续使用旧 inode 运行，新版本等重启后生效。
+    /*
+     * 删除旧二进制（保留 inode），再由 cp 创建新文件，避免覆盖正在运行
+     * 的可执行文件导致 SIGKILL。
      */
     tui_print_info(out, "正在安装更新...");
     fflush(out);
+    {
+        const char *rm_argv[] = { "rm", "-f", exe_path, desktop_path, NULL };
+        (void)run_process_quiet(rm_argv);
+    }
 
-    /* 先删除旧的可执行文件（rm 对运行中的二进制是安全的） */
-    snprintf(cmd, sizeof(cmd),
-        "rm -f \"%shis\" \"%shis_desktop\" 2>/dev/null",
-        exe_dir, exe_dir);
-    system(cmd);
-
-    /* 复制新文件到安装目录 */
-    snprintf(cmd, sizeof(cmd),
-        "for d in \"%s\"/*/; do cp -Rf \"$d\"* \"%s\" 2>/dev/null; done",
-        tmp_dir, exe_dir);
-    ret = system(cmd);
-
-    /* 第四步：修复文件权限 */
-#ifdef __APPLE__
-    /* macOS 需要清除扩展属性（quarantine）并添加执行权限 */
-    snprintf(cmd, sizeof(cmd),
-        "xattr -cr \"%s\" 2>/dev/null; chmod +x \"%shis\" 2>/dev/null; "
-        "chmod +x \"%shis_desktop\" 2>/dev/null",
-        exe_dir, exe_dir, exe_dir);
-    system(cmd);
+    /* 将解压目录下第一级子目录内容复制到 exe_dir
+     * 用 find + 遍历，而不是 shell glob，以保持无 shell 模式。 */
+    {
+        DIR *dir;
+        struct dirent *entry;
+#ifdef __linux__
+        dir = opendir(tmp_dir);
 #else
-    /* Linux 仅需添加执行权限 */
-    snprintf(cmd, sizeof(cmd),
-        "chmod +x \"%shis\" 2>/dev/null; chmod +x \"%shis_desktop\" 2>/dev/null",
-        exe_dir, exe_dir);
-    system(cmd);
+        dir = opendir(tmp_dir);
 #endif
+        if (dir == NULL) {
+            tui_print_error(out, "无法打开解压目录。");
+            remove(tmp_zip);
+            return 0;
+        }
+        while ((entry = readdir(dir)) != NULL) {
+            char sub[512];
+            struct stat st;
+            if (entry->d_name[0] == '.') continue;
+            snprintf(sub, sizeof(sub), "%s/%s", tmp_dir, entry->d_name);
+            if (stat(sub, &st) != 0) continue;
+            if (S_ISDIR(st.st_mode)) {
+                /* cp -Rf "<sub>/." "<exe_dir>" 将子目录内容递归拷贝过来 */
+                char cp_src[520];
+                snprintf(cp_src, sizeof(cp_src), "%s/.", sub);
+                const char *cp_argv[] = { "cp", "-Rf", cp_src, exe_dir, NULL };
+                (void)run_process_quiet(cp_argv);
+            } else {
+                const char *cp_argv[] = { "cp", "-f", sub, exe_dir, NULL };
+                (void)run_process_quiet(cp_argv);
+            }
+        }
+        closedir(dir);
+    }
 
-    /* 第五步：清理临时文件 */
-    snprintf(cmd, sizeof(cmd),
-        "rm -rf \"%s\" \"%s\"", tmp_dir, tmp_zip);
-    system(cmd);
+    /* 修复权限 */
+#ifdef __APPLE__
+    {
+        const char *xattr_argv[] = { "xattr", "-cr", exe_dir, NULL };
+        (void)run_process_quiet(xattr_argv);
+    }
+#endif
+    {
+        const char *chmod_exe[] = { "chmod", "+x", exe_path, NULL };
+        const char *chmod_desktop[] = { "chmod", "+x", desktop_path, NULL };
+        (void)run_process_quiet(chmod_exe);
+        (void)run_process_quiet(chmod_desktop);
+    }
+
+    /* 清理临时文件 */
+    {
+        const char *rm_argv[] = { "rm", "-rf", tmp_dir, tmp_zip, NULL };
+        (void)run_process_quiet(rm_argv);
+    }
 
     tui_print_success(out, "更新安装完成！");
     tui_print_info(out, "请重新启动 HIS 以使用新版本。");
-
     return 1;
 #endif
 }
 
 /* ── 用户更新提示对话框 ──────────────────────────────────── */
 
-/**
- * @brief 向用户展示更新提示对话框
- *
- * 在终端中绘制带边框的 TUI 风格对话框，展示当前版本和最新版本，
- * 并提供操作选项。根据是否有直接下载链接，显示不同的菜单选项。
- *
- * @param out  输出流
- * @param in   输入流
- * @param info 更新信息结构体
- * @return 0=跳过更新, 1=已打开浏览器, 2=已安装更新需重启
- */
 int UpdateChecker_prompt(FILE *out, FILE *in, const UpdateInfo *info) {
     char answer[16];
-    int has_direct_download = 0;
+    int has_direct_download;
 
-    /* 参数校验：输入输出流和更新信息不能为空，且必须有可用更新 */
-    if (out == 0 || in == 0 || info == 0 || info->has_update == 0) {
+    if (out == NULL || in == NULL || info == NULL || info->has_update == 0) {
         return 0;
     }
-
-    /* 判断是否有当前平台的直接下载链接 */
     has_direct_download = (info->asset_url[0] != '\0') ? 1 : 0;
 
-    /* 绘制更新提示对话框的标题区域 */
     fprintf(out, "\n");
     fprintf(out, TUI_BOLD_YELLOW
         "  ╔══════════════════════════════════════════╗\n"
@@ -792,37 +1072,32 @@ int UpdateChecker_prompt(FILE *out, FILE *in, const UpdateInfo *info) {
         TUI_BOLD_YELLOW "              ║\n"
         "  ╠══════════════════════════════════════════╣\n" TUI_RESET);
 
-    /* 显示当前版本号（灰色/暗淡样式） */
     fprintf(out,
         TUI_BOLD_YELLOW "  ║" TUI_RESET
         "  当前版本: " TUI_DIM "v%s" TUI_RESET,
         info->current_version);
     {
         int used = 14 + (int)strlen(info->current_version);
-        int i = 0;
-        for (i = used; i < 42; i++) fprintf(out, " "); /* 填充空格对齐右边框 */
+        int i;
+        for (i = used; i < 42; i++) fprintf(out, " ");
     }
     fprintf(out, TUI_BOLD_YELLOW "║\n" TUI_RESET);
 
-    /* 显示最新版本号（绿色高亮样式） */
     fprintf(out,
         TUI_BOLD_YELLOW "  ║" TUI_RESET
         "  最新版本: " TUI_BOLD_GREEN "v%s" TUI_RESET,
         info->latest_version);
     {
         int used = 14 + (int)strlen(info->latest_version);
-        int i = 0;
+        int i;
         for (i = used; i < 42; i++) fprintf(out, " ");
     }
     fprintf(out, TUI_BOLD_YELLOW "║\n" TUI_RESET);
 
-    /* 绘制分隔线 */
     fprintf(out, TUI_BOLD_YELLOW
         "  ╠══════════════════════════════════════════╣\n" TUI_RESET);
 
-    /* 根据是否有直接下载链接，显示不同的菜单选项 */
     if (has_direct_download) {
-        /* 有直接下载链接时提供三个选项 */
         fprintf(out,
             TUI_BOLD_YELLOW "  ║" TUI_RESET
             "  " TUI_BOLD_WHITE "1." TUI_RESET " 立即下载并安装更新"
@@ -839,7 +1114,6 @@ int UpdateChecker_prompt(FILE *out, FILE *in, const UpdateInfo *info) {
             "                              "
             TUI_BOLD_YELLOW "║\n" TUI_RESET);
     } else {
-        /* 无直接下载链接时只提供两个选项 */
         fprintf(out,
             TUI_BOLD_YELLOW "  ║" TUI_RESET
             "  " TUI_BOLD_WHITE "1." TUI_RESET " 在浏览器中打开下载页"
@@ -852,11 +1126,9 @@ int UpdateChecker_prompt(FILE *out, FILE *in, const UpdateInfo *info) {
             TUI_BOLD_YELLOW "║\n" TUI_RESET);
     }
 
-    /* 绘制底部边框 */
     fprintf(out, TUI_BOLD_YELLOW
         "  ╚══════════════════════════════════════════╝\n" TUI_RESET);
 
-    /* 显示输入提示并等待用户选择 */
     fprintf(out, "\n");
     if (has_direct_download) {
         fprintf(out, TUI_BOLD_CYAN "  请选择 " TUI_RESET
@@ -867,42 +1139,31 @@ int UpdateChecker_prompt(FILE *out, FILE *in, const UpdateInfo *info) {
     }
     fflush(out);
 
-    /* 读取用户输入 */
-    if (fgets(answer, sizeof(answer), in) == 0) {
+    if (fgets(answer, sizeof(answer), in) == NULL) {
         return 0;
     }
 
-    /* 处理用户选择：直接下载安装 */
     if (has_direct_download && answer[0] == '1') {
         if (do_download_and_install(out, info)) {
-#ifdef _WIN32
-            return 2; /* Windows：通知调用者退出，由批处理脚本完成后续安装 */
-#else
-            return 2; /* macOS/Linux：安装已完成，通知调用者退出以重启 */
-#endif
+            return 2;
         }
         return 0;
     }
 
-    /* 处理用户选择：在浏览器中打开下载页面 */
     if ((has_direct_download && answer[0] == '2') ||
         (!has_direct_download && answer[0] == '1')) {
-        /* 安全验证：验证 download_url 为合法 HTTPS 链接，防止打开恶意 URI */
-        {
-            char security_err[256];
-            if (!validate_url_for_shell(info->download_url, security_err, sizeof(security_err))) {
-                tui_print_error(out, "下载页面链接安全验证失败：");
-                tui_print_error(out, security_err);
-                return 0;
-            }
+        char err[128];
+        if (!validate_url(info->download_url, err, sizeof(err))) {
+            tui_print_error(out, "下载页面链接安全验证失败：");
+            tui_print_error(out, err);
+            return 0;
         }
-        /* 使用平台原生方式打开浏览器，避免通过 system() 造成命令注入风险 */
 #ifdef __APPLE__
         {
             pid_t pid = fork();
             if (pid == 0) {
                 execlp("open", "open", info->download_url, (char *)NULL);
-                _exit(127); /* exec 失败时退出子进程 */
+                _exit(127);
             }
         }
 #elif defined(_WIN32)
@@ -920,7 +1181,6 @@ int UpdateChecker_prompt(FILE *out, FILE *in, const UpdateInfo *info) {
         return 1;
     }
 
-    /* 用户选择跳过更新（输入 0 或其他值） */
     tui_print_info(out, "已跳过更新，继续启动系统...");
     return 0;
 }

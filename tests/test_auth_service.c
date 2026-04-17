@@ -17,7 +17,12 @@
 
 #include "domain/Patient.h"
 #include "service/AuthService.h"
+#include "service/AuthServiceTestHooks.h"
 #include "service/PatientService.h"
+
+/* 可控测试时钟：测试用例通过赋值 fake_now 控制当前时间 */
+static long fake_now = 0;
+static long TestAuthService_fake_clock(void) { return fake_now; }
 
 /**
  * @brief 辅助函数：从文件中读取内容到缓冲区
@@ -336,6 +341,129 @@ static void test_authenticate_accepts_seeded_demo_accounts(void) {
 }
 
 /**
+ * @brief 验证连续 5 次密码错误后账号被锁定；到期前即使密码正确也被拒。
+ *
+ * 步骤：
+ * 1. 注册用户
+ * 2. 注入固定的测试时钟（fake_now = 1000）
+ * 3. 连续 5 次使用错误密码登录，确认全部失败
+ * 4. 第 6 次使用【正确密码】登录，应被拒绝为 "account temporarily locked"
+ * 5. 将时钟推进到锁定到期之后（+901 秒），再次使用正确密码登录应成功
+ */
+static void test_authenticate_lockout_after_failures(void) {
+    char user_path[TEXT_FILE_REPOSITORY_PATH_CAPACITY];
+    char patient_path[TEXT_FILE_REPOSITORY_PATH_CAPACITY];
+    AuthService service;
+    User user;
+    Result result;
+    int i = 0;
+
+    TestAuthService_make_path(user_path, sizeof(user_path), "lockout_users");
+    TestAuthService_make_path(patient_path, sizeof(patient_path), "lockout_patients");
+    TestAuthService_seed_patient(patient_path, "PAT9101");
+
+    /* 注入测试时钟 */
+    fake_now = 1000;
+    AuthService_set_clock_for_testing(TestAuthService_fake_clock);
+
+    result = AuthService_init(&service, user_path, patient_path);
+    assert(result.success == 1);
+
+    result = AuthService_register_user(&service, "lockuser", "safe-pass",
+                                       USER_ROLE_PATIENT, "PAT9101");
+    assert(result.success == 1);
+
+    /* 连续 5 次错密码 → 账号进入锁定 */
+    for (i = 0; i < 5; i++) {
+        result = AuthService_authenticate(&service, "lockuser", "wrong-pass",
+                                          USER_ROLE_PATIENT, &user);
+        assert(result.success == 0);
+    }
+
+    /* 第 6 次即便密码正确也应被拒绝为 locked */
+    result = AuthService_authenticate(&service, "lockuser", "safe-pass",
+                                      USER_ROLE_PATIENT, &user);
+    assert(result.success == 0);
+    assert(strstr(result.message, "locked") != 0);
+
+    /* 锁定期内（900 秒），再多尝试也仍然 locked */
+    fake_now = 1000 + 100;
+    result = AuthService_authenticate(&service, "lockuser", "safe-pass",
+                                      USER_ROLE_PATIENT, &user);
+    assert(result.success == 0);
+    assert(strstr(result.message, "locked") != 0);
+
+    /* 推进时钟越过锁定期（+901 秒） → 正确密码应登录成功并清零计数 */
+    fake_now = 1000 + 901;
+    result = AuthService_authenticate(&service, "lockuser", "safe-pass",
+                                      USER_ROLE_PATIENT, &user);
+    assert(result.success == 1);
+    assert(strcmp(user.user_id, "lockuser") == 0);
+
+    /* 计数清零后，再次错误不会立即触发锁定（需要重新积累到 5 次） */
+    result = AuthService_authenticate(&service, "lockuser", "wrong-pass",
+                                      USER_ROLE_PATIENT, &user);
+    assert(result.success == 0);
+    /* 紧接着正确密码应能通过，证明失败计数已在上一次成功登录时清零 */
+    result = AuthService_authenticate(&service, "lockuser", "safe-pass",
+                                      USER_ROLE_PATIENT, &user);
+    assert(result.success == 1);
+
+    /* 恢复默认时钟 */
+    AuthService_set_clock_for_testing(0);
+}
+
+/**
+ * @brief 验证登录成功可清零之前累计的失败计数
+ */
+static void test_successful_login_resets_failure_counter(void) {
+    char user_path[TEXT_FILE_REPOSITORY_PATH_CAPACITY];
+    char patient_path[TEXT_FILE_REPOSITORY_PATH_CAPACITY];
+    AuthService service;
+    User user;
+    Result result;
+    int i = 0;
+
+    TestAuthService_make_path(user_path, sizeof(user_path), "reset_counter_users");
+    TestAuthService_make_path(patient_path, sizeof(patient_path), "reset_counter_patients");
+    TestAuthService_seed_patient(patient_path, "PAT9102");
+
+    fake_now = 2000;
+    AuthService_set_clock_for_testing(TestAuthService_fake_clock);
+
+    result = AuthService_init(&service, user_path, patient_path);
+    assert(result.success == 1);
+    result = AuthService_register_user(&service, "resetuser", "safe-pass",
+                                       USER_ROLE_PATIENT, "PAT9102");
+    assert(result.success == 1);
+
+    /* 4 次失败（未触发锁定） */
+    for (i = 0; i < 4; i++) {
+        result = AuthService_authenticate(&service, "resetuser", "wrong-pass",
+                                          USER_ROLE_PATIENT, &user);
+        assert(result.success == 0);
+    }
+
+    /* 正确密码登录成功，失败计数应被清零 */
+    result = AuthService_authenticate(&service, "resetuser", "safe-pass",
+                                      USER_ROLE_PATIENT, &user);
+    assert(result.success == 1);
+
+    /* 再 4 次失败，仍不应锁定（因为计数已清零） */
+    for (i = 0; i < 4; i++) {
+        result = AuthService_authenticate(&service, "resetuser", "wrong-pass",
+                                          USER_ROLE_PATIENT, &user);
+        assert(result.success == 0);
+    }
+    /* 此时第 5 次正确密码仍然应成功（未进入锁定） */
+    result = AuthService_authenticate(&service, "resetuser", "safe-pass",
+                                      USER_ROLE_PATIENT, &user);
+    assert(result.success == 1);
+
+    AuthService_set_clock_for_testing(0);
+}
+
+/**
  * @brief 测试主函数，依次运行所有认证服务测试用例
  */
 int main(void) {
@@ -344,5 +472,7 @@ int main(void) {
     test_authenticate_rejects_wrong_password_and_role_mismatch();
     test_register_rejects_blank_password_and_invalid_role();
     test_authenticate_accepts_seeded_demo_accounts();
+    test_authenticate_lockout_after_failures();
+    test_successful_login_resets_failure_counter();
     return 0;
 }

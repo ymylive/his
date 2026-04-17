@@ -21,6 +21,7 @@ add_library(his_common
     src/common/Result.c
     src/common/StringUtils.c
     src/common/UpdateChecker.c
+    third_party/sha256/sha256.c
     src/domain/Admission.c
     src/domain/Bed.c
     src/domain/DispenseRecord.c
@@ -47,6 +48,7 @@ add_library(his_common
     src/repository/UserRepository.c
     src/repository/VisitRecordRepository.c
     src/repository/WardRepository.c
+    src/service/AuditService.c
     src/service/AuthService.c
     src/service/DepartmentService.c
     src/service/BedService.c
@@ -270,6 +272,14 @@ target_link_libraries(test_admission PRIVATE his_common)
 
 add_test(NAME test_admission COMMAND test_admission)
 
+add_executable(test_audit_service
+    tests/test_audit_service.c
+)
+
+target_link_libraries(test_audit_service PRIVATE his_common)
+
+add_test(NAME test_audit_service COMMAND test_audit_service)
+
 set(HIS_TEST_TARGETS
     test_result
     test_common
@@ -294,6 +304,7 @@ set(HIS_TEST_TARGETS
     test_text_file_repository
     test_ward
     test_admission
+    test_audit_service
 )
 
 foreach(test_target IN LISTS HIS_TEST_TARGETS)

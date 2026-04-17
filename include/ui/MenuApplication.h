@@ -14,13 +14,25 @@
 
 #include <stddef.h>
 #include <stdio.h>
+#include <time.h>
 
 #include "common/Result.h"
+
+/**
+ * @brief 登录会话空闲超时阈值（秒）
+ *
+ * 超过此时长未产生用户输入则自动登出，满足 HIPAA §164.312(a)(2)(iii)
+ * 中对未监控工作站的自动注销要求。默认 15 分钟。
+ */
+#ifndef HIS_SESSION_IDLE_TIMEOUT_SECONDS
+#define HIS_SESSION_IDLE_TIMEOUT_SECONDS 900
+#endif
 #include "domain/Department.h"
 #include "domain/Doctor.h"
 #include "domain/Medicine.h"
 #include "domain/Patient.h"
 #include "domain/User.h"
+#include "service/AuditService.h"
 #include "service/AuthService.h"
 #include "service/BedService.h"
 #include "service/DoctorService.h"
@@ -58,6 +70,7 @@ typedef struct MenuApplicationPaths {
     const char *inpatient_order_path; /**< 住院医嘱数据文件路径 */
     const char *nursing_record_path;  /**< 护理记录数据文件路径 */
     const char *round_record_path;    /**< 查房记录数据文件路径 */
+    const char *data_dir;             /**< 数据目录路径（审计日志等写入此目录，可 NULL） */
 } MenuApplicationPaths;
 
 /**
@@ -67,6 +80,7 @@ typedef struct MenuApplicationPaths {
  * 是整个应用的运行时上下文。
  */
 typedef struct MenuApplication {
+    AuditService audit_service;                    /**< 审计日志服务 */
     AuthService auth_service;                      /**< 认证服务 */
     PatientService patient_service;                /**< 患者服务 */
     DoctorService doctor_service;                  /**< 医生服务（含科室） */
@@ -84,6 +98,7 @@ typedef struct MenuApplication {
     int has_authenticated_user;                    /**< 是否有已认证用户（0=无，1=有） */
     char bound_patient_id[HIS_DOMAIN_ID_CAPACITY]; /**< 绑定的患者编号（患者角色登录时自动绑定） */
     int has_bound_patient_session;                 /**< 是否已绑定患者会话（0=未绑定，1=已绑定） */
+    time_t last_activity;                          /**< 最近一次有效用户操作的时间戳（用于空闲超时） */
 } MenuApplication;
 
 /**
@@ -143,6 +158,28 @@ Result MenuApplication_login(
  * @param application 应用程序实例指针
  */
 void MenuApplication_logout(MenuApplication *application);
+
+/**
+ * @brief 刷新最后活动时间戳
+ *
+ * 每当接收到有效用户操作（如菜单选择、输入确认）时调用，
+ * 用于重置空闲超时计时器。
+ *
+ * @param application 应用程序实例指针
+ */
+void MenuApplication_touch_activity(MenuApplication *application);
+
+/**
+ * @brief 判断当前会话是否已空闲超时
+ *
+ * 基于 HIS_SESSION_IDLE_TIMEOUT_SECONDS 与 last_activity 字段判定。
+ * 若无已登录用户或 last_activity 为 0，则视为未超时。
+ *
+ * @param application 应用程序实例指针
+ * @param now_seconds 调用方提供的当前 Unix 时间戳（秒）
+ * @return 已超时返回 1，否则返回 0
+ */
+int MenuApplication_is_session_idle(const MenuApplication *application, time_t now_seconds);
 
 /**
  * @brief 绑定患者会话

@@ -38,6 +38,8 @@ typedef struct User {
     UserRole role;                                          /* 用户角色 */
     char patient_id[HIS_DOMAIN_ID_CAPACITY];               /* 关联的患者编号（仅患者角色使用） */
     int force_password_change;                              /* 1 = 必须在下次登录时修改密码 */
+    int failed_count;                                       /* 连续登录失败次数 */
+    long locked_until;                                      /* 账号锁定到期时间（Unix epoch 秒，0 = 未锁定） */
 } User;
 
 #endif

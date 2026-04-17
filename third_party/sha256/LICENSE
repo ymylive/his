@@ -1,0 +1,9 @@
+This SHA-256 implementation is derived from Brad Conte's public-domain reference
+code. The original source is at https://github.com/B-Con/crypto-algorithms and is
+released under the following notice:
+
+"These are made available in the public domain under the creative commons
+deed CC0 1.0 Universal."
+
+No rights reserved. Usage, modification, and redistribution are permitted
+without restriction.

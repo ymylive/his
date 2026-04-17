@@ -100,6 +100,27 @@ static Result UserRepository_parse_int(const char *text, int *out_value) {
 }
 
 /**
+ * @brief 解析 long 字段（用于 Unix 时间戳）
+ */
+static Result UserRepository_parse_long(const char *text, long *out_value) {
+    char *end = 0;
+    long value = 0;
+
+    if (text == 0 || out_value == 0 || text[0] == '\0') {
+        return Result_make_failure("long field missing");
+    }
+
+    errno = 0;
+    value = strtol(text, &end, 10);
+    if (errno != 0 || end == text || *end != '\0') {
+        return Result_make_failure("long field invalid");
+    }
+
+    *out_value = value;
+    return Result_make_success("long field parsed");
+}
+
+/**
  * @brief 将一行文本解析为用户结构体
  *
  * 按管道符拆分行内容，解析 user_id、password_hash、role 三个字段。
@@ -133,8 +154,9 @@ static Result UserRepository_parse_line(const char *line, User *out_user) {
         return result;
     }
 
-    /* 向后兼容：接受旧版4字段和新版5字段格式 */
+    /* 向后兼容：接受 V1（4字段）、V2（5字段）、当前（7字段）三种格式 */
     if (field_count != USER_REPOSITORY_FIELD_COUNT &&
+        field_count != USER_REPOSITORY_FIELD_COUNT_V2 &&
         field_count != USER_REPOSITORY_FIELD_COUNT_LEGACY) {
         return Result_make_failure("user field count invalid");
     }
@@ -166,8 +188,8 @@ static Result UserRepository_parse_line(const char *line, User *out_user) {
     strncpy(out_user->patient_id, fields[3], sizeof(out_user->patient_id) - 1);
     out_user->patient_id[sizeof(out_user->patient_id) - 1] = '\0';
 
-    /* 解析 force_password_change（新字段，旧数据默认为 0） */
-    if (field_count == USER_REPOSITORY_FIELD_COUNT) {
+    /* V2+ 字段：force_password_change（旧数据默认为 0） */
+    if (field_count >= USER_REPOSITORY_FIELD_COUNT_V2) {
         int parsed_flag = 0;
         result = UserRepository_parse_int(fields[4], &parsed_flag);
         if (result.success == 0) {
@@ -176,6 +198,25 @@ static Result UserRepository_parse_line(const char *line, User *out_user) {
         out_user->force_password_change = parsed_flag;
     } else {
         out_user->force_password_change = 0;
+    }
+
+    /* 当前版本字段：failed_count 与 locked_until（更旧格式默认为 0） */
+    if (field_count == USER_REPOSITORY_FIELD_COUNT) {
+        int parsed_failed = 0;
+        long parsed_locked = 0;
+        result = UserRepository_parse_int(fields[5], &parsed_failed);
+        if (result.success == 0) {
+            return result;
+        }
+        result = UserRepository_parse_long(fields[6], &parsed_locked);
+        if (result.success == 0) {
+            return result;
+        }
+        out_user->failed_count = parsed_failed;
+        out_user->locked_until = parsed_locked;
+    } else {
+        out_user->failed_count = 0;
+        out_user->locked_until = 0;
     }
 
     return UserRepository_validate_user(out_user);
@@ -210,12 +251,14 @@ static Result UserRepository_format_line(const User *user, char *buffer, size_t 
 
     written = snprintf(
         buffer, buffer_size,
-        "%s|%s|%d|%s|%d",
+        "%s|%s|%d|%s|%d|%d|%ld",
         esc_user_id,
         esc_password_hash,
         (int)user->role,
         esc_patient_id,
-        user->force_password_change
+        user->force_password_change,
+        user->failed_count,
+        user->locked_until
     );
     if (written < 0 || (size_t)written >= buffer_size) {
         return Result_make_failure("user line formatting failed");
@@ -267,8 +310,9 @@ static Result UserRepository_ensure_header(const UserRepository *repository) {
         return TextFileRepository_append_line(&repository->file_repository, USER_REPOSITORY_HEADER);
     }
 
-    /* 验证表头（兼容旧版不含 force_password_change 的表头） */
+    /* 验证表头：接受当前版本及旧版（V1/V2）表头 */
     if (strcmp(line, USER_REPOSITORY_HEADER) != 0 &&
+        strcmp(line, "user_id|password_hash|role|patient_id|force_password_change") != 0 &&
         strcmp(line, "user_id|password_hash|role|patient_id") != 0) {
         return Result_make_failure("user repository header invalid");
     }

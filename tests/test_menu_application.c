@@ -1892,6 +1892,52 @@ static void test_execute_action_ward_discharge_check_reports_ready_status(void) 
     assert(strstr(output, "可办理出院") != 0);
 }
 
+/**
+ * @brief 验证 MenuApplication_is_session_idle 的判定逻辑
+ *
+ * 覆盖：未登录、最近活动、边界、超时四种情况。
+ */
+static void test_menu_application_session_idle_detection(void) {
+    MenuApplicationTestContext context;
+    MenuApplication application;
+    Result result;
+
+    setup_context(&context, "idle_timeout");
+    seed_user_account(&context, "IDLEADM", "idle-pass", USER_ROLE_ADMIN);
+
+    result = MenuApplication_init(&application, &context.paths);
+    assert(result.success == 1);
+
+    /* 未登录：永远不视为超时 */
+    assert(MenuApplication_is_session_idle(&application, 1000000) == 0);
+
+    result = MenuApplication_login(&application, "IDLEADM", "idle-pass", USER_ROLE_ADMIN);
+    assert(result.success == 1);
+    assert(application.last_activity != 0);
+
+    /* 用已知时间戳覆盖活动时间，方便断言 */
+    application.last_activity = 1000;
+
+    /* 恰好等于上次活动时间：未超时 */
+    assert(MenuApplication_is_session_idle(&application, 1000) == 0);
+    /* 小于阈值（+100 秒）：未超时 */
+    assert(MenuApplication_is_session_idle(&application, 1100) == 0);
+    /* 正好等于阈值：按 > 严格比较，未超时 */
+    assert(MenuApplication_is_session_idle(&application,
+                                            1000 + HIS_SESSION_IDLE_TIMEOUT_SECONDS) == 0);
+    /* 超过阈值 1 秒：已超时 */
+    assert(MenuApplication_is_session_idle(&application,
+                                            1000 + HIS_SESSION_IDLE_TIMEOUT_SECONDS + 1) == 1);
+
+    /* touch_activity 应刷新时间戳 */
+    MenuApplication_touch_activity(&application);
+    assert(application.last_activity != 1000);
+
+    /* 登出后再也不会超时 */
+    MenuApplication_logout(&application);
+    assert(MenuApplication_is_session_idle(&application, 99999999) == 0);
+}
+
 int main(void) {
     test_clerk_flow_add_query_patient_and_registration();
     test_patient_self_registration_requires_session_and_tracks_duplicates();
@@ -1916,5 +1962,6 @@ int main(void) {
     test_execute_action_admin_medicine_overview_lists_low_stock();
     test_execute_action_patient_query_medicine_usage_reports_missing_instruction();
     test_execute_action_ward_discharge_check_reports_ready_status();
+    test_menu_application_session_idle_detection();
     return 0;
 }

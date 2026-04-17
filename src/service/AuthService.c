@@ -9,10 +9,12 @@
 #include "service/AuthService.h"
 
 #include <ctype.h>
+#include <limits.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
 
 #ifdef _WIN32
 #include <windows.h>
@@ -22,6 +24,45 @@
 #include "repository/RepositoryUtils.h"
 
 /**
+ * @brief 默认的时钟源，返回当前 Unix 时间戳（秒）
+ */
+static long AuthService_default_now(void) {
+    return (long)time(NULL);
+}
+
+/**
+ * @brief 可注入的时钟函数指针，测试时可替换为受控时钟
+ *
+ * 通过 AuthService_set_clock_for_testing（声明在 AuthServiceTestHooks.h）
+ * 进行注入，生产代码始终走默认的 time() 实现。
+ */
+static long (*auth_now_fn)(void) = AuthService_default_now;
+
+/**
+ * @brief 测试专用：注入自定义时钟函数。传入 NULL 恢复默认。
+ *
+ * 声明在 include/service/AuthServiceTestHooks.h 中，仅供测试代码使用。
+ */
+void AuthService_set_clock_for_testing(long (*now_fn)(void)) {
+    auth_now_fn = (now_fn != 0) ? now_fn : AuthService_default_now;
+}
+
+/**
+ * @brief 统一获取当前时间的内部接口
+ */
+static long AuthService_now(void) {
+    return auth_now_fn();
+}
+
+/**
+ * @brief 审计日志记录（若 AuditService 未就绪则输出到 stderr）
+ */
+#ifndef HIS_HAS_AUDIT
+#define HIS_AUDIT_LOG(fmt, ...) \
+    fprintf(stderr, "AUDIT: " fmt "\n", __VA_ARGS__)
+#endif
+
+/**
  * @brief 密码哈希迭代次数
  *
  * 较高的值能增强抗暴力破解能力，但会增加哈希计算时间。
@@ -29,6 +70,246 @@
  * 以提供更强的安全边际。调整此值后需重新生成所有已存储的密码哈希。
  */
 #define AUTH_HASH_ITERATIONS 100000
+
+/**
+ * @brief 触发账号锁定的最大连续失败次数
+ */
+#ifndef HIS_LOGIN_MAX_FAILURES
+#define HIS_LOGIN_MAX_FAILURES 5
+#endif
+
+/**
+ * @brief 账号锁定时长（秒）
+ */
+#ifndef HIS_LOGIN_LOCKOUT_SECONDS
+#define HIS_LOGIN_LOCKOUT_SECONDS 900
+#endif
+
+/**
+ * @brief 登录失败锁定计数的旁路（sidecar）文件后缀
+ *
+ * 将锁定状态独立保存到与 users.txt 同目录的 .lockout 文件中，
+ * 避免修改 User 记录文件格式，保持兼容性。
+ * 格式：user_id|failed_count|locked_until（Unix epoch 秒，0 = 未锁定）
+ */
+#define AUTH_LOCKOUT_SUFFIX ".lockout"
+#define AUTH_LOCKOUT_HEADER "user_id|failed_count|locked_until"
+#define AUTH_LOCKOUT_LINE_CAPACITY 256
+#define AUTH_LOCKOUT_FILE_CAPACITY 32768
+
+/**
+ * @brief 登录失败锁定状态
+ */
+typedef struct AuthLockoutState {
+    int failed_count;
+    long locked_until;
+} AuthLockoutState;
+
+/**
+ * @brief 由 user 文件路径推导出 lockout 旁路文件路径
+ *
+ * 规则：在原路径末尾追加 ".lockout" 后缀。
+ *
+ * @param service   认证服务（读取 user_repository.file_repository.path）
+ * @param buffer    输出路径缓冲区
+ * @param capacity  缓冲区容量
+ * @return 成功返回 1，缓冲区不足返回 0
+ */
+static int AuthService_lockout_path(
+    const AuthService *service,
+    char *buffer,
+    size_t capacity
+) {
+    int written = 0;
+    if (service == 0 || buffer == 0 || capacity == 0) {
+        return 0;
+    }
+    written = snprintf(buffer, capacity, "%s%s",
+                       service->user_repository.file_repository.path,
+                       AUTH_LOCKOUT_SUFFIX);
+    if (written < 0 || (size_t)written >= capacity) {
+        return 0;
+    }
+    return 1;
+}
+
+/**
+ * @brief 读取指定用户的锁定状态
+ *
+ * 若文件不存在或用户条目缺失，返回零值（未锁定、无失败）。
+ *
+ * @param service  认证服务
+ * @param user_id  用户ID
+ * @param out      输出锁定状态
+ */
+static void AuthService_load_lockout(
+    const AuthService *service,
+    const char *user_id,
+    AuthLockoutState *out
+) {
+    char path[TEXT_FILE_REPOSITORY_PATH_CAPACITY + 16];
+    FILE *file = 0;
+    char line[AUTH_LOCKOUT_LINE_CAPACITY];
+
+    if (out == 0) {
+        return;
+    }
+    out->failed_count = 0;
+    out->locked_until = 0;
+
+    if (service == 0 || user_id == 0 || user_id[0] == '\0') {
+        return;
+    }
+    if (!AuthService_lockout_path(service, path, sizeof(path))) {
+        return;
+    }
+
+    file = fopen(path, "r");
+    if (file == 0) {
+        return; /* 未创建过 sidecar，视为干净状态 */
+    }
+
+    while (fgets(line, sizeof(line), file) != 0) {
+        size_t len = strlen(line);
+        char *pipe1 = 0;
+        char *pipe2 = 0;
+        long failed_val = 0;
+        long locked_val = 0;
+
+        /* 去除结尾换行 */
+        while (len > 0 && (line[len - 1] == '\n' || line[len - 1] == '\r')) {
+            line[--len] = '\0';
+        }
+        if (len == 0 || strcmp(line, AUTH_LOCKOUT_HEADER) == 0) {
+            continue;
+        }
+
+        pipe1 = strchr(line, '|');
+        if (pipe1 == 0) continue;
+        pipe2 = strchr(pipe1 + 1, '|');
+        if (pipe2 == 0) continue;
+
+        *pipe1 = '\0';
+        *pipe2 = '\0';
+        if (strcmp(line, user_id) != 0) {
+            continue;
+        }
+
+        failed_val = strtol(pipe1 + 1, 0, 10);
+        locked_val = strtol(pipe2 + 1, 0, 10);
+        if (failed_val < 0) failed_val = 0;
+        if (failed_val > INT_MAX) failed_val = INT_MAX;
+        out->failed_count = (int)failed_val;
+        out->locked_until = locked_val;
+        break;
+    }
+
+    fclose(file);
+}
+
+/**
+ * @brief 写回指定用户的锁定状态
+ *
+ * 读取 sidecar 文件全文，替换/追加目标用户条目，然后整文件覆盖写入。
+ * 若 sidecar 不存在会新建（含表头）。失败静默忽略，不影响登录流程。
+ */
+static void AuthService_save_lockout(
+    const AuthService *service,
+    const char *user_id,
+    const AuthLockoutState *state
+) {
+    char path[TEXT_FILE_REPOSITORY_PATH_CAPACITY + 16];
+    char tmp_path[TEXT_FILE_REPOSITORY_PATH_CAPACITY + 32];
+    char content[AUTH_LOCKOUT_FILE_CAPACITY];
+    FILE *file = 0;
+    size_t offset = 0;
+    int written = 0;
+    int found_user = 0;
+    char line[AUTH_LOCKOUT_LINE_CAPACITY];
+
+    if (service == 0 || user_id == 0 || user_id[0] == '\0' || state == 0) {
+        return;
+    }
+    if (!AuthService_lockout_path(service, path, sizeof(path))) {
+        return;
+    }
+
+    memset(content, 0, sizeof(content));
+    written = snprintf(content, sizeof(content), "%s\n", AUTH_LOCKOUT_HEADER);
+    if (written < 0 || (size_t)written >= sizeof(content)) return;
+    offset = (size_t)written;
+
+    file = fopen(path, "r");
+    if (file != 0) {
+        while (fgets(line, sizeof(line), file) != 0) {
+            size_t len = strlen(line);
+            char id_buf[HIS_DOMAIN_ID_CAPACITY];
+            const char *pipe1 = 0;
+            size_t id_len = 0;
+
+            while (len > 0 && (line[len - 1] == '\n' || line[len - 1] == '\r')) {
+                line[--len] = '\0';
+            }
+            if (len == 0 || strcmp(line, AUTH_LOCKOUT_HEADER) == 0) {
+                continue;
+            }
+
+            pipe1 = strchr(line, '|');
+            if (pipe1 == 0) continue;
+            id_len = (size_t)(pipe1 - line);
+            if (id_len >= sizeof(id_buf)) id_len = sizeof(id_buf) - 1;
+            memcpy(id_buf, line, id_len);
+            id_buf[id_len] = '\0';
+
+            if (strcmp(id_buf, user_id) == 0) {
+                /* 目标用户：写入新状态 */
+                written = snprintf(content + offset, sizeof(content) - offset,
+                                   "%s|%d|%ld\n",
+                                   user_id, state->failed_count, state->locked_until);
+                found_user = 1;
+            } else {
+                /* 其他用户：原样保留 */
+                written = snprintf(content + offset, sizeof(content) - offset,
+                                   "%s\n", line);
+            }
+            if (written < 0 || (size_t)written >= sizeof(content) - offset) {
+                fclose(file);
+                return;
+            }
+            offset += (size_t)written;
+        }
+        fclose(file);
+    }
+
+    if (found_user == 0) {
+        written = snprintf(content + offset, sizeof(content) - offset,
+                           "%s|%d|%ld\n",
+                           user_id, state->failed_count, state->locked_until);
+        if (written < 0 || (size_t)written >= sizeof(content) - offset) {
+            return;
+        }
+        offset += (size_t)written;
+    }
+
+    /* 原子写：先写入临时文件再重命名 */
+    written = snprintf(tmp_path, sizeof(tmp_path), "%s.tmp", path);
+    if (written < 0 || (size_t)written >= sizeof(tmp_path)) return;
+    file = fopen(tmp_path, "w");
+    if (file == 0) return;
+    if (fwrite(content, 1, offset, file) != offset) {
+        fclose(file);
+        remove(tmp_path);
+        return;
+    }
+    if (fflush(file) != 0 || fclose(file) != 0) {
+        remove(tmp_path);
+        return;
+    }
+    remove(path);
+    if (rename(tmp_path, path) != 0) {
+        remove(tmp_path);
+    }
+}
 
 /**
  * @brief 安全清零敏感缓冲区
@@ -646,6 +927,9 @@ Result AuthService_authenticate(
     /* 默认盐值，当用户不存在时使用，避免时序差异 */
     char extracted_salt[33] = "00000000000000000000000000000000";
     int user_hash_format_known = 0;  /* 是否成功识别了存储哈希的格式 */
+    AuthLockoutState lockout;
+    long now_ts = 0;
+    int account_locked = 0;
     Result result;
     Result find_result;
 
@@ -674,6 +958,21 @@ Result AuthService_authenticate(
     memset(&loaded_user, 0, sizeof(loaded_user));
     find_result = UserRepository_find_by_user_id(&service->user_repository, user_id, &loaded_user);
     auth_secure_zero(password_hash, sizeof(password_hash));
+
+    /* 加载锁定状态（找不到用户时返回零值） */
+    lockout.failed_count = 0;
+    lockout.locked_until = 0;
+    if (find_result.success != 0) {
+        AuthService_load_lockout(service, user_id, &lockout);
+    }
+    now_ts = AuthService_now();
+    if (lockout.locked_until > now_ts) {
+        account_locked = 1;
+    } else if (lockout.locked_until != 0 && lockout.locked_until <= now_ts) {
+        /* 锁定已过期，清零以便下一轮重新计数 */
+        lockout.failed_count = 0;
+        lockout.locked_until = 0;
+    }
 
     if (find_result.success != 0) {
         /* 用户存在，根据存储的哈希格式选择对应的哈希算法 */
@@ -707,6 +1006,8 @@ Result AuthService_authenticate(
         auth_secure_zero(password_hash, sizeof(password_hash));
         auth_secure_zero(extracted_salt, sizeof(extracted_salt));
         auth_secure_zero(&loaded_user, sizeof(loaded_user));
+        HIS_AUDIT_LOG("LOGIN_FAILURE user=%s reason=unknown_user",
+                      user_id != 0 ? user_id : "<null>");
         return Result_make_failure("invalid credentials");
     }
 
@@ -714,8 +1015,32 @@ Result AuthService_authenticate(
     {
         size_t stored_len = strlen(loaded_user.password_hash);
         size_t computed_len = strlen(password_hash);
-        if (stored_len != computed_len ||
-            !constant_time_compare(loaded_user.password_hash, password_hash, stored_len)) {
+        int password_match = (stored_len == computed_len) &&
+            constant_time_compare(loaded_user.password_hash, password_hash, stored_len);
+
+        if (account_locked) {
+            /* 即便密码正确，在锁定期内也拒绝登录 */
+            auth_secure_zero(password_hash, sizeof(password_hash));
+            auth_secure_zero(extracted_salt, sizeof(extracted_salt));
+            auth_secure_zero(&loaded_user, sizeof(loaded_user));
+            HIS_AUDIT_LOG("LOGIN_BLOCKED user=%s reason=account_locked locked_until=%ld",
+                          user_id, lockout.locked_until);
+            return Result_make_failure("account temporarily locked");
+        }
+
+        if (password_match == 0) {
+            /* 密码错误：递增失败计数并持久化，必要时锁定 */
+            lockout.failed_count += 1;
+            if (lockout.failed_count >= HIS_LOGIN_MAX_FAILURES) {
+                lockout.locked_until = now_ts + HIS_LOGIN_LOCKOUT_SECONDS;
+                HIS_AUDIT_LOG("ACCOUNT_LOCKED user=%s failed_count=%d locked_until=%ld",
+                              user_id, lockout.failed_count, lockout.locked_until);
+            } else {
+                HIS_AUDIT_LOG("LOGIN_FAILURE user=%s reason=wrong_password failed_count=%d",
+                              user_id, lockout.failed_count);
+            }
+            AuthService_save_lockout(service, user_id, &lockout);
+
             auth_secure_zero(password_hash, sizeof(password_hash));
             auth_secure_zero(extracted_salt, sizeof(extracted_salt));
             auth_secure_zero(&loaded_user, sizeof(loaded_user));
@@ -730,7 +1055,15 @@ Result AuthService_authenticate(
     if (required_role != USER_ROLE_UNKNOWN && loaded_user.role != required_role) {
         auth_secure_zero(password_hash, sizeof(password_hash));
         auth_secure_zero(&loaded_user, sizeof(loaded_user));
+        HIS_AUDIT_LOG("LOGIN_FAILURE user=%s reason=role_mismatch", user_id);
         return Result_make_failure("user role mismatch");
+    }
+
+    /* 登录成功：清零失败计数 */
+    if (lockout.failed_count != 0 || lockout.locked_until != 0) {
+        lockout.failed_count = 0;
+        lockout.locked_until = 0;
+        AuthService_save_lockout(service, user_id, &lockout);
     }
 
     /* 旧版哈希自动升级：使用新的加盐格式重新哈希并更新存储 */

@@ -15,6 +15,12 @@
 #include "repository/PatientRepository.h"
 #include "repository/UserRepository.h"
 
+/** 触发账号锁定的最大连续失败次数 */
+#define HIS_LOGIN_MAX_FAILURES 5
+
+/** 账号锁定时长（秒） */
+#define HIS_LOGIN_LOCKOUT_SECONDS 900
+
 /**
  * @brief 认证服务结构体
  *
@@ -102,5 +108,15 @@ Result AuthService_change_password(
     const char *old_password,
     const char *new_password
 );
+
+/**
+ * @brief 注入自定义的 "当前时间" 函数（仅供测试使用）
+ *
+ * 默认情况下 AuthService 调用 time(NULL) 获取时钟。测试可以通过
+ * 此函数注入可控时钟源，验证锁定到期逻辑；传入 NULL 恢复默认。
+ *
+ * @param now_fn 返回当前时间（Unix epoch 秒）的函数指针
+ */
+void AuthService_set_clock_for_testing(long (*now_fn)(void));
 
 #endif

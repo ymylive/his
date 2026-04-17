@@ -31,12 +31,38 @@
 #include <fcntl.h>
 #include <sys/types.h>
 #include <unistd.h>
-#define HIS_MKDIR(path) mkdir(path, 0750) /* Unix/macOS：权限 rwxr-x--- */
+#define HIS_MKDIR(path) mkdir(path, 0700) /* Unix/macOS：权限 rwx------（仅所有者） */
 #define his_fsync(fd) fsync(fd)
 #define his_fileno(f) fileno(f)
 #endif
 
 #include "repository/RepositoryUtils.h"
+
+/**
+ * @brief 将数据文件权限收紧为"仅所有者可读写"（0600）
+ *
+ * 合规要求（HIPAA / 个保法）：PHI 数据文件（含身份证、手机号、病史）
+ * 必须只有进程所有者可读写。fopen(..., "a") 不会重置已有文件的模式，
+ * 且 umask / git checkout 可能留下 0644，因此在每次接触文件时显式 chmod。
+ *
+ * Windows 平台仅区分只读/可读写两档权限位，ACL 控制需另行处理，
+ * 此处仅保留 POSIX 分支；Windows 下如需更严格可在此扩展 SetFileSecurity。
+ *
+ * @param path 文件路径（NULL 或空字符串将被忽略）
+ */
+static void TextFileRepository_secure_mode(const char *path) {
+    if (path == 0 || path[0] == '\0') {
+        return;
+    }
+#if defined(_WIN32)
+    /* TODO(security): Windows 下通过 ACL (SetNamedSecurityInfo) 限制访问。
+       目前 _chmod 只能设置只读位，无法做到 POSIX 0600 级别隔离。 */
+    (void)path;
+#else
+    /* 忽略返回值：文件可能尚未存在，由调用方负责先创建。 */
+    (void)chmod(path, 0600);
+#endif
+}
 
 /**
  * @brief 判断字符是否为路径分隔符（'/' 或 '\'）
@@ -84,6 +110,10 @@ static Result TextFileRepository_create_directory_if_needed(const char *path) {
     /* 检查路径是否已存在 */
     if (stat(path, &info) == 0) {
         if (S_ISDIR(info.st_mode)) {
+#if !defined(_WIN32)
+            /* 合规：收紧已存在数据目录到 0700（仅所有者访问） */
+            (void)chmod(path, 0700);
+#endif
             return Result_make_success("directory exists"); /* 目录已存在 */
         }
 
@@ -92,6 +122,9 @@ static Result TextFileRepository_create_directory_if_needed(const char *path) {
 
     /* 尝试创建目录 */
     if (HIS_MKDIR(path) == 0 || errno == EEXIST) {
+#if !defined(_WIN32)
+        (void)chmod(path, 0700);
+#endif
         return Result_make_success("directory ready");
     }
 
@@ -319,6 +352,8 @@ Result TextFileRepository_ensure_file_exists(const TextFileRepository *repositor
     }
 
     fclose(file);
+    /* 合规：收紧文件权限到 0600，避免 git checkout 留下的 0644 泄露 PHI */
+    TextFileRepository_secure_mode(repository->path);
     /* 通过强制类型转换去除 const 限定符，设置已初始化标志 */
     ((TextFileRepository *)repository)->initialized = 1;
     return Result_make_success("repository file ready");
@@ -414,6 +449,8 @@ Result TextFileRepository_append_line(
     }
 
     fclose(file);
+    /* 合规：每次追加后重申 0600，防御外部进程 chmod 或恢复默认 umask 的情况 */
+    TextFileRepository_secure_mode(repository->path);
     return Result_make_success("repository line appended");
 }
 
@@ -512,5 +549,7 @@ Result TextFileRepository_save_file(
         return Result_make_failure("failed to replace repository file");
     }
 
+    /* 合规：rename 保留源文件权限（临时文件虽已创建为 0600，仍显式重申一次） */
+    TextFileRepository_secure_mode(repository->path);
     return Result_make_success("repository file saved");
 }

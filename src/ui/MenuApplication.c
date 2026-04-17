@@ -40,6 +40,40 @@
 #include "common/InputHelper.h"
 #include "service/DepartmentService.h"
 
+/**
+ * @brief 将用户角色枚举映射为审计日志中的角色标签
+ */
+static const char *MenuApplication_audit_role_label(UserRole role) {
+    switch (role) {
+        case USER_ROLE_ADMIN:             return "ADMIN";
+        case USER_ROLE_DOCTOR:            return "DOCTOR";
+        case USER_ROLE_PATIENT:           return "PATIENT";
+        case USER_ROLE_INPATIENT_MANAGER: return "INPATIENT_MANAGER";
+        case USER_ROLE_PHARMACY:          return "PHARMACY";
+        default:                          return "UNKNOWN";
+    }
+}
+
+/**
+ * @brief 获取当前已认证用户ID；未登录时返回 NULL
+ */
+static const char *MenuApplication_audit_actor_id(const MenuApplication *application) {
+    if (application == 0 || application->has_authenticated_user == 0) {
+        return 0;
+    }
+    return application->authenticated_user.user_id;
+}
+
+/**
+ * @brief 获取当前已认证用户角色标签；未登录时返回 NULL
+ */
+static const char *MenuApplication_audit_actor_role(const MenuApplication *application) {
+    if (application == 0 || application->has_authenticated_user == 0) {
+        return 0;
+    }
+    return MenuApplication_audit_role_label(application->authenticated_user.role);
+}
+
 /* ANSI cursor control sequences for interactive UI */
 #define TUI_CURSOR_UP_FMT    "\033[%dA\r"   /* Move cursor up N lines + carriage return */
 #define TUI_CURSOR_UP_ONLY   "\033[%dA"     /* Move cursor up N lines */
@@ -628,6 +662,27 @@ static void MenuApplication_clear_authenticated_user_state(MenuApplication *appl
 
     application->has_authenticated_user = 0;
     memset(&application->authenticated_user, 0, sizeof(application->authenticated_user));
+    application->last_activity = 0;
+}
+
+void MenuApplication_touch_activity(MenuApplication *application) {
+    if (application == 0) {
+        return;
+    }
+    application->last_activity = time(NULL);
+}
+
+int MenuApplication_is_session_idle(const MenuApplication *application, time_t now_seconds) {
+    if (application == 0 || application->has_authenticated_user == 0) {
+        return 0;
+    }
+    if (application->last_activity == 0) {
+        return 0;
+    }
+    if (now_seconds <= application->last_activity) {
+        return 0;
+    }
+    return (now_seconds - application->last_activity) > HIS_SESSION_IDLE_TIMEOUT_SECONDS;
 }
 
 /** @brief 检查是否已绑定患者会话（患者角色操作的前置条件） */
@@ -1070,6 +1125,15 @@ Result MenuApplication_init(MenuApplication *application, const MenuApplicationP
         }
     }
 
+    /* 初始化审计日志服务：data_dir 缺省时退化为当前目录下的 audit.log */
+    result = AuditService_init(
+        &application->audit_service,
+        paths->data_dir != 0 ? paths->data_dir : ""
+    );
+    if (result.success == 0) {
+        return result;
+    }
+
     MenuApplication_clear_authenticated_user_state(application);
     MenuApplication_clear_patient_session_state(application);
 
@@ -1100,11 +1164,23 @@ Result MenuApplication_login(
         &user
     );
     if (result.success == 0) {
+        /* 登录失败审计：角色尚未确认，仅记录尝试的用户ID */
+        (void)AuditService_record(
+            &application->audit_service,
+            AUDIT_EVENT_LOGIN_FAILURE,
+            user_id,
+            0,
+            0,
+            0,
+            "FAIL",
+            result.message
+        );
         return result;
     }
 
     application->authenticated_user = user;
     application->has_authenticated_user = 1;
+    application->last_activity = time(NULL);
 
     if (user.role == USER_ROLE_PATIENT) {
         result = MenuApplication_bind_patient_session(application, user.patient_id);
@@ -1114,10 +1190,33 @@ Result MenuApplication_login(
         }
     }
 
+    (void)AuditService_record(
+        &application->audit_service,
+        AUDIT_EVENT_LOGIN_SUCCESS,
+        user.user_id,
+        MenuApplication_audit_role_label(user.role),
+        0,
+        0,
+        "OK",
+        0
+    );
+
     return Result_make_success("menu application login ready");
 }
 
 void MenuApplication_logout(MenuApplication *application) {
+    if (application != 0 && application->has_authenticated_user) {
+        (void)AuditService_record(
+            &application->audit_service,
+            AUDIT_EVENT_LOGOUT,
+            application->authenticated_user.user_id,
+            MenuApplication_audit_role_label(application->authenticated_user.role),
+            0,
+            0,
+            "OK",
+            0
+        );
+    }
     MenuApplication_clear_authenticated_user_state(application);
     MenuApplication_clear_patient_session_state(application);
 }
@@ -1286,6 +1385,17 @@ Result MenuApplication_create_registration(
         return MenuApplication_write_failure(result.message, buffer, capacity);
     }
 
+    (void)AuditService_record(
+        &application->audit_service,
+        AUDIT_EVENT_CREATE,
+        MenuApplication_audit_actor_id(application),
+        MenuApplication_audit_actor_role(application),
+        "REGISTRATION",
+        registration.registration_id,
+        "OK",
+        registration.patient_id
+    );
+
     return MenuApplication_write_text(
         buffer,
         capacity,
@@ -1320,7 +1430,7 @@ Result MenuApplication_create_self_registration(
         return result;
     }
 
-    return RegistrationService_create(
+    result = RegistrationService_create(
         &application->registration_service,
         application->bound_patient_id,
         doctor_id,
@@ -1330,6 +1440,19 @@ Result MenuApplication_create_self_registration(
         registration_fee,
         out_registration
     );
+    if (result.success != 0) {
+        (void)AuditService_record(
+            &application->audit_service,
+            AUDIT_EVENT_CREATE,
+            MenuApplication_audit_actor_id(application),
+            MenuApplication_audit_actor_role(application),
+            "REGISTRATION",
+            out_registration->registration_id,
+            "OK",
+            out_registration->patient_id
+        );
+    }
+    return result;
 }
 
 Result MenuApplication_query_registration(
@@ -1608,6 +1731,17 @@ Result MenuApplication_create_visit_record_handoff(
         return result;
     }
 
+    (void)AuditService_record(
+        &application->audit_service,
+        AUDIT_EVENT_CREATE,
+        MenuApplication_audit_actor_id(application),
+        MenuApplication_audit_actor_role(application),
+        "VISIT",
+        record.visit_id,
+        "OK",
+        record.patient_id
+    );
+
     MenuApplication_fill_visit_handoff(&record, out_handoff);
     return Result_make_success("visit handoff ready");
 }
@@ -1667,6 +1801,17 @@ Result MenuApplication_create_examination_record(
     if (result.success == 0) {
         return MenuApplication_write_failure(result.message, buffer, capacity);
     }
+
+    (void)AuditService_record(
+        &application->audit_service,
+        AUDIT_EVENT_CREATE,
+        MenuApplication_audit_actor_id(application),
+        MenuApplication_audit_actor_role(application),
+        "EXAMINATION",
+        record.examination_id,
+        "OK",
+        record.exam_item
+    );
 
     return MenuApplication_write_text(
         buffer,
@@ -1852,6 +1997,17 @@ Result MenuApplication_admit_patient(
         return MenuApplication_write_failure(result.message, buffer, capacity);
     }
 
+    (void)AuditService_record(
+        &application->audit_service,
+        AUDIT_EVENT_CREATE,
+        MenuApplication_audit_actor_id(application),
+        MenuApplication_audit_actor_role(application),
+        "ADMISSION",
+        admission.admission_id,
+        "OK",
+        admission.patient_id
+    );
+
     return MenuApplication_write_text(
         buffer,
         capacity,
@@ -1885,6 +2041,17 @@ Result MenuApplication_discharge_patient(
         return MenuApplication_write_failure(result.message, buffer, capacity);
     }
 
+    (void)AuditService_record(
+        &application->audit_service,
+        AUDIT_EVENT_DISCHARGE,
+        MenuApplication_audit_actor_id(application),
+        MenuApplication_audit_actor_role(application),
+        "ADMISSION",
+        admission.admission_id,
+        "OK",
+        admission.patient_id
+    );
+
     return MenuApplication_write_text(
         buffer,
         capacity,
@@ -1916,6 +2083,17 @@ Result MenuApplication_transfer_bed(
     if (result.success == 0) {
         return MenuApplication_write_failure(result.message, buffer, capacity);
     }
+
+    (void)AuditService_record(
+        &application->audit_service,
+        AUDIT_EVENT_UPDATE,
+        MenuApplication_audit_actor_id(application),
+        MenuApplication_audit_actor_role(application),
+        "ADMISSION",
+        admission.admission_id,
+        "OK",
+        admission.bed_id
+    );
 
     return MenuApplication_write_text(
         buffer,
@@ -2072,6 +2250,7 @@ Result MenuApplication_dispense_medicine(
 ) {
     DispenseRecord record;
     int stock = 0;
+    char dispense_detail[128];
     Result result = PharmacyService_dispense_medicine_for_patient(
         &application->pharmacy_service,
         patient_id,
@@ -2086,6 +2265,25 @@ Result MenuApplication_dispense_medicine(
     if (result.success == 0) {
         return MenuApplication_write_failure(result.message, buffer, capacity);
     }
+
+    snprintf(
+        dispense_detail,
+        sizeof(dispense_detail),
+        "patient=%s medicine=%s qty=%d",
+        record.patient_id,
+        record.medicine_id,
+        record.quantity
+    );
+    (void)AuditService_record(
+        &application->audit_service,
+        AUDIT_EVENT_DISPENSE,
+        MenuApplication_audit_actor_id(application),
+        MenuApplication_audit_actor_role(application),
+        "PRESCRIPTION",
+        record.prescription_id,
+        "OK",
+        dispense_detail
+    );
 
     result = PharmacyService_get_stock(&application->pharmacy_service, medicine_id, &stock);
     if (result.success == 0) {
