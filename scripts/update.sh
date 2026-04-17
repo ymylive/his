@@ -52,11 +52,44 @@ esac
 log "platform: $PLATFORM_KEY"
 
 # ── 定位目标 ──────────────────────────────────────────────
+#
+# 优先级：
+#   1. 显式 --target
+#   2. install.sh 的默认位置 $HOME/.his/his（真实二进制，绕过 wrapper）
+#   3. ./his（便携模式）
+#   4. command -v his，但如果解析到软链 / shell wrapper 要跟进到真实文件
+#   5. 不存在则回退到 ./his（新装）
+resolve_real_target() {
+    local candidate="$1"
+    [ -z "$candidate" ] && return 1
+    [ -e "$candidate" ] || return 1
+    # 跟软链
+    if command -v readlink >/dev/null; then
+        local resolved
+        if resolved="$(readlink -f "$candidate" 2>/dev/null)" && [ -n "$resolved" ]; then
+            candidate="$resolved"
+        fi
+    fi
+    # shell wrapper (install.sh 会生成 cd "$HOME/.his" && exec ./his "$@")
+    if head -c 2 "$candidate" 2>/dev/null | grep -q '#!'; then
+        local wrapper_target
+        wrapper_target="$(awk '/exec/ { for(i=1;i<=NF;i++) if ($i ~ /his$/) { print $i; exit } }' "$candidate" 2>/dev/null)"
+        if [ "$wrapper_target" = "./his" ] && [ -x "$HOME/.his/his" ]; then
+            candidate="$HOME/.his/his"
+        fi
+    fi
+    printf '%s\n' "$candidate"
+}
+
 if [ -z "$TARGET" ]; then
-    if [ -x "./his" ]; then
+    if [ -x "$HOME/.his/his" ]; then
+        TARGET="$HOME/.his/his"
+        log "found install.sh layout at \$HOME/.his"
+    elif [ -x "./his" ]; then
         TARGET="./his"
     elif command -v his >/dev/null; then
-        TARGET="$(command -v his)"
+        TARGET="$(resolve_real_target "$(command -v his)")" || TARGET=""
+        if [ -z "$TARGET" ]; then TARGET="./his"; fi
     else
         TARGET="./his"
         warn "no existing his binary found; will install to $TARGET"

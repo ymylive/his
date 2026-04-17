@@ -22,10 +22,26 @@ $PlatformKey = 'win64'
 Log "platform: $PlatformKey"
 
 # ── 目标路径 ───────────────────────────────────────────
+#
+# 优先级：
+#   1. 显式 -Target / HIS_TARGET
+#   2. install.ps1 默认位置 %LOCALAPPDATA%\his\his.exe
+#   3. .\his.exe（便携模式）
+#   4. Get-Command his.exe（但要跳过 .cmd 包装脚本）
+$LocalAppDataHis = if ($env:LOCALAPPDATA) { Join-Path $env:LOCALAPPDATA 'his\his.exe' } else { '' }
 if (-not $Target) {
-    if (Test-Path '.\his.exe')  { $Target = '.\his.exe' }
-    elseif (Get-Command his.exe -ErrorAction SilentlyContinue) {
-        $Target = (Get-Command his.exe).Source
+    if ($LocalAppDataHis -and (Test-Path $LocalAppDataHis)) {
+        $Target = $LocalAppDataHis
+        Log 'found install.ps1 layout at %LOCALAPPDATA%\his'
+    } elseif (Test-Path '.\his.exe') {
+        $Target = '.\his.exe'
+    } elseif ($cmd = Get-Command his.exe -ErrorAction SilentlyContinue) {
+        $src = $cmd.Source
+        if ($src -match '\.cmd$' -and $LocalAppDataHis -and (Test-Path $LocalAppDataHis)) {
+            $Target = $LocalAppDataHis
+        } else {
+            $Target = $src
+        }
     } else {
         $Target = '.\his.exe'
         Warn "no existing his.exe found; will install to $Target"
