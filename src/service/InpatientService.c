@@ -634,13 +634,60 @@ static Result InpatientService_write_temp_file(const char *tmp_path, const char 
 }
 
 /**
+ * @brief 检查文件是否存在
+ *
+ * @param path  文件路径
+ * @return 1=存在，0=不存在
+ */
+static int InpatientService_file_exists(const char *path) {
+    FILE *file = fopen(path, "rb");
+    if (file == 0) {
+        return 0;
+    }
+    fclose(file);
+    return 1;
+}
+
+/**
+ * @brief 将已提交的正式文件用对应的 .bak 备份回滚
+ *
+ * 用于 Phase 3 提交中途失败时恢复已替换的文件。committed_count 指示
+ * 已成功 rename 的索引数量（[0, committed_count)）。
+ *
+ * @param paths            正式文件路径数组
+ * @param bak_paths        对应的 .bak 备份路径数组
+ * @param had_backup       每个索引是否产生过备份（原文件存在时为 1）
+ * @param committed_count  已成功提交的正式文件数量
+ */
+static void InpatientService_rollback_committed(
+    const char *paths[],
+    char bak_paths[][TEXT_FILE_REPOSITORY_PATH_CAPACITY + 8],
+    const int had_backup[],
+    int committed_count
+) {
+    int k = 0;
+    for (k = 0; k < committed_count; k++) {
+        if (had_backup[k]) {
+            /* 删掉已覆盖的正式文件，再把 .bak 改回正式文件名 */
+            remove(paths[k]);
+            rename(bak_paths[k], paths[k]);
+        } else {
+            /* 原先无此文件，直接删掉新写入的即可 */
+            remove(paths[k]);
+        }
+    }
+}
+
+/**
  * @brief 保存所有仓库数据（患者、病房、床位、住院记录）
  *
- * 使用"prepare then commit"模式确保跨文件一致性：
- * 1. 在内存中构建所有4个文件的完整内容
+ * 使用"prepare-backup-commit-rollback"模式确保跨 4 个文件的一致性：
+ * 1. 在内存中构建所有 4 个文件的完整内容
  * 2. 将所有内容写入临时文件（path.tmp）
- * 3. 全部写入成功后，依次将临时文件重命名为正式文件
- * 4. 任一步骤失败时，清理所有临时文件并返回错误
+ * 3. 备份：把每个已存在的正式文件 rename 为 .bak
+ * 4. 提交：依次将临时文件重命名为正式文件
+ *    - 任一步失败：用 .bak 恢复已提交的正式文件，删除剩余 temp，返回失败
+ * 5. 全部成功后删除所有 .bak
  *
  * @param service     指向住院服务结构体
  * @param patients    患者链表
@@ -656,25 +703,33 @@ static Result InpatientService_save_all(
     LinkedList *beds,
     LinkedList *admissions
 ) {
-    /* File paths and temp paths for all 4 repositories */
+    /* File paths, temp paths and backup paths for all 4 repositories */
     const char *paths[INPATIENT_SERVICE_REPO_COUNT];
     char tmp_paths[INPATIENT_SERVICE_REPO_COUNT][TEXT_FILE_REPOSITORY_PATH_CAPACITY + 8];
+    char bak_paths[INPATIENT_SERVICE_REPO_COUNT][TEXT_FILE_REPOSITORY_PATH_CAPACITY + 8];
+    int had_backup[INPATIENT_SERVICE_REPO_COUNT];
     char *contents[INPATIENT_SERVICE_REPO_COUNT];
     int i = 0;
+    int j = 0;
     Result result;
 
     memset(contents, 0, sizeof(contents));
+    memset(had_backup, 0, sizeof(had_backup));
 
     paths[0] = service->patient_repository.file_repository.path;
     paths[1] = service->ward_repository.storage.path;
     paths[2] = service->bed_repository.storage.path;
     paths[3] = service->admission_repository.storage.path;
 
-    /* Build temp file paths */
+    /* Build temp and backup file paths */
     for (i = 0; i < INPATIENT_SERVICE_REPO_COUNT; i++) {
         if (snprintf(tmp_paths[i], sizeof(tmp_paths[i]), "%s.tmp", paths[i])
                 >= (int)sizeof(tmp_paths[i])) {
             return Result_make_failure("repository path too long for temp file");
+        }
+        if (snprintf(bak_paths[i], sizeof(bak_paths[i]), "%s.bak", paths[i])
+                >= (int)sizeof(bak_paths[i])) {
+            return Result_make_failure("repository path too long for backup file");
         }
     }
 
@@ -710,7 +765,6 @@ static Result InpatientService_save_all(
         result = InpatientService_write_temp_file(tmp_paths[i], contents[i]);
         if (result.success == 0) {
             /* Clean up: remove any temp files already written */
-            int j = 0;
             for (j = 0; j < i; j++) {
                 remove(tmp_paths[j]);
             }
@@ -721,21 +775,68 @@ static Result InpatientService_save_all(
         }
     }
 
-    /* Phase 3: Commit - rename all temp files to final paths */
+    /* Phase 3a: Backup every existing final file to path.bak so we can roll
+     * back any partial commit. Files that don't yet exist (first save) have
+     * no backup; their rollback is simply `remove(paths[i])`. */
+    for (i = 0; i < INPATIENT_SERVICE_REPO_COUNT; i++) {
+        if (InpatientService_file_exists(paths[i])) {
+            /* Stale leftover from a previous crash would block rename on
+             * Windows and confuse rollback; clear it first. */
+            remove(bak_paths[i]);
+            if (rename(paths[i], bak_paths[i]) != 0) {
+                /* Backup failed: restore any prior backups and drop temps. */
+                for (j = 0; j < i; j++) {
+                    if (had_backup[j]) {
+                        remove(paths[j]);
+                        rename(bak_paths[j], paths[j]);
+                    }
+                }
+                for (j = 0; j < INPATIENT_SERVICE_REPO_COUNT; j++) {
+                    remove(tmp_paths[j]);
+                    free(contents[j]);
+                }
+                return Result_make_failure("failed to backup repository file");
+            }
+            had_backup[i] = 1;
+        }
+    }
+
+    /* Phase 3b: Commit - rename all temp files to final paths. If any rename
+     * fails, roll back fully using the .bak files produced in Phase 3a. */
     for (i = 0; i < INPATIENT_SERVICE_REPO_COUNT; i++) {
 #if defined(_WIN32)
+        /* On Windows rename cannot overwrite; after Phase 3a the final path
+         * should already be free, but remove defensively in case a stale file
+         * reappeared (e.g. read-sharing tools). */
         remove(paths[i]);
 #endif
         if (rename(tmp_paths[i], paths[i]) != 0) {
-            /* Rename failed: clean up remaining temp files */
-            int j = 0;
+            /* Roll back the i files already committed */
+            InpatientService_rollback_committed(paths, bak_paths, had_backup, i);
+            /* Remove remaining temps (including the one that failed) */
             for (j = i; j < INPATIENT_SERVICE_REPO_COUNT; j++) {
                 remove(tmp_paths[j]);
+            }
+            /* Clean up any un-restored backups (indices >= i that still have
+             * their .bak sitting on disk because their final file was never
+             * touched). Their originals are already intact at paths[j], so
+             * just delete the stale backup. */
+            for (j = i; j < INPATIENT_SERVICE_REPO_COUNT; j++) {
+                if (had_backup[j]) {
+                    remove(bak_paths[j]);
+                }
             }
             for (j = 0; j < INPATIENT_SERVICE_REPO_COUNT; j++) {
                 free(contents[j]);
             }
             return Result_make_failure("failed to commit repository files");
+        }
+    }
+
+    /* Phase 4: All commits succeeded - discard backups */
+    for (i = 0; i < INPATIENT_SERVICE_REPO_COUNT; i++) {
+        if (had_backup[i]) {
+            remove(bak_paths[i]);
         }
     }
 

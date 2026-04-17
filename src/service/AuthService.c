@@ -526,13 +526,21 @@ static Result AuthService_update_line_handler(const char *line, void *context) {
     size_t id_len = 0;
     int written = 0;
 
+    /* 防御性检查：offset 不得超过 capacity，否则 capacity-offset 会下溢 */
+    if (ctx->offset >= ctx->capacity) {
+        return Result_make_failure("user file content overflow");
+    }
+
     /* 提取行中的 user_id（第一个 '|' 之前的部分） */
     sep = strchr(line, '|');
     if (sep == 0) {
         /* 无法解析，原样保留 */
         written = snprintf(ctx->buffer + ctx->offset,
                            ctx->capacity - ctx->offset, "%s\n", line);
-        if (written > 0) ctx->offset += (size_t)written;
+        if (written < 0 || (size_t)written >= ctx->capacity - ctx->offset) {
+            return Result_make_failure("user file content overflow");
+        }
+        ctx->offset += (size_t)written;
         return Result_make_success("line kept");
     }
 
@@ -553,13 +561,19 @@ static Result AuthService_update_line_handler(const char *line, void *context) {
                            (int)ctx->updated_user->role,
                            ctx->updated_user->patient_id,
                            ctx->updated_user->force_password_change);
-        if (written > 0) ctx->offset += (size_t)written;
+        if (written < 0 || (size_t)written >= ctx->capacity - ctx->offset) {
+            return Result_make_failure("user file content overflow");
+        }
+        ctx->offset += (size_t)written;
         ctx->updated = 1;
     } else {
         /* 原样保留 */
         written = snprintf(ctx->buffer + ctx->offset,
                            ctx->capacity - ctx->offset, "%s\n", line);
-        if (written > 0) ctx->offset += (size_t)written;
+        if (written < 0 || (size_t)written >= ctx->capacity - ctx->offset) {
+            return Result_make_failure("user file content overflow");
+        }
+        ctx->offset += (size_t)written;
     }
 
     return Result_make_success("line processed");
@@ -585,7 +599,7 @@ static void AuthService_update_user_hash(AuthService *service, const User *updat
 
     /* 先写入表头 */
     written = snprintf(file_content, sizeof(file_content), "%s\n", USER_REPOSITORY_HEADER);
-    if (written <= 0) return;
+    if (written <= 0 || (size_t)written >= sizeof(file_content)) return;
 
     ctx.updated_user = updated_user;
     ctx.buffer = file_content;

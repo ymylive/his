@@ -6020,16 +6020,27 @@ Result MenuApplication_stats_dept_performance(
 }
 
 /**
- * @brief 将日期转换为近似天数（用于天数差计算）
- * 使用累积月天数查表，不考虑闰年（仅用于天数差的近似计算）
+ * @brief 将日期转换为自 epoch 起的天数（用于天数差计算）
+ *
+ * 使用标准库 mktime 正确处理闰年、月长差异与跨年边界。
+ * tm_hour 固定为 12 以规避夏令时切换日可能出现的 23/25 小时问题。
+ * 调用方通过两次调用相减得到实际自然日差（例如住院天数）。
+ * 参数非法或 mktime 失败时返回 0（保持既有调用方容错路径）。
  */
 static int MenuApplication_date_to_days(int year, int month, int day) {
-    static const int month_days[12] = {
-        0, 31, 59, 90, 120, 151, 181, 212, 243, 273, 304, 334
-    };
-    if (month < 1) month = 1;
-    if (month > 12) month = 12;
-    return year * 365 + month_days[month - 1] + day;
+    struct tm tm_date;
+    time_t t;
+    memset(&tm_date, 0, sizeof(tm_date));
+    tm_date.tm_year = year - 1900;
+    tm_date.tm_mon  = month - 1;
+    tm_date.tm_mday = day;
+    tm_date.tm_hour = 12;  /* 避免 DST 边界问题 */
+    tm_date.tm_isdst = -1;
+    t = mktime(&tm_date);
+    if (t == (time_t)-1) {
+        return 0;
+    }
+    return (int)(t / 86400);
 }
 
 /**

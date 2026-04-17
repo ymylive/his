@@ -20,15 +20,20 @@
 #include <string.h>
 #include <sys/stat.h>
 
-/* 跨平台目录创建宏 */
+/* 跨平台目录创建宏及 fsync 宏 */
 #if defined(_WIN32)
 #include <direct.h>
+#include <io.h>
 #define HIS_MKDIR(path) _mkdir(path)
+#define his_fsync(fd) _commit(fd)
+#define his_fileno(f) _fileno(f)
 #else
 #include <fcntl.h>
 #include <sys/types.h>
 #include <unistd.h>
 #define HIS_MKDIR(path) mkdir(path, 0750) /* Unix/macOS：权限 rwxr-x--- */
+#define his_fsync(fd) fsync(fd)
+#define his_fileno(f) fileno(f)
 #endif
 
 #include "repository/RepositoryUtils.h"
@@ -476,7 +481,25 @@ Result TextFileRepository_save_file(
         return Result_make_failure("temp file write error");
     }
 
-    fclose(file);
+    /* 将用户缓冲区数据刷入内核 */
+    if (fflush(file) != 0) {
+        fclose(file);
+        remove(tmp_path);
+        return Result_make_failure("failed to flush temp file");
+    }
+
+    /* 将内核缓冲区数据落盘，确保断电/崩溃时不丢失 */
+    if (his_fsync(his_fileno(file)) != 0) {
+        fclose(file);
+        remove(tmp_path);
+        return Result_make_failure("failed to fsync temp file");
+    }
+
+    /* 关闭文件，检查返回值以捕获延迟写入错误 */
+    if (fclose(file) != 0) {
+        remove(tmp_path);
+        return Result_make_failure("failed to close temp file");
+    }
 
     /* Windows 平台上 rename 不支持覆盖已有文件，需先删除 */
 #if defined(_WIN32)

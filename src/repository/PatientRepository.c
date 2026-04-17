@@ -631,11 +631,15 @@ static Result PatientRepository_write_all_lines(
 
         len = strlen(line);
         if (used + len + 2 > capacity) {
+            char *tmp;
             capacity *= 2;
-            content = (char *)realloc(content, capacity);
-            if (content == 0) {
+            tmp = (char *)realloc(content, capacity);
+            if (tmp == 0) {
+                free(content);
+                content = 0;
                 return Result_make_failure("failed to grow patient content buffer");
             }
+            content = tmp;
         }
         memcpy(content + used, line, len);
         used += len;
