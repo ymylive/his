@@ -79,6 +79,49 @@ static void copy_text(char *destination, size_t capacity, const char *source) {
     destination[capacity - 1] = '\0';
 }
 
+static void format_relative_registration_time(
+    char *buffer,
+    size_t buffer_size,
+    int day_offset,
+    int hour,
+    int minute
+) {
+    time_t now = time(0);
+    struct tm value_tm;
+
+    assert(buffer != 0);
+    assert(buffer_size > 0);
+    assert(now != (time_t)-1);
+
+#ifdef _WIN32
+    {
+        struct tm *local_tm = localtime(&now);
+        assert(local_tm != 0);
+        value_tm = *local_tm;
+    }
+#else
+    assert(localtime_r(&now, &value_tm) != 0);
+#endif
+
+    value_tm.tm_mday += day_offset;
+    value_tm.tm_hour = hour;
+    value_tm.tm_min = minute;
+    value_tm.tm_sec = 0;
+    value_tm.tm_isdst = -1;
+    assert(mktime(&value_tm) != (time_t)-1);
+
+    snprintf(
+        buffer,
+        buffer_size,
+        "%04d-%02d-%02d %02d:%02d",
+        value_tm.tm_year + 1900,
+        value_tm.tm_mon + 1,
+        value_tm.tm_mday,
+        value_tm.tm_hour,
+        value_tm.tm_min
+    );
+}
+
 static void setup_context(MenuApplicationTestContext *context, const char *test_name) {
     assert(context != 0);
 
@@ -403,6 +446,8 @@ static void test_patient_self_registration_requires_session_and_tracks_duplicate
     MenuApplication application;
     Registration first_registration;
     Registration second_registration;
+    char first_time[32];
+    char second_time[32];
     char output[1024];
     Result result;
 
@@ -415,12 +460,15 @@ static void test_patient_self_registration_requires_session_and_tracks_duplicate
     result = MenuApplication_init(&application, &context.paths);
     assert(result.success == 1);
 
+    format_relative_registration_time(first_time, sizeof(first_time), 1, 9, 5);
+    format_relative_registration_time(second_time, sizeof(second_time), 2, 9, 10);
+
     memset(&first_registration, 0, sizeof(first_registration));
     result = MenuApplication_create_self_registration(
         &application,
         "DOC0001",
         "DEP0001",
-        "2026-03-21T08:00",
+        first_time,
         REG_TYPE_STANDARD,
         5.00,
         &first_registration
@@ -435,7 +483,7 @@ static void test_patient_self_registration_requires_session_and_tracks_duplicate
         &application,
         "DOC0001",
         "DEP0001",
-        "2026-03-21T08:05",
+        first_time,
         REG_TYPE_STANDARD,
         5.00,
         &first_registration
@@ -449,7 +497,7 @@ static void test_patient_self_registration_requires_session_and_tracks_duplicate
         &application,
         "DOC0001",
         "DEP0001",
-        "2026-03-21T08:10",
+        second_time,
         REG_TYPE_STANDARD,
         5.00,
         &second_registration
@@ -469,6 +517,87 @@ static void test_patient_self_registration_requires_session_and_tracks_duplicate
     assert(strstr(output, "count=2") != 0);
     assert(strstr(output, "REG0001") != 0);
     assert(strstr(output, "REG0002") != 0);
+}
+
+static void test_patient_self_registration_rejects_invalid_or_out_of_window_time(void) {
+    MenuApplicationTestContext context;
+    MenuApplication application;
+    Registration registration;
+    char out_of_window_time[32];
+    Result result;
+
+    setup_context(&context, "self_registration_time_validation");
+    seed_department_and_doctor(&context);
+    seed_patient(&context, "PAT5103", "SelfTimeValidation", 0);
+    seed_user_account(&context, "PAT5103", "self-time-pass", USER_ROLE_PATIENT);
+
+    result = MenuApplication_init(&application, &context.paths);
+    assert(result.success == 1);
+
+    result = MenuApplication_login(&application, "PAT5103", "self-time-pass", USER_ROLE_PATIENT);
+    assert(result.success == 1);
+
+    memset(&registration, 0, sizeof(registration));
+    result = MenuApplication_create_self_registration(
+        &application,
+        "DOC0001",
+        "DEP0001",
+        "3030-06-40 09:00",
+        REG_TYPE_STANDARD,
+        5.00,
+        &registration
+    );
+    assert(result.success == 0);
+    assert(strstr(result.message, "registration time invalid") != 0);
+
+    result = MenuApplication_create_self_registration(
+        &application,
+        "DOC0001",
+        "DEP0001",
+        "2026-05-33 09:00",
+        REG_TYPE_STANDARD,
+        5.00,
+        &registration
+    );
+    assert(result.success == 0);
+    assert(strstr(result.message, "registration time invalid") != 0);
+
+    result = MenuApplication_create_self_registration(
+        &application,
+        "DOC0001",
+        "DEP0001",
+        "2026-06-45 09:00",
+        REG_TYPE_STANDARD,
+        5.00,
+        &registration
+    );
+    assert(result.success == 0);
+    assert(strstr(result.message, "registration time invalid") != 0);
+
+    result = MenuApplication_create_self_registration(
+        &application,
+        "DOC0001",
+        "DEP0001",
+        "2026-02-29 09:00",
+        REG_TYPE_STANDARD,
+        5.00,
+        &registration
+    );
+    assert(result.success == 0);
+    assert(strstr(result.message, "registration time invalid") != 0);
+
+    format_relative_registration_time(out_of_window_time, sizeof(out_of_window_time), 8, 9, 0);
+    result = MenuApplication_create_self_registration(
+        &application,
+        "DOC0001",
+        "DEP0001",
+        out_of_window_time,
+        REG_TYPE_STANDARD,
+        5.00,
+        &registration
+    );
+    assert(result.success == 0);
+    assert(strstr(result.message, "next 7 days") != 0);
 }
 
 static void test_menu_application_lists_departments_and_creates_visit_handoff(void) {
@@ -1941,6 +2070,7 @@ static void test_menu_application_session_idle_detection(void) {
 int main(void) {
     test_clerk_flow_add_query_patient_and_registration();
     test_patient_self_registration_requires_session_and_tracks_duplicates();
+    test_patient_self_registration_rejects_invalid_or_out_of_window_time();
     test_menu_application_lists_departments_and_creates_visit_handoff();
     test_doctor_flow_create_visit_and_query_history();
     test_inpatient_flow_list_admit_and_discharge();

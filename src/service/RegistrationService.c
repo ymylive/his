@@ -960,6 +960,20 @@ Result RegistrationService_find_by_doctor_id(
         current = current->next;
     }
 
+    /* 按挂号时间升序排序（最早挂号的排在前面） */
+    LinkedListNode *i, *j;
+    for (i = out_registrations->head; i != NULL; i = i->next) {
+        for (j = i->next; j != NULL; j = j->next) {
+            const Registration *reg1 = (const Registration *)i->data;
+            const Registration *reg2 = (const Registration *)j->data;
+            if (strcmp(reg1->registered_at, reg2->registered_at) > 0) {
+                void *temp = i->data;
+                i->data = j->data;
+                j->data = temp;
+            }
+        }
+    }
+
     RegistrationRepository_clear_list(&registrations);
     return Result_make_success("doctor registrations loaded");
 }

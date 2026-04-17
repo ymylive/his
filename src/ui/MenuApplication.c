@@ -482,6 +482,208 @@ int MenuApplication_is_blank(const char *text) {
     return 1;
 }
 
+static int MenuApplication_is_digit_char(char character) {
+    return character >= '0' && character <= '9';
+}
+
+static int MenuApplication_parse_two_digit_number(const char *text) {
+    return (text[0] - '0') * 10 + (text[1] - '0');
+}
+
+static int MenuApplication_parse_four_digit_number(const char *text) {
+    return (text[0] - '0') * 1000 +
+           (text[1] - '0') * 100 +
+           (text[2] - '0') * 10 +
+           (text[3] - '0');
+}
+
+static int MenuApplication_is_leap_year(int year) {
+    if (year % 400 == 0) {
+        return 1;
+    }
+    if (year % 100 == 0) {
+        return 0;
+    }
+    return year % 4 == 0 ? 1 : 0;
+}
+
+static int MenuApplication_days_in_month(int year, int month) {
+    static const int days_per_month[] = {
+        31, 28, 31, 30, 31, 30,
+        31, 31, 30, 31, 30, 31
+    };
+
+    if (month < 1 || month > 12) {
+        return 0;
+    }
+
+    if (month == 2 && MenuApplication_is_leap_year(year)) {
+        return 29;
+    }
+
+    return days_per_month[month - 1];
+}
+
+static int MenuApplication_is_valid_calendar_date(
+    int year,
+    int month,
+    int day,
+    int hour,
+    int minute
+) {
+    int max_day = 0;
+
+    if (year <= 0) {
+        return 0;
+    }
+
+    if (hour < 0 || hour > 23 || minute < 0 || minute > 59) {
+        return 0;
+    }
+
+    max_day = MenuApplication_days_in_month(year, month);
+    if (max_day == 0 || day < 1 || day > max_day) {
+        return 0;
+    }
+
+    return 1;
+}
+
+static int MenuApplication_localtime_safe(const time_t *value, struct tm *out_tm) {
+    if (value == 0 || out_tm == 0) {
+        return 0;
+    }
+
+#ifdef _WIN32
+    {
+        struct tm *local_tm = localtime(value);
+        if (local_tm == 0) {
+            return 0;
+        }
+        *out_tm = *local_tm;
+        return 1;
+    }
+#else
+    return localtime_r(value, out_tm) != 0 ? 1 : 0;
+#endif
+}
+
+static int MenuApplication_parse_registration_time(
+    const char *registered_at,
+    time_t *out_time
+) {
+    struct tm input_tm;
+    struct tm normalized_tm;
+    time_t parsed_time = (time_t)0;
+    int year = 0;
+    int month = 0;
+    int day = 0;
+    int hour = 0;
+    int minute = 0;
+    size_t index = 0;
+    size_t length = 0;
+
+    if (registered_at == 0 || out_time == 0) {
+        return 0;
+    }
+
+    length = strlen(registered_at);
+    if (length != 16) {
+        return 0;
+    }
+
+    for (index = 0; index < length; index++) {
+        if (index == 4 || index == 7) {
+            if (registered_at[index] != '-') {
+                return 0;
+            }
+            continue;
+        }
+
+        if (index == 10) {
+            if (registered_at[index] != ' ' && registered_at[index] != 'T') {
+                return 0;
+            }
+            continue;
+        }
+
+        if (index == 13) {
+            if (registered_at[index] != ':') {
+                return 0;
+            }
+            continue;
+        }
+
+        if (!MenuApplication_is_digit_char(registered_at[index])) {
+            return 0;
+        }
+    }
+
+    year = MenuApplication_parse_four_digit_number(registered_at);
+    month = MenuApplication_parse_two_digit_number(registered_at + 5);
+    day = MenuApplication_parse_two_digit_number(registered_at + 8);
+    hour = MenuApplication_parse_two_digit_number(registered_at + 11);
+    minute = MenuApplication_parse_two_digit_number(registered_at + 14);
+
+    if (!MenuApplication_is_valid_calendar_date(year, month, day, hour, minute)) {
+        return 0;
+    }
+
+    memset(&input_tm, 0, sizeof(input_tm));
+    input_tm.tm_year = year - 1900;
+    input_tm.tm_mon = month - 1;
+    input_tm.tm_mday = day;
+    input_tm.tm_hour = hour;
+    input_tm.tm_min = minute;
+    input_tm.tm_sec = 0;
+    input_tm.tm_isdst = -1;
+
+    parsed_time = mktime(&input_tm);
+    if (parsed_time == (time_t)-1) {
+        return 0;
+    }
+
+    if (!MenuApplication_localtime_safe(&parsed_time, &normalized_tm)) {
+        return 0;
+    }
+
+    if (normalized_tm.tm_year != input_tm.tm_year ||
+        normalized_tm.tm_mon != input_tm.tm_mon ||
+        normalized_tm.tm_mday != input_tm.tm_mday ||
+        normalized_tm.tm_hour != input_tm.tm_hour ||
+        normalized_tm.tm_min != input_tm.tm_min) {
+        return 0;
+    }
+
+    *out_time = parsed_time;
+    return 1;
+}
+
+static Result MenuApplication_validate_self_registration_time(const char *registered_at) {
+    time_t registered_time = (time_t)0;
+    time_t current_time = (time_t)0;
+    double seconds_until_visit = 0.0;
+    const double max_window_seconds = 7.0 * 24.0 * 60.0 * 60.0;
+
+    if (!MenuApplication_parse_registration_time(registered_at, &registered_time)) {
+        return Result_make_failure(
+            "registration time invalid; expected YYYY-MM-DD HH:MM within a real calendar date"
+        );
+    }
+
+    current_time = time(0);
+    if (current_time == (time_t)-1) {
+        return Result_make_failure("current time unavailable");
+    }
+
+    seconds_until_visit = difftime(registered_time, current_time);
+    if (seconds_until_visit < 0.0 || seconds_until_visit > max_window_seconds) {
+        return Result_make_failure("registration time must be in the next 7 days");
+    }
+
+    return Result_make_success("self registration time valid");
+}
+
 /**
  * @brief 验证必填文本字段不为空
  * @param text       待验证的文本
@@ -1426,6 +1628,11 @@ Result MenuApplication_create_self_registration(
         return Result_make_failure("self registration output missing");
     }
 
+    if (result.success == 0) {
+        return result;
+    }
+
+    result = MenuApplication_validate_self_registration_time(registered_at);
     if (result.success == 0) {
         return result;
     }
