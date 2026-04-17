@@ -120,10 +120,20 @@ jobs:
       - name: Display structure
         run: ls -R artifacts
 
+      - name: Flatten artifacts and generate SHA256SUMS
+        run: |
+          mkdir -p release
+          find artifacts -type f \( -name "*.zip" -o -name "*.tar.gz" \) -exec cp {} release/ \;
+          cd release
+          sha256sum *.zip *.tar.gz 2>/dev/null | sort > SHA256SUMS
+          echo "--- SHA256SUMS ---"
+          cat SHA256SUMS
+
       - name: Publish GitHub release
         uses: softprops/action-gh-release@v2
         with:
           files: |
-            artifacts/**/*.zip
-            artifacts/**/*.tar.gz
+            release/*.zip
+            release/*.tar.gz
+            release/SHA256SUMS
           fail_on_unmatched_files: false

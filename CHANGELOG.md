@@ -4,6 +4,36 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## [7.1.0] - 2026-04-16
+
+### Security
+
+- **密码 KDF 升级** — 自研 FNV 变体 → PBKDF2-HMAC-SHA256（100k 轮），符合 NIST SP 800-132；惰性迁移，老账号首次登录自动升级
+- **审计日志** — 新增 AuditService，登录/登出/CRUD/发药/出院等关键操作写入 `data/audit.log`（append-only，0600），满足 HIPAA §164.312(b)
+- **PHI 文件权限** — 启动时自动 chmod 0600 扫描 `data/*.txt` + `data/demo_seed/*.txt`，目录 0700，双重保险
+- **登录锁定 + 会话超时** — 持久化失败计数（5 次锁 15 分钟，sidecar `users.txt.lockout`） + 15 分钟空闲自动登出
+- **UpdateChecker 去 system()** — 全链路改 `fork+execvp` / `CreateProcess`，参数走 argv 数组不经 shell；下载附带 SHA-256 校验（SHA256SUMS 文件）；URL 白名单取代黑名单
+- **AuthService 栈溢出修复** — `snprintf` 边界检查，防止 size_t 下溢触发越界写
+
+### Fixed
+
+- **住院计费日期错误** — `date_to_days` 固定月长表导致跨月/跨年可算出负天数，30 天当 1 天收费；改用 `mktime` 正确处理闰年
+- **save_file 原子替换失效** — `fflush + fsync + fclose` 三步检查后再 rename，磁盘满/断电不再留下截断文件
+- **跨文件事务非原子** — InpatientService 的 4 表写入加备份-提交-回滚，失败时复原原文件
+- **15 处 realloc 泄漏** — 16 个 Repository 文件统一 `tmp` 模式，realloc 失败释放原缓冲区
+
+### Changed
+
+- **写路径性能** — 新增 SequenceService + 单文件 `data/sequences.txt` 持久化序列号；挂号创建从 O(N) load_all + save_all 改为 O(1) append-only，万级规模可用
+- **Repository 去重** — 通用工具 `_has_text/_copy_text/_parse_int/_parse_double` 归一到 `RepositoryUtils`，消除 393 行字面重复
+
+### Added
+
+- **患者自助挂号时间校验** — YYYY-MM-DD HH:MM 日历合法性（闰年、日数、localtime 往返）+ 硬性 7 天未来窗口；2026-02-29 等伪日期被拒绝
+- **医生挂号列表按时间升序** — `find_by_doctor_id` 结果自动排序
+- **4 个核心 Service 补测** — Prescription / InpatientOrder / NursingRecord / RoundRecord 从 0 覆盖到单元测试齐全
+- **29 个测试全绿** — 新增 test_audit_service、test_sequence_service、4 个 Service 测试（+4 PBKDF2 NIST 向量）
+
 ## [6.2.1] - 2026-04-12
 
 ### Fixed
