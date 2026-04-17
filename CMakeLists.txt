@@ -62,6 +62,7 @@ add_library(his_common
     src/service/PharmacyService.c
     src/service/PrescriptionService.c
     src/service/RegistrationService.c
+    src/service/SequenceService.c
     src/ui/DemoData.c
     src/ui/MenuActionAdmin.c
     src/ui/MenuActionDoctor.c
@@ -312,6 +313,14 @@ target_link_libraries(test_round_record_service PRIVATE his_common)
 
 add_test(NAME test_round_record_service COMMAND test_round_record_service)
 
+add_executable(test_sequence_service
+    tests/test_sequence_service.c
+)
+
+target_link_libraries(test_sequence_service PRIVATE his_common)
+
+add_test(NAME test_sequence_service COMMAND test_sequence_service)
+
 set(HIS_TEST_TARGETS
     test_result
     test_common
@@ -341,6 +350,7 @@ set(HIS_TEST_TARGETS
     test_inpatient_order_service
     test_nursing_record_service
     test_round_record_service
+    test_sequence_service
 )
 
 foreach(test_target IN LISTS HIS_TEST_TARGETS)

@@ -1248,6 +1248,59 @@ Result MenuApplication_init(MenuApplication *application, const MenuApplicationP
         return result;
     }
 
+    /* 初始化持久化序列号服务，替代挂号创建路径上的 O(N) 写放大。
+     * sequences.txt 放在 registration_path 同目录下，保持与 data/ 共存。
+     * 首次运行时会扫描 registrations.txt 得到迁移种子 (max REG 序号)。 */
+    {
+        char sequences_path_buffer[HIS_FILE_PATH_CAPACITY];
+        const char *sequences_path = paths->sequences_path;
+        SequenceTypeSpec spec;
+
+        if (sequences_path == 0 || sequences_path[0] == '\0') {
+            /* 未显式提供路径：在 registration_path 后追加 ".sequences" 扩展名。
+             * 避免多测试共享同一 data/ 父目录时互相污染序列号状态（每个测试的
+             * registration_path 唯一，因此派生出的 sequences 路径也唯一）。 */
+            int written = snprintf(
+                sequences_path_buffer,
+                sizeof(sequences_path_buffer),
+                "%s.sequences",
+                paths->registration_path != 0 ? paths->registration_path : "sequences"
+            );
+            if (written < 0 || (size_t)written >= sizeof(sequences_path_buffer)) {
+                return Result_make_failure("sequences path too long");
+            }
+            sequences_path = sequences_path_buffer;
+        }
+
+        /* 本轮仅注册 REGISTRATION 类型；后续扩展到其他 Service 时在此追加 spec。 */
+        memset(&spec, 0, sizeof(spec));
+        snprintf(spec.type_name, sizeof(spec.type_name), "REGISTRATION");
+        snprintf(spec.id_prefix, sizeof(spec.id_prefix), "REG");
+        if (paths->registration_path != 0) {
+            snprintf(
+                spec.data_path,
+                sizeof(spec.data_path),
+                "%s",
+                paths->registration_path
+            );
+        }
+
+        result = SequenceService_init(
+            &application->sequence_service,
+            sequences_path,
+            &spec,
+            1
+        );
+        if (result.success == 0) {
+            return result;
+        }
+
+        RegistrationService_set_sequence_service(
+            &application->registration_service,
+            &application->sequence_service
+        );
+    }
+
     result = MedicalRecordService_init(
         &application->medical_record_service,
         paths->registration_path,

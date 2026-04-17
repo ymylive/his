@@ -2,8 +2,10 @@
  * @file AuthService.c
  * @brief 认证服务模块实现
  *
- * 实现用户注册和身份认证功能。包含密码加盐哈希（基于 FNV 变体算法）、
- * 旧版无盐哈希兼容、文本校验以及用户角色验证等内部逻辑。
+ * 实现用户注册和身份认证功能。现阶段密码哈希采用 PBKDF2-HMAC-SHA256
+ * （NIST SP 800-132 / 800-63B §5.1.1.2），迭代 100000 轮，盐值 16 字节
+ * 来自操作系统 CSPRNG。旧版 FNV 变体哈希仅保留用于登录时的惰性迁移，
+ * 旧格式用户在下次成功登录时会被透明升级到 pbkdf2v1 格式。
  */
 
 #include "service/AuthService.h"
@@ -22,6 +24,7 @@
 
 #include "common/StringUtils.h"
 #include "repository/RepositoryUtils.h"
+#include "../../third_party/sha256/sha256.h"
 
 /**
  * @brief 默认的时钟源，返回当前 Unix 时间戳（秒）
@@ -47,6 +50,26 @@ void AuthService_set_clock_for_testing(long (*now_fn)(void)) {
     auth_now_fn = (now_fn != 0) ? now_fn : AuthService_default_now;
 }
 
+/* forward declaration, 实际定义靠后 */
+static void pbkdf2_hmac_sha256(
+    const uint8_t *password, size_t pwd_len,
+    const uint8_t *salt, size_t salt_len,
+    uint32_t iterations,
+    uint8_t *out, size_t out_len
+);
+
+/**
+ * @brief 测试专用：直通 PBKDF2-HMAC-SHA256 实现以便核对 NIST 向量
+ */
+void AuthService_pbkdf2_hmac_sha256_for_testing(
+    const uint8_t *password, size_t pwd_len,
+    const uint8_t *salt, size_t salt_len,
+    uint32_t iterations,
+    uint8_t *out, size_t out_len
+) {
+    pbkdf2_hmac_sha256(password, pwd_len, salt, salt_len, iterations, out, out_len);
+}
+
 /**
  * @brief 统一获取当前时间的内部接口
  */
@@ -63,13 +86,27 @@ static long AuthService_now(void) {
 #endif
 
 /**
- * @brief 密码哈希迭代次数
+ * @brief PBKDF2-HMAC-SHA256 迭代次数
  *
- * 较高的值能增强抗暴力破解能力，但会增加哈希计算时间。
- * NIST SP 800-63B 建议至少 10000 次迭代；此处使用 100000 次
- * 以提供更强的安全边际。调整此值后需重新生成所有已存储的密码哈希。
+ * NIST SP 800-132 / 800-63B §5.1.1.2 推荐 PBKDF2 至少 10000 轮；OWASP
+ * 2023 密码学备忘单建议 SHA-256 时至少 600000 轮。此处选择 100000 轮
+ * 作为安全性与登录延迟之间的折衷，迭代次数随哈希字符串一同持久化，
+ * 未来可在不破坏既有记录的前提下提升。
  */
-#define AUTH_HASH_ITERATIONS 100000
+#ifndef HIS_PBKDF2_ITERATIONS
+#define HIS_PBKDF2_ITERATIONS 100000
+#endif
+
+/**
+ * @brief 新版密码哈希格式标识（pbkdf2v1 = PBKDF2-HMAC-SHA256 第 1 版）
+ */
+#define HIS_PBKDF2_PREFIX "pbkdf2v1$"
+#define HIS_PBKDF2_PREFIX_LEN 9
+
+/**
+ * @brief 旧版 FNV 算法保留迭代次数（仅用于惰性迁移期间验证旧哈希）
+ */
+#define AUTH_LEGACY_FNV_ITERATIONS 100000
 
 /**
  * @brief 触发账号锁定的最大连续失败次数
@@ -342,6 +379,194 @@ static int constant_time_compare(const char *a, const char *b, size_t len) {
 }
 
 /**
+ * @brief HMAC-SHA256（RFC 2104）：PBKDF2 所依赖的 PRF
+ *
+ * 标准 HMAC 构造：
+ *   K' = key 若长度 ≤ 64，否则 sha256(key)；不足 64 字节右补 0
+ *   ipad[i] = 0x36, opad[i] = 0x5c
+ *   out = sha256((K' XOR opad) || sha256((K' XOR ipad) || msg))
+ *
+ * @param key      HMAC 密钥（PBKDF2 中即 password）
+ * @param key_len  密钥长度
+ * @param msg      被认证消息
+ * @param msg_len  消息长度
+ * @param out      输出 32 字节 MAC
+ */
+static void hmac_sha256(
+    const uint8_t *key, size_t key_len,
+    const uint8_t *msg, size_t msg_len,
+    uint8_t out[32]
+) {
+    const size_t BLOCK = 64;
+    uint8_t k_block[64];
+    uint8_t k_ipad[64];
+    uint8_t k_opad[64];
+    uint8_t inner_digest[32];
+    uint8_t key_digest[32];
+    SHA256_CTX ctx;
+    size_t i = 0;
+
+    /* K' = 若 key 超过块大小则先 sha256；否则原样；不足补 0 */
+    memset(k_block, 0, sizeof(k_block));
+    if (key_len > BLOCK) {
+        sha256_init(&ctx);
+        sha256_update(&ctx, key, key_len);
+        sha256_final(&ctx, key_digest);
+        memcpy(k_block, key_digest, 32);
+    } else if (key_len > 0) {
+        memcpy(k_block, key, key_len);
+    }
+
+    for (i = 0; i < BLOCK; i++) {
+        k_ipad[i] = k_block[i] ^ 0x36;
+        k_opad[i] = k_block[i] ^ 0x5c;
+    }
+
+    /* inner = sha256(k_ipad || msg) */
+    sha256_init(&ctx);
+    sha256_update(&ctx, k_ipad, BLOCK);
+    if (msg_len > 0) {
+        sha256_update(&ctx, msg, msg_len);
+    }
+    sha256_final(&ctx, inner_digest);
+
+    /* out = sha256(k_opad || inner) */
+    sha256_init(&ctx);
+    sha256_update(&ctx, k_opad, BLOCK);
+    sha256_update(&ctx, inner_digest, 32);
+    sha256_final(&ctx, out);
+
+    /* 敏感中间值清零 */
+    {
+        volatile uint8_t *p = (volatile uint8_t *)k_block; for (i = 0; i < BLOCK; i++) p[i] = 0;
+        p = (volatile uint8_t *)k_ipad; for (i = 0; i < BLOCK; i++) p[i] = 0;
+        p = (volatile uint8_t *)k_opad; for (i = 0; i < BLOCK; i++) p[i] = 0;
+        p = (volatile uint8_t *)inner_digest; for (i = 0; i < 32; i++) p[i] = 0;
+        p = (volatile uint8_t *)key_digest; for (i = 0; i < 32; i++) p[i] = 0;
+    }
+}
+
+/**
+ * @brief PBKDF2-HMAC-SHA256（RFC 8018 §5.2 / NIST SP 800-132）
+ *
+ *   T_i = F(P, S, c, i)
+ *   F(P, S, c, i) = U_1 XOR U_2 XOR ... XOR U_c
+ *   U_1 = PRF(P, S || INT_BE32(i))
+ *   U_j = PRF(P, U_{j-1})
+ * 输出 out_len 字节的派生密钥，支持 out_len > 32 的分块场景。
+ *
+ * @param password    口令
+ * @param pwd_len     口令长度
+ * @param salt        盐值
+ * @param salt_len    盐值长度
+ * @param iterations  迭代次数（必须 ≥ 1）
+ * @param out         输出缓冲区
+ * @param out_len     期望输出长度（字节）
+ */
+static void pbkdf2_hmac_sha256(
+    const uint8_t *password, size_t pwd_len,
+    const uint8_t *salt, size_t salt_len,
+    uint32_t iterations,
+    uint8_t *out, size_t out_len
+) {
+    const size_t HLEN = 32;
+    uint8_t u[32];
+    uint8_t t[32];
+    uint8_t salt_block[128];
+    uint32_t block_index = 1;
+    size_t offset = 0;
+    uint32_t j = 0;
+    size_t k = 0;
+
+    if (iterations == 0) iterations = 1;
+
+    while (offset < out_len) {
+        size_t chunk = (out_len - offset < HLEN) ? (out_len - offset) : HLEN;
+        size_t sb_len = 0;
+
+        /* 构造 salt || INT_BE32(block_index) */
+        if (salt_len > sizeof(salt_block) - 4) {
+            /* 盐值过大时回退：直接用较短上限（本项目固定 16 字节，不会触发） */
+            sb_len = sizeof(salt_block) - 4;
+            memcpy(salt_block, salt, sb_len);
+        } else {
+            memcpy(salt_block, salt, salt_len);
+            sb_len = salt_len;
+        }
+        salt_block[sb_len + 0] = (uint8_t)((block_index >> 24) & 0xff);
+        salt_block[sb_len + 1] = (uint8_t)((block_index >> 16) & 0xff);
+        salt_block[sb_len + 2] = (uint8_t)((block_index >> 8)  & 0xff);
+        salt_block[sb_len + 3] = (uint8_t)((block_index >> 0)  & 0xff);
+
+        /* U_1 = HMAC(P, S || INT_BE32(i)) */
+        hmac_sha256(password, pwd_len, salt_block, sb_len + 4, u);
+        memcpy(t, u, HLEN);
+
+        /* T = U_1 XOR U_2 XOR ... XOR U_c */
+        for (j = 1; j < iterations; j++) {
+            hmac_sha256(password, pwd_len, u, HLEN, u);
+            for (k = 0; k < HLEN; k++) {
+                t[k] ^= u[k];
+            }
+        }
+
+        memcpy(out + offset, t, chunk);
+        offset += chunk;
+        block_index++;
+    }
+
+    /* 敏感中间值清零 */
+    {
+        volatile uint8_t *p = (volatile uint8_t *)u; for (k = 0; k < sizeof(u); k++) p[k] = 0;
+        p = (volatile uint8_t *)t; for (k = 0; k < sizeof(t); k++) p[k] = 0;
+        p = (volatile uint8_t *)salt_block; for (k = 0; k < sizeof(salt_block); k++) p[k] = 0;
+    }
+}
+
+/**
+ * @brief 将二进制字节转换为小写十六进制字符串
+ *
+ * @param bytes     输入字节数组
+ * @param byte_len  字节数
+ * @param out       输出缓冲区（至少 byte_len*2 + 1 字节）
+ */
+static void auth_bytes_to_hex(const uint8_t *bytes, size_t byte_len, char *out) {
+    static const char hex[] = "0123456789abcdef";
+    size_t i = 0;
+    for (i = 0; i < byte_len; i++) {
+        out[i * 2 + 0] = hex[(bytes[i] >> 4) & 0x0f];
+        out[i * 2 + 1] = hex[bytes[i] & 0x0f];
+    }
+    out[byte_len * 2] = '\0';
+}
+
+/**
+ * @brief 将十六进制字符串解析为二进制字节
+ *
+ * @return 1 成功，0 失败（长度不匹配或非法字符）
+ */
+static int auth_hex_to_bytes(const char *hex, size_t hex_len, uint8_t *out, size_t out_len) {
+    size_t i = 0;
+    if (hex_len != out_len * 2) return 0;
+    for (i = 0; i < out_len; i++) {
+        int hi = 0;
+        int lo = 0;
+        char ch = hex[i * 2];
+        char cl = hex[i * 2 + 1];
+        if      (ch >= '0' && ch <= '9') hi = ch - '0';
+        else if (ch >= 'a' && ch <= 'f') hi = ch - 'a' + 10;
+        else if (ch >= 'A' && ch <= 'F') hi = ch - 'A' + 10;
+        else return 0;
+        if      (cl >= '0' && cl <= '9') lo = cl - '0';
+        else if (cl >= 'a' && cl <= 'f') lo = cl - 'a' + 10;
+        else if (cl >= 'A' && cl <= 'F') lo = cl - 'A' + 10;
+        else return 0;
+        out[i] = (uint8_t)((hi << 4) | lo);
+    }
+    return 1;
+}
+
+/**
  * @brief 判断用户角色是否合法
  *
  * @param role  用户角色枚举值
@@ -440,10 +665,10 @@ static Result AuthService_generate_salt(char *salt_hex, size_t capacity) {
 }
 
 /**
- * @brief 对密码进行加盐哈希运算
+ * @brief [legacy: kept for lazy migration only] 旧版 FNV 变体加盐哈希
  *
- * 使用 FNV 变体算法，先将盐值混入初始状态，再对密码进行 1000 次
- * 迭代混合运算，最终输出格式为 "盐值$哈希值" 的字符串。
+ * 输出 "盐值$哈希值" 共 97 字符。仅在惰性迁移阶段用于验证旧账号密码。
+ * 新建用户、改密均走 AuthService_hash_password_pbkdf2 路径。
  *
  * @param password          明文密码
  * @param salt_hex          32字符的十六进制盐值
@@ -451,7 +676,7 @@ static Result AuthService_generate_salt(char *salt_hex, size_t capacity) {
  * @param out_hash_capacity 输出缓冲区容量
  * @return Result           操作结果
  */
-static Result AuthService_hash_password(
+static Result AuthService_hash_password_legacy_fnv(
     const char *password,
     const char *salt_hex,
     char *out_hash,
@@ -473,8 +698,8 @@ static Result AuthService_hash_password(
         return result;
     }
 
-    /* 校验输出缓冲区是否足够 */
-    if (out_hash == 0 || out_hash_capacity < HIS_USER_PASSWORD_HASH_CAPACITY) {
+    /* 校验输出缓冲区是否足够（旧格式共 97 字符 + NUL） */
+    if (out_hash == 0 || out_hash_capacity < 98) {
         return Result_make_failure("password hash buffer too small");
     }
 
@@ -494,7 +719,7 @@ static Result AuthService_hash_password(
     }
 
     /* 对密码执行多次迭代混合，增强抗暴力破解能力 */
-    for (iteration = 0; iteration < AUTH_HASH_ITERATIONS; iteration++) {
+    for (iteration = 0; iteration < AUTH_LEGACY_FNV_ITERATIONS; iteration++) {
         index = 0;
         while (password[index] != '\0') {
             unsigned char value = (unsigned char)password[index];
@@ -533,7 +758,7 @@ static Result AuthService_hash_password(
         (unsigned long long)h3,
         (unsigned long long)h4
     );
-    if (written != HIS_USER_PASSWORD_HASH_CAPACITY - 1) {
+    if (written != 97) {
         return Result_make_failure("password hash formatting failed");
     }
 
@@ -541,7 +766,7 @@ static Result AuthService_hash_password(
 }
 
 /**
- * @brief 旧版无盐密码哈希（用于向后兼容）
+ * @brief [legacy: kept for lazy migration only] 旧版无盐单次 FNV 哈希
  *
  * 与加盐版本类似的 FNV 变体算法，但不使用盐值和迭代，
  * 仅对密码单次遍历，输出64字符的十六进制哈希。
@@ -551,7 +776,7 @@ static Result AuthService_hash_password(
  * @param out_hash_capacity 输出缓冲区容量
  * @return Result           操作结果
  */
-static Result AuthService_hash_password_legacy(
+static Result AuthService_hash_password_legacy_nosalt(
     const char *password,
     char *out_hash,
     size_t out_hash_capacity
@@ -568,7 +793,8 @@ static Result AuthService_hash_password_legacy(
         return result;
     }
 
-    if (out_hash == 0 || out_hash_capacity < HIS_USER_PASSWORD_HASH_CAPACITY) {
+    /* 旧格式 64 字符 + NUL = 65 字节即可 */
+    if (out_hash == 0 || out_hash_capacity < 65) {
         return Result_make_failure("password hash buffer too small");
     }
 
@@ -609,17 +835,28 @@ static Result AuthService_hash_password_legacy(
 }
 
 /**
- * @brief 判断存储的密码哈希是否为加盐格式
+ * @brief 判断存储的密码哈希是否为 pbkdf2v1 新格式
  *
- * 加盐格式为 "32位盐值$64位哈希值"，通过检测 '$' 分隔符的位置来判断。
- *
- * @param stored_hash  存储的密码哈希字符串
- * @return int         1=加盐格式，0=非加盐格式
+ * 期望前缀 "pbkdf2v1$"，否则视为旧版（FNV 加盐或无盐）。
  */
-static int AuthService_is_salted_password_hash(const char *stored_hash) {
+static int AuthService_is_pbkdf2_hash(const char *stored_hash) {
+    return stored_hash != 0 &&
+           strncmp(stored_hash, HIS_PBKDF2_PREFIX, HIS_PBKDF2_PREFIX_LEN) == 0;
+}
+
+/**
+ * @brief 判断存储的密码哈希是否为旧版 FNV 加盐格式
+ *
+ * 旧加盐格式为 "32位盐值$64位哈希值"，通过检测 '$' 分隔符的位置判断。
+ * 注意：必须在先排除 pbkdf2v1 后调用，否则新格式也包含 '$'。
+ */
+static int AuthService_is_legacy_salted_hash(const char *stored_hash) {
     const char *dollar_pos = 0;
 
     if (stored_hash == 0) {
+        return 0;
+    }
+    if (AuthService_is_pbkdf2_hash(stored_hash)) {
         return 0;
     }
 
@@ -632,12 +869,145 @@ static int AuthService_is_salted_password_hash(const char *stored_hash) {
  * @brief 判断存储的密码哈希是否为旧版无盐格式
  *
  * 旧版格式为64个十六进制字符，不包含 '$' 分隔符。
- *
- * @param stored_hash  存储的密码哈希字符串
- * @return int         1=旧版格式，0=非旧版格式
  */
-static int AuthService_is_legacy_password_hash(const char *stored_hash) {
+static int AuthService_is_legacy_nosalt_hash(const char *stored_hash) {
     return stored_hash != 0 && strchr(stored_hash, '$') == 0 && strlen(stored_hash) == 64;
+}
+
+/**
+ * @brief 使用 PBKDF2-HMAC-SHA256 计算密码哈希并编码为 pbkdf2v1 字符串
+ *
+ * 输出格式：
+ *   pbkdf2v1$<iterations>$<hex_salt:32>$<hex_hash:64>
+ *
+ * @param password          明文密码
+ * @param salt_hex          32 字符十六进制盐值（对应 16 字节）
+ * @param iterations        PBKDF2 迭代次数
+ * @param out_hash          输出缓冲区
+ * @param out_hash_capacity 输出缓冲区容量
+ */
+static Result AuthService_hash_password_pbkdf2(
+    const char *password,
+    const char *salt_hex,
+    uint32_t iterations,
+    char *out_hash,
+    size_t out_hash_capacity
+) {
+    uint8_t salt_bytes[16];
+    uint8_t derived[32];
+    char derived_hex[65];
+    int written = 0;
+    Result result = AuthService_validate_text(password, "password");
+
+    if (result.success == 0) {
+        return result;
+    }
+
+    if (out_hash == 0 || out_hash_capacity < HIS_USER_PASSWORD_HASH_CAPACITY) {
+        return Result_make_failure("password hash buffer too small");
+    }
+    if (salt_hex == 0 || strlen(salt_hex) != 32) {
+        return Result_make_failure("salt must be 32 hex characters");
+    }
+    if (!auth_hex_to_bytes(salt_hex, 32, salt_bytes, 16)) {
+        return Result_make_failure("salt hex decode failed");
+    }
+    if (iterations == 0) {
+        return Result_make_failure("iterations must be positive");
+    }
+
+    pbkdf2_hmac_sha256(
+        (const uint8_t *)password, strlen(password),
+        salt_bytes, sizeof(salt_bytes),
+        iterations,
+        derived, sizeof(derived)
+    );
+
+    auth_bytes_to_hex(derived, sizeof(derived), derived_hex);
+
+    written = snprintf(
+        out_hash, out_hash_capacity,
+        "%s%u$%s$%s",
+        HIS_PBKDF2_PREFIX, (unsigned int)iterations, salt_hex, derived_hex
+    );
+
+    /* 敏感中间值清零 */
+    auth_secure_zero(salt_bytes, sizeof(salt_bytes));
+    auth_secure_zero(derived, sizeof(derived));
+    auth_secure_zero(derived_hex, sizeof(derived_hex));
+
+    if (written < 0 || (size_t)written >= out_hash_capacity) {
+        return Result_make_failure("password hash formatting failed");
+    }
+    return Result_make_success("password hashed");
+}
+
+/**
+ * @brief 校验 pbkdf2v1 格式的密码
+ *
+ * 从存储串解析 iterations/salt/hash，对候选密码重算 PBKDF2 并
+ * 以常量时间比较 32 字节派生结果。
+ *
+ * @return 1 密码匹配，0 不匹配或解析失败
+ */
+static int AuthService_verify_pbkdf2(const char *password, const char *stored_hash) {
+    const char *cursor = 0;
+    const char *iter_end = 0;
+    const char *salt_start = 0;
+    const char *salt_end = 0;
+    const char *hash_start = 0;
+    uint32_t iterations = 0;
+    uint8_t salt_bytes[16];
+    uint8_t stored_bytes[32];
+    uint8_t derived[32];
+    volatile unsigned char diff = 0;
+    size_t i = 0;
+    long iter_val = 0;
+
+    if (password == 0 || stored_hash == 0) return 0;
+    if (!AuthService_is_pbkdf2_hash(stored_hash)) return 0;
+
+    cursor = stored_hash + HIS_PBKDF2_PREFIX_LEN;  /* 指向迭代次数起点 */
+    iter_end = strchr(cursor, '$');
+    if (iter_end == 0 || iter_end == cursor) return 0;
+
+    {
+        char iter_buf[12];
+        size_t iter_len = (size_t)(iter_end - cursor);
+        if (iter_len >= sizeof(iter_buf)) return 0;
+        memcpy(iter_buf, cursor, iter_len);
+        iter_buf[iter_len] = '\0';
+        iter_val = strtol(iter_buf, 0, 10);
+        if (iter_val <= 0 || iter_val > 10000000) return 0;
+        iterations = (uint32_t)iter_val;
+    }
+
+    salt_start = iter_end + 1;
+    salt_end = strchr(salt_start, '$');
+    if (salt_end == 0 || (size_t)(salt_end - salt_start) != 32) return 0;
+    if (!auth_hex_to_bytes(salt_start, 32, salt_bytes, 16)) return 0;
+
+    hash_start = salt_end + 1;
+    if (strlen(hash_start) != 64) return 0;
+    if (!auth_hex_to_bytes(hash_start, 64, stored_bytes, 32)) return 0;
+
+    pbkdf2_hmac_sha256(
+        (const uint8_t *)password, strlen(password),
+        salt_bytes, sizeof(salt_bytes),
+        iterations,
+        derived, sizeof(derived)
+    );
+
+    /* 二进制常量时间比较 */
+    for (i = 0; i < sizeof(derived); i++) {
+        diff |= (unsigned char)(derived[i] ^ stored_bytes[i]);
+    }
+
+    auth_secure_zero(salt_bytes, sizeof(salt_bytes));
+    auth_secure_zero(stored_bytes, sizeof(stored_bytes));
+    auth_secure_zero(derived, sizeof(derived));
+
+    return diff == 0 ? 1 : 0;
 }
 
 /**
@@ -770,14 +1140,17 @@ Result AuthService_register_user(
         user.patient_id[sizeof(user.patient_id) - 1] = '\0';
     }
 
-    /* 生成随机盐值并计算加盐密码哈希 */
+    /* 生成随机盐值并计算 PBKDF2-HMAC-SHA256 密码哈希（新用户一律用新格式） */
     memset(salt_hex, 0, sizeof(salt_hex));
     result = AuthService_generate_salt(salt_hex, sizeof(salt_hex));
     if (result.success == 0) {
         return result;
     }
 
-    result = AuthService_hash_password(password, salt_hex, user.password_hash, sizeof(user.password_hash));
+    result = AuthService_hash_password_pbkdf2(
+        password, salt_hex, HIS_PBKDF2_ITERATIONS,
+        user.password_hash, sizeof(user.password_hash));
+    auth_secure_zero(salt_hex, sizeof(salt_hex));
     if (result.success == 0) {
         return result;
     }
@@ -923,10 +1296,13 @@ Result AuthService_authenticate(
     User *out_user
 ) {
     User loaded_user;
-    char password_hash[HIS_USER_PASSWORD_HASH_CAPACITY];
-    /* 默认盐值，当用户不存在时使用，避免时序差异 */
-    char extracted_salt[33] = "00000000000000000000000000000000";
-    int user_hash_format_known = 0;  /* 是否成功识别了存储哈希的格式 */
+    /* 固定盐值占位（用户不存在时用于 PBKDF2 dummy 运算，抵消时序差异） */
+    static const char dummy_salt_hex[33] = "00000000000000000000000000000000";
+    char dummy_hash[HIS_USER_PASSWORD_HASH_CAPACITY];
+    char legacy_recomputed[98];  /* FNV 格式 97 字符 + NUL */
+    int password_match = 0;
+    int user_hash_format_known = 0;
+    int stored_is_legacy = 0;  /* 旧格式标志：成功登录后需升级到 pbkdf2v1 */
     AuthLockoutState lockout;
     long now_ts = 0;
     int account_locked = 0;
@@ -957,7 +1333,6 @@ Result AuthService_authenticate(
     /* 从存储中查找用户 */
     memset(&loaded_user, 0, sizeof(loaded_user));
     find_result = UserRepository_find_by_user_id(&service->user_repository, user_id, &loaded_user);
-    auth_secure_zero(password_hash, sizeof(password_hash));
 
     /* 加载锁定状态（找不到用户时返回零值） */
     lockout.failed_count = 0;
@@ -975,85 +1350,95 @@ Result AuthService_authenticate(
     }
 
     if (find_result.success != 0) {
-        /* 用户存在，根据存储的哈希格式选择对应的哈希算法 */
-        if (AuthService_is_salted_password_hash(loaded_user.password_hash)) {
-            /* 加盐格式：提取前32字符作为盐值 */
-            memcpy(extracted_salt, loaded_user.password_hash, 32);
-            extracted_salt[32] = '\0';
-            result = AuthService_hash_password(password, extracted_salt, password_hash, sizeof(password_hash));
+        /* 用户存在，按存储格式选择 PBKDF2 / legacy FNV 路径 */
+        if (AuthService_is_pbkdf2_hash(loaded_user.password_hash)) {
+            password_match = AuthService_verify_pbkdf2(password, loaded_user.password_hash);
             user_hash_format_known = 1;
-        } else if (AuthService_is_legacy_password_hash(loaded_user.password_hash)) {
-            /* 旧版无盐格式 */
-            result = AuthService_hash_password_legacy(password, password_hash, sizeof(password_hash));
-            user_hash_format_known = 1;
+            stored_is_legacy = 0;
+        } else if (AuthService_is_legacy_salted_hash(loaded_user.password_hash)) {
+            char salt_hex[33];
+            memcpy(salt_hex, loaded_user.password_hash, 32);
+            salt_hex[32] = '\0';
+            memset(legacy_recomputed, 0, sizeof(legacy_recomputed));
+            result = AuthService_hash_password_legacy_fnv(
+                password, salt_hex, legacy_recomputed, sizeof(legacy_recomputed));
+            if (result.success != 0) {
+                size_t stored_len = strlen(loaded_user.password_hash);
+                size_t computed_len = strlen(legacy_recomputed);
+                password_match = (stored_len == computed_len) &&
+                    constant_time_compare(loaded_user.password_hash,
+                                          legacy_recomputed, stored_len);
+                user_hash_format_known = 1;
+                stored_is_legacy = 1;
+            }
+            auth_secure_zero(salt_hex, sizeof(salt_hex));
+            auth_secure_zero(legacy_recomputed, sizeof(legacy_recomputed));
+        } else if (AuthService_is_legacy_nosalt_hash(loaded_user.password_hash)) {
+            memset(legacy_recomputed, 0, sizeof(legacy_recomputed));
+            result = AuthService_hash_password_legacy_nosalt(
+                password, legacy_recomputed, sizeof(legacy_recomputed));
+            if (result.success != 0) {
+                size_t stored_len = strlen(loaded_user.password_hash);
+                size_t computed_len = strlen(legacy_recomputed);
+                password_match = (stored_len == computed_len) &&
+                    constant_time_compare(loaded_user.password_hash,
+                                          legacy_recomputed, stored_len);
+                user_hash_format_known = 1;
+                stored_is_legacy = 1;
+            }
+            auth_secure_zero(legacy_recomputed, sizeof(legacy_recomputed));
         } else {
-            /* 无法识别的哈希格式，仍执行哈希运算避免时序差异 */
-            result = AuthService_hash_password(password, extracted_salt, password_hash, sizeof(password_hash));
+            /* 无法识别的格式：走 dummy PBKDF2 以抵消时序差异 */
+            (void)AuthService_hash_password_pbkdf2(
+                password, dummy_salt_hex, HIS_PBKDF2_ITERATIONS,
+                dummy_hash, sizeof(dummy_hash));
+            auth_secure_zero(dummy_hash, sizeof(dummy_hash));
+            password_match = 0;
+            user_hash_format_known = 0;
         }
     } else {
-        /* 用户不存在，仍执行哈希运算以防止通过时序判断用户是否存在 */
-        result = AuthService_hash_password(password, extracted_salt, password_hash, sizeof(password_hash));
-    }
-    if (result.success == 0) {
-        auth_secure_zero(password_hash, sizeof(password_hash));
-        auth_secure_zero(extracted_salt, sizeof(extracted_salt));
-        auth_secure_zero(&loaded_user, sizeof(loaded_user));
-        return result;
+        /* 用户不存在：跑一次 dummy PBKDF2 以抵消用户枚举时序 */
+        (void)AuthService_hash_password_pbkdf2(
+            password, dummy_salt_hex, HIS_PBKDF2_ITERATIONS,
+            dummy_hash, sizeof(dummy_hash));
+        auth_secure_zero(dummy_hash, sizeof(dummy_hash));
+        password_match = 0;
     }
 
     /* 用户不存在或哈希格式无法识别，统一返回凭证无效 */
     if (find_result.success == 0 || user_hash_format_known == 0) {
-        auth_secure_zero(password_hash, sizeof(password_hash));
-        auth_secure_zero(extracted_salt, sizeof(extracted_salt));
         auth_secure_zero(&loaded_user, sizeof(loaded_user));
         HIS_AUDIT_LOG("LOGIN_FAILURE user=%s reason=unknown_user",
                       user_id != 0 ? user_id : "<null>");
         return Result_make_failure("invalid credentials");
     }
 
-    /* 比对密码哈希（使用常量时间比较，防止时序攻击） */
-    {
-        size_t stored_len = strlen(loaded_user.password_hash);
-        size_t computed_len = strlen(password_hash);
-        int password_match = (stored_len == computed_len) &&
-            constant_time_compare(loaded_user.password_hash, password_hash, stored_len);
-
-        if (account_locked) {
-            /* 即便密码正确，在锁定期内也拒绝登录 */
-            auth_secure_zero(password_hash, sizeof(password_hash));
-            auth_secure_zero(extracted_salt, sizeof(extracted_salt));
-            auth_secure_zero(&loaded_user, sizeof(loaded_user));
-            HIS_AUDIT_LOG("LOGIN_BLOCKED user=%s reason=account_locked locked_until=%ld",
-                          user_id, lockout.locked_until);
-            return Result_make_failure("account temporarily locked");
-        }
-
-        if (password_match == 0) {
-            /* 密码错误：递增失败计数并持久化，必要时锁定 */
-            lockout.failed_count += 1;
-            if (lockout.failed_count >= HIS_LOGIN_MAX_FAILURES) {
-                lockout.locked_until = now_ts + HIS_LOGIN_LOCKOUT_SECONDS;
-                HIS_AUDIT_LOG("ACCOUNT_LOCKED user=%s failed_count=%d locked_until=%ld",
-                              user_id, lockout.failed_count, lockout.locked_until);
-            } else {
-                HIS_AUDIT_LOG("LOGIN_FAILURE user=%s reason=wrong_password failed_count=%d",
-                              user_id, lockout.failed_count);
-            }
-            AuthService_save_lockout(service, user_id, &lockout);
-
-            auth_secure_zero(password_hash, sizeof(password_hash));
-            auth_secure_zero(extracted_salt, sizeof(extracted_salt));
-            auth_secure_zero(&loaded_user, sizeof(loaded_user));
-            return Result_make_failure("invalid credentials");
-        }
+    if (account_locked) {
+        /* 即便密码正确，在锁定期内也拒绝登录 */
+        auth_secure_zero(&loaded_user, sizeof(loaded_user));
+        HIS_AUDIT_LOG("LOGIN_BLOCKED user=%s reason=account_locked locked_until=%ld",
+                      user_id, lockout.locked_until);
+        return Result_make_failure("account temporarily locked");
     }
 
-    /* 盐值不再需要，立即清零 */
-    auth_secure_zero(extracted_salt, sizeof(extracted_salt));
+    if (password_match == 0) {
+        /* 密码错误：递增失败计数并持久化，必要时锁定 */
+        lockout.failed_count += 1;
+        if (lockout.failed_count >= HIS_LOGIN_MAX_FAILURES) {
+            lockout.locked_until = now_ts + HIS_LOGIN_LOCKOUT_SECONDS;
+            HIS_AUDIT_LOG("ACCOUNT_LOCKED user=%s failed_count=%d locked_until=%ld",
+                          user_id, lockout.failed_count, lockout.locked_until);
+        } else {
+            HIS_AUDIT_LOG("LOGIN_FAILURE user=%s reason=wrong_password failed_count=%d",
+                          user_id, lockout.failed_count);
+        }
+        AuthService_save_lockout(service, user_id, &lockout);
+        auth_secure_zero(&loaded_user, sizeof(loaded_user));
+        return Result_make_failure("invalid credentials");
+    }
 
     /* 可选的角色匹配验证 */
     if (required_role != USER_ROLE_UNKNOWN && loaded_user.role != required_role) {
-        auth_secure_zero(password_hash, sizeof(password_hash));
         auth_secure_zero(&loaded_user, sizeof(loaded_user));
         HIS_AUDIT_LOG("LOGIN_FAILURE user=%s reason=role_mismatch", user_id);
         return Result_make_failure("user role mismatch");
@@ -1066,29 +1451,27 @@ Result AuthService_authenticate(
         AuthService_save_lockout(service, user_id, &lockout);
     }
 
-    /* 旧版哈希自动升级：使用新的加盐格式重新哈希并更新存储 */
-    if (AuthService_is_legacy_password_hash(loaded_user.password_hash)) {
+    /* 惰性迁移：旧 FNV 哈希验证通过 → 以 pbkdf2v1 格式重写该用户记录 */
+    if (stored_is_legacy) {
         char new_salt[33];
         char new_hash[HIS_USER_PASSWORD_HASH_CAPACITY];
         Result salt_result = AuthService_generate_salt(new_salt, sizeof(new_salt));
         if (salt_result.success != 0) {
-            Result hash_result = AuthService_hash_password(
-                password, new_salt, new_hash, sizeof(new_hash));
+            Result hash_result = AuthService_hash_password_pbkdf2(
+                password, new_salt, HIS_PBKDF2_ITERATIONS,
+                new_hash, sizeof(new_hash));
             if (hash_result.success != 0) {
-                /* 更新用户记录中的密码哈希 */
                 strncpy(loaded_user.password_hash, new_hash,
                         sizeof(loaded_user.password_hash) - 1);
                 loaded_user.password_hash[sizeof(loaded_user.password_hash) - 1] = '\0';
                 /* 尝试保存更新后的用户（失败不影响本次登录） */
                 AuthService_update_user_hash(service, &loaded_user);
+                HIS_AUDIT_LOG("PASSWORD_HASH_UPGRADED user=%s algo=pbkdf2v1", user_id);
             }
             auth_secure_zero(new_hash, sizeof(new_hash));
         }
         auth_secure_zero(new_salt, sizeof(new_salt));
     }
-
-    /* 清零密码哈希缓冲区 */
-    auth_secure_zero(password_hash, sizeof(password_hash));
 
     /* 认证成功，输出用户信息 */
     *out_user = loaded_user;
@@ -1137,7 +1520,9 @@ Result AuthService_change_password(
     }
 
     memset(new_hash, 0, sizeof(new_hash));
-    result = AuthService_hash_password(new_password, salt_hex, new_hash, sizeof(new_hash));
+    result = AuthService_hash_password_pbkdf2(
+        new_password, salt_hex, HIS_PBKDF2_ITERATIONS,
+        new_hash, sizeof(new_hash));
     auth_secure_zero(salt_hex, sizeof(salt_hex));
     if (result.success == 0) {
         auth_secure_zero(new_hash, sizeof(new_hash));

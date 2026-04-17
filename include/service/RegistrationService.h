@@ -17,18 +17,24 @@
 #include "repository/DoctorRepository.h"
 #include "repository/PatientRepository.h"
 #include "repository/RegistrationRepository.h"
+#include "service/SequenceService.h"
 
 /**
  * @brief 挂号服务结构体
  *
  * 持有各关联仓库的指针，提供统一的挂号管理接口。
  * 注意：此结构体中的仓库字段为指针类型，需由调用方管理其生命周期。
+ *
+ * sequence_service 为可选注入（创建挂号时需要分配持久化序列号）；
+ * 若调用方未注入，create 将回退到旧的"扫全表取 max+1"逻辑以保留兼容性，
+ * 但失去 O(1) 写入优化。
  */
 typedef struct RegistrationService {
     RegistrationRepository *registration_repository;  /* 挂号数据仓库指针 */
     PatientRepository *patient_repository;            /* 患者数据仓库指针 */
     DoctorRepository *doctor_repository;              /* 医生数据仓库指针 */
     DepartmentRepository *department_repository;      /* 科室数据仓库指针 */
+    SequenceService *sequence_service;                /* 持久化序列号服务（可选） */
 } RegistrationService;
 
 /**
@@ -49,6 +55,24 @@ Result RegistrationService_init(
     PatientRepository *patient_repository,
     DoctorRepository *doctor_repository,
     DepartmentRepository *department_repository
+);
+
+/**
+ * @brief 绑定持久化序列号服务，切换到 append-only create 路径
+ *
+ * 在 init 之后调用；绑定后，RegistrationService_create 通过
+ * SequenceService 常数时间分配挂号序号，并调用
+ * RegistrationRepository_append 追加单行，无需再加载全表。
+ *
+ * 未调用此函数时，create 自动回退到"加载全表 + 扫描 max+1 + 保存全表"
+ * 的旧路径（保证向后兼容，但失去性能优化）。
+ *
+ * @param service          挂号服务实例
+ * @param sequence_service 序列号服务指针，可为 NULL（解绑）
+ */
+void RegistrationService_set_sequence_service(
+    RegistrationService *service,
+    SequenceService *sequence_service
 );
 
 /**

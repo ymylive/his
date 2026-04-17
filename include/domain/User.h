@@ -12,8 +12,13 @@
 
 #include "domain/DomainTypes.h"
 
-/** 密码哈希值的最大字符容量 */
-#define HIS_USER_PASSWORD_HASH_CAPACITY 98
+/** 密码哈希值的最大字符容量
+ *
+ * 需要容纳 pbkdf2v1 格式：
+ *   "pbkdf2v1$<iter>$<hex_salt:32>$<hex_hash:64>" = 8+1+6+1+32+1+64 = 113 字符
+ * 保留余量以允许迭代次数字段未来调整。
+ */
+#define HIS_USER_PASSWORD_HASH_CAPACITY 128
 
 /**
  * @brief 用户角色枚举

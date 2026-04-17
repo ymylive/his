@@ -11,11 +11,15 @@
  */
 
 #include <assert.h>
+#include <ctype.h>
+#include <stdint.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <time.h>
 
 #include "domain/Patient.h"
+#include "repository/UserRepository.h"
 #include "service/AuthService.h"
 #include "service/AuthServiceTestHooks.h"
 #include "service/PatientService.h"
@@ -464,9 +468,264 @@ static void test_successful_login_resets_failure_counter(void) {
 }
 
 /**
+ * @brief 辅助：将十六进制字符串解析为字节数组（测试内部使用，无需常量时间）
+ */
+static void TestAuthService_hex_to_bytes(const char *hex, uint8_t *out, size_t out_len) {
+    size_t i = 0;
+    for (i = 0; i < out_len; i++) {
+        unsigned int byte = 0;
+        assert(sscanf(hex + i * 2, "%2x", &byte) == 1);
+        out[i] = (uint8_t)byte;
+    }
+}
+
+/**
+ * @brief 辅助：搜索包含 user_id 前缀的行，返回该行的 password_hash 字段副本
+ */
+static void TestAuthService_extract_hash_field(
+    const char *file_path,
+    const char *user_id,
+    char *out_field,
+    size_t out_capacity
+) {
+    FILE *file = 0;
+    char line[TEXT_FILE_REPOSITORY_LINE_CAPACITY];
+    size_t uid_len = strlen(user_id);
+
+    assert(out_capacity > 0);
+    out_field[0] = '\0';
+
+    file = fopen(file_path, "r");
+    assert(file != 0);
+    while (fgets(line, sizeof(line), file) != 0) {
+        size_t len = strlen(line);
+        while (len > 0 && (line[len - 1] == '\n' || line[len - 1] == '\r')) {
+            line[--len] = '\0';
+        }
+        if (strncmp(line, user_id, uid_len) == 0 && line[uid_len] == '|') {
+            const char *start = line + uid_len + 1;
+            const char *end = strchr(start, '|');
+            size_t copy_len = 0;
+            if (end == 0) copy_len = strlen(start);
+            else copy_len = (size_t)(end - start);
+            if (copy_len >= out_capacity) copy_len = out_capacity - 1;
+            memcpy(out_field, start, copy_len);
+            out_field[copy_len] = '\0';
+            break;
+        }
+    }
+    fclose(file);
+}
+
+/**
+ * @brief 验证首次登录会把旧 FNV 加盐哈希惰性迁移为 pbkdf2v1
+ *
+ * 场景：手工构造一条用户记录，其 password_hash 为旧 FNV 加盐格式
+ *       （salt$hash，对应密码 "safe-pass"）。调用 authenticate：
+ *       - 正确密码应成功
+ *       - 文件中对应字段应被重写为 pbkdf2v1 开头
+ *       - 再次登录仍然成功（新格式生效）
+ *       - 错误密码仍然失败，且不写回文件
+ */
+static void test_legacy_hash_migration_on_login(void) {
+    /* 旧 FNV 加盐哈希来自项目现有种子数据（"admin123" 对应 ADM0001）。
+     * 为了保持测试独立于 DemoData，我们直接用一份已知有效的旧哈希。 */
+    const char *legacy_admin_user_id = "ADM0001";
+    const char *legacy_admin_password = "admin123";
+    const char *legacy_admin_hash =
+        "0a1b2c3d4e5f60718293a4b5c6d7e8f9"
+        "$"
+        "58e41e727b432fc54a5e66b2222d7f14a44709f5b22b6acd856d5545e55eded5";
+
+    char user_path[TEXT_FILE_REPOSITORY_PATH_CAPACITY];
+    char hash_before[HIS_USER_PASSWORD_HASH_CAPACITY];
+    char hash_after[HIS_USER_PASSWORD_HASH_CAPACITY];
+    char hash_after_wrong[HIS_USER_PASSWORD_HASH_CAPACITY];
+    FILE *seed_file = 0;
+    AuthService service;
+    User user;
+    Result result;
+
+    TestAuthService_make_path(user_path, sizeof(user_path), "migration_users");
+
+    /* 手工预埋旧格式用户记录（含所有字段，匹配当前 USER_REPOSITORY_HEADER） */
+    seed_file = fopen(user_path, "w");
+    assert(seed_file != 0);
+    fprintf(seed_file, "%s\n", USER_REPOSITORY_HEADER);
+    fprintf(seed_file, "%s|%s|%d||0|0|0\n",
+            legacy_admin_user_id, legacy_admin_hash, (int)USER_ROLE_ADMIN);
+    fclose(seed_file);
+
+    /* 记录旧哈希字段作为对照 */
+    TestAuthService_extract_hash_field(user_path, legacy_admin_user_id,
+                                       hash_before, sizeof(hash_before));
+    assert(strcmp(hash_before, legacy_admin_hash) == 0);
+    assert(strncmp(hash_before, "pbkdf2v1$", 9) != 0);
+
+    result = AuthService_init(&service, user_path, "");
+    assert(result.success == 1);
+
+    /* 用正确密码登录 → 成功且触发迁移 */
+    result = AuthService_authenticate(&service, legacy_admin_user_id,
+                                      legacy_admin_password,
+                                      USER_ROLE_ADMIN, &user);
+    assert(result.success == 1);
+    assert(strcmp(user.user_id, legacy_admin_user_id) == 0);
+
+    /* 文件中该用户字段应已升级为 pbkdf2v1 格式 */
+    TestAuthService_extract_hash_field(user_path, legacy_admin_user_id,
+                                       hash_after, sizeof(hash_after));
+    assert(strncmp(hash_after, "pbkdf2v1$", 9) == 0);
+    assert(strcmp(hash_after, hash_before) != 0);
+
+    /* 再次登录，用新格式路径仍能成功 */
+    memset(&user, 0, sizeof(user));
+    result = AuthService_authenticate(&service, legacy_admin_user_id,
+                                      legacy_admin_password,
+                                      USER_ROLE_ADMIN, &user);
+    assert(result.success == 1);
+
+    /* 错误密码 → 失败，且文件不被再次改写 */
+    result = AuthService_authenticate(&service, legacy_admin_user_id,
+                                      "definitely-wrong",
+                                      USER_ROLE_ADMIN, &user);
+    assert(result.success == 0);
+    TestAuthService_extract_hash_field(user_path, legacy_admin_user_id,
+                                       hash_after_wrong,
+                                       sizeof(hash_after_wrong));
+    assert(strcmp(hash_after_wrong, hash_after) == 0);
+}
+
+/**
+ * @brief 新用户注册时直接写入 pbkdf2v1 格式，验证后续登录也走新路径
+ */
+static void test_new_user_uses_pbkdf2_format(void) {
+    char user_path[TEXT_FILE_REPOSITORY_PATH_CAPACITY];
+    char patient_path[TEXT_FILE_REPOSITORY_PATH_CAPACITY];
+    char hash_field[HIS_USER_PASSWORD_HASH_CAPACITY];
+    AuthService service;
+    User user;
+    Result result;
+
+    TestAuthService_make_path(user_path, sizeof(user_path), "pbkdf2_new_users");
+    TestAuthService_make_path(patient_path, sizeof(patient_path),
+                              "pbkdf2_new_patients");
+    TestAuthService_seed_patient(patient_path, "PAT9201");
+
+    result = AuthService_init(&service, user_path, patient_path);
+    assert(result.success == 1);
+
+    result = AuthService_register_user(&service, "pbkdf2user", "safe-pass",
+                                       USER_ROLE_PATIENT, "PAT9201");
+    assert(result.success == 1);
+
+    TestAuthService_extract_hash_field(user_path, "pbkdf2user",
+                                       hash_field, sizeof(hash_field));
+    /* 必须是 pbkdf2v1 开头，且包含迭代次数与两段 $ 分隔的字段 */
+    assert(strncmp(hash_field, "pbkdf2v1$", 9) == 0);
+    {
+        const char *iter_sep = strchr(hash_field + 9, '$');
+        const char *salt_sep = 0;
+        assert(iter_sep != 0);
+        salt_sep = strchr(iter_sep + 1, '$');
+        assert(salt_sep != 0);
+        /* 盐值 32 个十六进制字符，哈希 64 个十六进制字符 */
+        assert((size_t)(salt_sep - iter_sep - 1) == 32);
+        assert(strlen(salt_sep + 1) == 64);
+    }
+
+    /* 登录同样应成功 */
+    result = AuthService_authenticate(&service, "pbkdf2user", "safe-pass",
+                                      USER_ROLE_PATIENT, &user);
+    assert(result.success == 1);
+
+    /* 改密后仍是新格式 */
+    result = AuthService_change_password(&service, "pbkdf2user",
+                                         "safe-pass", "new-pass");
+    assert(result.success == 1);
+    TestAuthService_extract_hash_field(user_path, "pbkdf2user",
+                                       hash_field, sizeof(hash_field));
+    assert(strncmp(hash_field, "pbkdf2v1$", 9) == 0);
+
+    /* 新密码可登录 */
+    result = AuthService_authenticate(&service, "pbkdf2user", "new-pass",
+                                      USER_ROLE_PATIENT, &user);
+    assert(result.success == 1);
+    /* 旧密码不可登录 */
+    result = AuthService_authenticate(&service, "pbkdf2user", "safe-pass",
+                                      USER_ROLE_PATIENT, &user);
+    assert(result.success == 0);
+}
+
+/**
+ * @brief 使用 RFC 7914 附录 A.2 与 stackexchange 公开核对的 PBKDF2-HMAC-SHA256
+ *        测试向量校验 pbkdf2_hmac_sha256 内部实现的正确性
+ *
+ * 向量来源（RFC 7914 §11 PBKDF2-HMAC-SHA256 测试向量）：
+ *   password="passwd", salt="salt", c=1, dkLen=64 →
+ *     55ac046e56e3089fec1691c22544b605f94185216dde0465e68b9d57c20dacbc
+ *     49ca9cccf179b645991664b39d77ef317c71b845b1e30bd509112041d3a19783
+ *
+ *   password="Password", salt="NaCl", c=80000, dkLen=64 →
+ *     4ddcd8f60b98be21830cee5ef22701f9641a4418d04c0414aeff08876b34ab56
+ *     a1d425a1225833549adb841b51c9b3176a272bdebba1d078478f62b397f33c8d
+ *
+ * 我们只取前 32 字节（PBKDF2-HMAC-SHA256 在 dkLen=32 时仍走同一分块路径）。
+ */
+static void test_pbkdf2_hmac_sha256_nist_vectors(void) {
+    uint8_t derived[32];
+    uint8_t expected[32];
+
+    /* Vector 1: passwd / salt / c=1 */
+    AuthService_pbkdf2_hmac_sha256_for_testing(
+        (const uint8_t *)"passwd", 6,
+        (const uint8_t *)"salt", 4,
+        1,
+        derived, sizeof(derived));
+    TestAuthService_hex_to_bytes(
+        "55ac046e56e3089fec1691c22544b605f94185216dde0465e68b9d57c20dacbc",
+        expected, sizeof(expected));
+    assert(memcmp(derived, expected, sizeof(derived)) == 0);
+
+    /* Vector 2: Password / NaCl / c=80000（与参考值首 32 字节） */
+    AuthService_pbkdf2_hmac_sha256_for_testing(
+        (const uint8_t *)"Password", 8,
+        (const uint8_t *)"NaCl", 4,
+        80000,
+        derived, sizeof(derived));
+    TestAuthService_hex_to_bytes(
+        "4ddcd8f60b98be21830cee5ef22701f9641a4418d04c0414aeff08876b34ab56",
+        expected, sizeof(expected));
+    assert(memcmp(derived, expected, sizeof(derived)) == 0);
+}
+
+/**
+ * @brief 验证 PBKDF2 实现对 dkLen > HLEN 的分块逻辑正确（跨 T_1/T_2 边界）
+ */
+static void test_pbkdf2_hmac_sha256_multi_block(void) {
+    uint8_t derived[64];
+    uint8_t expected[64];
+
+    AuthService_pbkdf2_hmac_sha256_for_testing(
+        (const uint8_t *)"passwd", 6,
+        (const uint8_t *)"salt", 4,
+        1,
+        derived, sizeof(derived));
+    TestAuthService_hex_to_bytes(
+        "55ac046e56e3089fec1691c22544b605"
+        "f94185216dde0465e68b9d57c20dacbc"
+        "49ca9cccf179b645991664b39d77ef31"
+        "7c71b845b1e30bd509112041d3a19783",
+        expected, sizeof(expected));
+    assert(memcmp(derived, expected, sizeof(derived)) == 0);
+}
+
+/**
  * @brief 测试主函数，依次运行所有认证服务测试用例
  */
 int main(void) {
+    test_pbkdf2_hmac_sha256_nist_vectors();
+    test_pbkdf2_hmac_sha256_multi_block();
     test_patient_binding_and_login_success();
     test_patient_registration_requires_existing_patient_record();
     test_authenticate_rejects_wrong_password_and_role_mismatch();
@@ -474,5 +733,7 @@ int main(void) {
     test_authenticate_accepts_seeded_demo_accounts();
     test_authenticate_lockout_after_failures();
     test_successful_login_resets_failure_counter();
+    test_legacy_hash_migration_on_login();
+    test_new_user_uses_pbkdf2_format();
     return 0;
 }

@@ -45,6 +45,7 @@
 #include "service/RoundRecordService.h"
 #include "service/PrescriptionService.h"
 #include "service/RegistrationService.h"
+#include "service/SequenceService.h"
 #include "ui/MenuController.h"
 
 /**
@@ -71,6 +72,7 @@ typedef struct MenuApplicationPaths {
     const char *nursing_record_path;  /**< 护理记录数据文件路径 */
     const char *round_record_path;    /**< 查房记录数据文件路径 */
     const char *data_dir;             /**< 数据目录路径（审计日志等写入此目录，可 NULL） */
+    const char *sequences_path;       /**< 序列号状态文件路径（可 NULL，自动从 registration_path 推导） */
 } MenuApplicationPaths;
 
 /**
@@ -94,6 +96,7 @@ typedef struct MenuApplication {
     InpatientOrderService inpatient_order_service; /**< 住院医嘱服务 */
     NursingRecordService nursing_record_service;  /**< 护理记录服务 */
     RoundRecordService round_record_service;    /**< 查房记录服务 */
+    SequenceService sequence_service;              /**< 持久化序列号服务（CRUD 快路径依赖） */
     User authenticated_user;                       /**< 当前已认证用户 */
     int has_authenticated_user;                    /**< 是否有已认证用户（0=无，1=有） */
     char bound_patient_id[HIS_DOMAIN_ID_CAPACITY]; /**< 绑定的患者编号（患者角色登录时自动绑定） */

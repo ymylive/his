@@ -25,6 +25,7 @@
 #include "repository/PatientRepository.h"
 #include "repository/RegistrationRepository.h"
 #include "service/RegistrationService.h"
+#include "service/SequenceService.h"
 
 /**
  * @brief 挂号服务测试上下文结构体
@@ -36,10 +37,12 @@ typedef struct RegistrationServiceTestContext {
     char doctor_path[TEXT_FILE_REPOSITORY_PATH_CAPACITY];         /* 医生数据文件路径 */
     char department_path[TEXT_FILE_REPOSITORY_PATH_CAPACITY];     /* 科室数据文件路径 */
     char registration_path[TEXT_FILE_REPOSITORY_PATH_CAPACITY];   /* 挂号数据文件路径 */
+    char sequence_path[TEXT_FILE_REPOSITORY_PATH_CAPACITY];       /* 序列号状态文件路径 */
     PatientRepository patient_repository;                         /* 患者仓储 */
     DoctorRepository doctor_repository;                           /* 医生仓储 */
     DepartmentRepository department_repository;                   /* 科室仓储 */
     RegistrationRepository registration_repository;               /* 挂号仓储 */
+    SequenceService sequence_service;                             /* 序列号服务 */
     RegistrationService service;                                  /* 挂号服务 */
 } RegistrationServiceTestContext;
 
@@ -201,6 +204,12 @@ static void setup_context(RegistrationServiceTestContext *context, const char *t
         test_name,
         "registrations.txt"
     );
+    build_test_path(
+        context->sequence_path,
+        sizeof(context->sequence_path),
+        test_name,
+        "sequences.txt"
+    );
 
     /* 初始化各仓储 */
     result = PatientRepository_init(&context->patient_repository, context->patient_path);
@@ -232,6 +241,34 @@ static void setup_context(RegistrationServiceTestContext *context, const char *t
         &context->department_repository
     );
     assert(result.success == 1);
+
+    /* 初始化序列号服务并绑定：启用 append-only 快路径 */
+    {
+        SequenceTypeSpec spec;
+
+        memset(&spec, 0, sizeof(spec));
+        snprintf(spec.type_name, sizeof(spec.type_name), "REGISTRATION");
+        snprintf(spec.id_prefix, sizeof(spec.id_prefix), "REG");
+        snprintf(
+            spec.data_path,
+            sizeof(spec.data_path),
+            "%s",
+            context->registration_path
+        );
+
+        result = SequenceService_init(
+            &context->sequence_service,
+            context->sequence_path,
+            &spec,
+            1
+        );
+        assert(result.success == 1);
+
+        RegistrationService_set_sequence_service(
+            &context->service,
+            &context->sequence_service
+        );
+    }
 }
 
 /**
@@ -557,6 +594,84 @@ static void test_query_by_doctor_with_status_and_time_filter(void) {
 }
 
 /**
+ * @brief 辅助函数：计算文件中非空行总数（含表头）
+ */
+static size_t count_lines_in_file(const char *path) {
+    FILE *f = fopen(path, "r");
+    size_t count = 0;
+    int c = 0;
+    int has_content = 0;
+
+    if (f == NULL) {
+        return 0;
+    }
+    while ((c = fgetc(f)) != EOF) {
+        if (c == '\n') {
+            if (has_content != 0) {
+                count++;
+            }
+            has_content = 0;
+        } else {
+            has_content = 1;
+        }
+    }
+    if (has_content != 0) {
+        count++;
+    }
+    fclose(f);
+    return count;
+}
+
+/**
+ * @brief 测试：批量创建 100 条挂号，验证 append-only 写入特征
+ *
+ * 断言：
+ * 1. 每次 create 后，registrations.txt 行数严格 +1（无全表重写）
+ * 2. ID 连续递增 REG0001..REG0100
+ * 3. 最终文件行数 = 100 + 1 header
+ */
+static void test_bulk_create_is_append_only(void) {
+    RegistrationServiceTestContext context;
+    Registration created;
+    size_t previous_lines = 0;
+    size_t current_lines = 0;
+    int i;
+    Result result;
+
+    setup_context(&context, "bulk_append_only");
+
+    /* 初始：只有表头 */
+    previous_lines = count_lines_in_file(context.registration_path);
+    assert(previous_lines == 1); /* header */
+
+    for (i = 1; i <= 100; i++) {
+        char expected_id[16];
+        result = RegistrationService_create(
+            &context.service,
+            "PAT0001",
+            "DOC0001",
+            "DEP0001",
+            "2026-03-20T08:00",
+            REG_TYPE_STANDARD,
+            5.00,
+            &created
+        );
+        assert(result.success == 1);
+
+        snprintf(expected_id, sizeof(expected_id), "REG%04d", i);
+        assert(strcmp(created.registration_id, expected_id) == 0);
+
+        current_lines = count_lines_in_file(context.registration_path);
+        /* 每次 create 行数严格 +1 → append-only 写入 */
+        assert(current_lines == previous_lines + 1);
+        previous_lines = current_lines;
+    }
+
+    /* 最终：1 header + 100 records */
+    assert(current_lines == 101);
+}
+
+/**
  * @brief 测试主函数，依次运行所有挂号服务测试用例
  */
 int main(void) {
@@ -565,5 +680,6 @@ int main(void) {
     test_cancel_pending_registration();
     test_cancel_rejects_diagnosed_registration();
     test_query_by_doctor_with_status_and_time_filter();
+    test_bulk_create_is_append_only();
     return 0;
 }

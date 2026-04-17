@@ -644,7 +644,21 @@ Result RegistrationService_init(
     service->patient_repository = patient_repository;
     service->doctor_repository = doctor_repository;
     service->department_repository = department_repository;
+    service->sequence_service = 0;  /* 默认未绑定；由 set_sequence_service 可选注入 */
     return Result_make_success("registration service ready");
+}
+
+/**
+ * @brief 绑定/解绑 SequenceService
+ */
+void RegistrationService_set_sequence_service(
+    RegistrationService *service,
+    SequenceService *sequence_service
+) {
+    if (service == 0) {
+        return;
+    }
+    service->sequence_service = sequence_service;
 }
 
 /**
@@ -661,7 +675,78 @@ Result RegistrationService_init(
  * @param out_registration  输出参数，创建成功时存放挂号信息
  * @return Result           操作结果
  */
-Result RegistrationService_create(
+/**
+ * @brief 通过 SequenceService 获取下一序号并 append-only 写入（O(1) 路径）
+ *
+ * 相较旧路径（load_all + save_all）省去 4*N 行读 + N 行写，
+ * 单次 create 的磁盘 I/O 为常数：
+ *   - SequenceService.next 内部重写 sequences.txt（行数 ≈ 类型数 ≤ 16）
+ *   - RegistrationRepository_append 追加一行到 registrations.txt
+ *
+ * 依赖 SequenceService 对序号唯一性的保证（内存自增 + 持久化回写），
+ * 从而免去按全表去重。
+ */
+static Result RegistrationService_create_append_only(
+    RegistrationService *service,
+    const char *patient_id,
+    const char *doctor_id,
+    const char *department_id,
+    const char *registered_at,
+    RegistrationType registration_type,
+    double registration_fee,
+    Registration *out_registration
+) {
+    char registration_id[HIS_DOMAIN_ID_CAPACITY];
+    int next_sequence = 0;
+    Result result;
+
+    result = SequenceService_next(
+        service->sequence_service,
+        "REGISTRATION",
+        &next_sequence
+    );
+    if (!result.success) {
+        return result;
+    }
+
+    /* 将序号格式化成 "REG%04d" 风格的 ID */
+    if (!IdGenerator_format(
+            registration_id,
+            sizeof(registration_id),
+            REGISTRATION_SERVICE_ID_PREFIX,
+            next_sequence,
+            REGISTRATION_SERVICE_ID_WIDTH)) {
+        return Result_make_failure("failed to generate registration id");
+    }
+
+    /* 就地构造 Registration 结构体，不进入链表 */
+    result = RegistrationService_fill_new_registration(
+        out_registration,
+        registration_id,
+        patient_id,
+        doctor_id,
+        department_id,
+        registered_at,
+        registration_type,
+        registration_fee
+    );
+    if (!result.success) {
+        return result;
+    }
+
+    /* 仅 append 一行到 registrations.txt */
+    return RegistrationRepository_append(
+        service->registration_repository,
+        out_registration
+    );
+}
+
+/**
+ * @brief 旧路径：加载全表 -> 扫描 max+1 -> 追加 -> 全量保存（O(N) 写放大）
+ *
+ * 仅在未注入 SequenceService 时使用，保持对旧调用方和未迁移测试的兼容。
+ */
+static Result RegistrationService_create_via_load_all(
     RegistrationService *service,
     const char *patient_id,
     const char *doctor_id,
@@ -676,26 +761,6 @@ Result RegistrationService_create(
     char registration_id[HIS_DOMAIN_ID_CAPACITY];
     int next_sequence = 0;
     Result result;
-
-    /* 校验所有必填参数 */
-    if (service == 0 || !RegistrationService_has_text(patient_id) ||
-        !RegistrationService_has_text(doctor_id) ||
-        !RegistrationService_has_text(department_id) ||
-        !RegistrationService_has_text(registered_at) ||
-        out_registration == 0) {
-        return Result_make_failure("registration create arguments invalid");
-    }
-
-    /* 验证关联实体的存在性和有效性 */
-    result = RegistrationService_validate_related_entities(
-        service,
-        patient_id,
-        doctor_id,
-        department_id
-    );
-    if (!result.success) {
-        return result;
-    }
 
     /* 加载所有已有挂号记录 */
     result = RegistrationService_load_all_registrations(service, &registrations);
@@ -758,6 +823,64 @@ Result RegistrationService_create(
     );
     RegistrationRepository_clear_list(&registrations);
     return result;
+}
+
+Result RegistrationService_create(
+    RegistrationService *service,
+    const char *patient_id,
+    const char *doctor_id,
+    const char *department_id,
+    const char *registered_at,
+    RegistrationType registration_type,
+    double registration_fee,
+    Registration *out_registration
+) {
+    Result result;
+
+    /* 校验所有必填参数 */
+    if (service == 0 || !RegistrationService_has_text(patient_id) ||
+        !RegistrationService_has_text(doctor_id) ||
+        !RegistrationService_has_text(department_id) ||
+        !RegistrationService_has_text(registered_at) ||
+        out_registration == 0) {
+        return Result_make_failure("registration create arguments invalid");
+    }
+
+    /* 验证关联实体的存在性和有效性 */
+    result = RegistrationService_validate_related_entities(
+        service,
+        patient_id,
+        doctor_id,
+        department_id
+    );
+    if (!result.success) {
+        return result;
+    }
+
+    /* 分派：有 SequenceService 走 append-only 快路径，否则走兼容路径 */
+    if (service->sequence_service != 0) {
+        return RegistrationService_create_append_only(
+            service,
+            patient_id,
+            doctor_id,
+            department_id,
+            registered_at,
+            registration_type,
+            registration_fee,
+            out_registration
+        );
+    }
+
+    return RegistrationService_create_via_load_all(
+        service,
+        patient_id,
+        doctor_id,
+        department_id,
+        registered_at,
+        registration_type,
+        registration_fee,
+        out_registration
+    );
 }
 
 /**
