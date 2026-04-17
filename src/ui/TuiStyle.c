@@ -280,30 +280,12 @@ void tui_print_logo(FILE *out) {
     if (out == 0) return;
 
     logo_width = tui_display_width(LOGO_LINES[0]);
-
-    /* 动态马赛克开场（短动画 + 上下围边） */
-    if (tui_mosaic_enabled()) {
-        tui_mosaic_splash(out, 900);
-    }
     fputc('\n', out);
-
-    if (tui_mosaic_enabled()) {
-        tui_print_margin(out, logo_width);
-        tui_print_mosaic_strip(out, logo_width, (int)(time(0) & 0x7fffffff));
-        fputc('\n', out);
-    }
-
     for (i = 0; i < LOGO_LINE_COUNT; i++) {
         tui_print_margin(out, logo_width);
         fputs(TUI_OC_ACCENT TUI_BOLD, out);
         fputs(LOGO_LINES[i], out);
         fputs(TUI_RESET, out);
-        fputc('\n', out);
-    }
-
-    if (tui_mosaic_enabled()) {
-        tui_print_margin(out, logo_width);
-        tui_print_mosaic_strip(out, logo_width, (int)((time(0) + 7) & 0x7fffffff));
         fputc('\n', out);
     }
 }
@@ -327,19 +309,14 @@ void tui_print_gradient_text(FILE *out, const char *text) {
 
 void tui_print_banner(FILE *out, const char *title) {
     int i = 0;
-    int phase = (int)(time(0) & 0x7fffffff);
 
     if (out == 0 || title == 0) return;
 
-    /* 顶边：马赛克条 / 回退到细横线 */
+    /* Top thin line */
     tui_print_margin(out, 46);
-    if (tui_mosaic_enabled()) {
-        tui_print_mosaic_strip(out, 46, phase);
-    } else {
-        fputs(TUI_OC_DIM, out);
-        for (i = 0; i < 46; i++) fputs(TUI_H, out);
-        fputs(TUI_RESET, out);
-    }
+    fputs(TUI_OC_DIM, out);
+    for (i = 0; i < 46; i++) fputs(TUI_H, out);
+    fputs(TUI_RESET, out);
     fputc('\n', out);
 
     /* Bold title */
@@ -349,15 +326,11 @@ void tui_print_banner(FILE *out, const char *title) {
     fputs(TUI_RESET, out);
     fputc('\n', out);
 
-    /* 底边：相位偏移后的马赛克条 */
+    /* Bottom thin line */
     tui_print_margin(out, 46);
-    if (tui_mosaic_enabled()) {
-        tui_print_mosaic_strip(out, 46, phase + 11);
-    } else {
-        fputs(TUI_OC_DIM, out);
-        for (i = 0; i < 46; i++) fputs(TUI_H, out);
-        fputs(TUI_RESET, out);
-    }
+    fputs(TUI_OC_DIM, out);
+    for (i = 0; i < 46; i++) fputs(TUI_H, out);
+    fputs(TUI_RESET, out);
     fputc('\n', out);
     fputc('\n', out);
 }
@@ -365,10 +338,6 @@ void tui_print_banner(FILE *out, const char *title) {
 void tui_print_welcome(FILE *out, TuiRoleTheme theme, const char *user_id) {
     (void)theme;
     if (out == 0) return;
-
-    if (tui_mosaic_enabled()) {
-        tui_mosaic_splash(out, 500);
-    }
 
     fputc('\n', out);
     tui_print_margin(out, 46);
@@ -386,10 +355,6 @@ void tui_print_welcome(FILE *out, TuiRoleTheme theme, const char *user_id) {
 
 void tui_print_goodbye(FILE *out) {
     if (out == 0) return;
-
-    if (tui_mosaic_enabled()) {
-        tui_mosaic_splash(out, 500);
-    }
 
     fputc('\n', out);
     tui_print_margin(out, 46);
@@ -457,7 +422,6 @@ void tui_print_header(FILE *out, const char *title, int width) {
     int pad_left = 0;
     int pad_right = 0;
     int i = 0;
-    int phase = (int)(time(0) & 0x7fffffff);
 
     if (out == 0 || title == 0) return;
     if (width < 20) width = 20;
@@ -465,12 +429,6 @@ void tui_print_header(FILE *out, const char *title, int width) {
     title_w = tui_display_width(title);
     pad_left = (width - 2 - title_w) / 2;
     pad_right = width - 2 - title_w - pad_left;
-
-    /* 顶装饰：动态马赛克条（启用时）*/
-    if (tui_mosaic_enabled()) {
-        tui_print_mosaic_strip(out, width, phase);
-        fputc('\n', out);
-    }
 
     fputs(TUI_BOLD_CYAN, out);
     fputs(TUI_TL, out);
@@ -492,12 +450,6 @@ void tui_print_header(FILE *out, const char *title, int width) {
     fputs(TUI_RT, out);
     fputs(TUI_RESET, out);
     fputc('\n', out);
-
-    /* 底装饰：相位偏移，避免上下对称 */
-    if (tui_mosaic_enabled()) {
-        tui_print_mosaic_strip(out, width, phase + 17);
-        fputc('\n', out);
-    }
 }
 
 void tui_print_section(FILE *out, const char *icon, const char *title) {
@@ -550,29 +502,25 @@ void tui_print_gradient_hline(FILE *out, int width) {
 void tui_print_success(FILE *out, const char *message) {
     if (out == 0 || message == 0) return;
     fputc('\n', out); tui_print_margin(out, 46);
-    tui_print_mosaic_gutter(out);
     fprintf(out, TUI_OC_SUCCESS " %s " TUI_OC_TEXT "%s" TUI_RESET "\n", TUI_CHECK, message);
 }
 
 void tui_print_error(FILE *out, const char *message) {
     if (out == 0 || message == 0) return;
     fputc('\n', out); tui_print_margin(out, 46);
-    tui_print_mosaic_gutter(out);
     fprintf(out, TUI_OC_ERROR " %s " TUI_OC_TEXT "%s" TUI_RESET "\n", TUI_CROSS, message);
 }
 
 void tui_print_warning(FILE *out, const char *message) {
     if (out == 0 || message == 0) return;
     fputc('\n', out); tui_print_margin(out, 46);
-    tui_print_mosaic_gutter(out);
     fprintf(out, TUI_OC_WARN " %s " TUI_OC_TEXT "%s" TUI_RESET "\n", TUI_TRIANGLE, message);
 }
 
 void tui_print_info(FILE *out, const char *message) {
     if (out == 0 || message == 0) return;
     tui_print_margin(out, 46);
-    tui_print_mosaic_gutter(out);
-    fprintf(out, " " TUI_OC_BLUE "%s" TUI_RESET " " TUI_OC_MUTED "%s" TUI_RESET "\n", TUI_DOT, message);
+    fprintf(out, TUI_OC_BLUE "%s" TUI_RESET " " TUI_OC_MUTED "%s" TUI_RESET "\n", TUI_DOT, message);
 }
 
 void tui_print_prompt(FILE *out, const char *text) {
@@ -1141,8 +1089,6 @@ void tui_spinner_run(FILE *out, const char *message, int duration_ms) {
     int frame = 0;
     int step = 80;
     int msg_w = 0;
-    int use_mosaic = 0;
-    int mosaic_width = 6;
 
     if (out == 0) return;
     if (!tui_is_interactive()) {
@@ -1155,22 +1101,15 @@ void tui_spinner_run(FILE *out, const char *message, int duration_ms) {
     }
     if (duration_ms <= 0) duration_ms = 500;
 
-    use_mosaic = tui_mosaic_enabled();
-    /* spinner + space + mosaic wave + space + message */
-    msg_w = tui_display_width(message != 0 ? message : "") + 2 + (use_mosaic ? mosaic_width + 1 : 0);
+    msg_w = tui_display_width(message != 0 ? message : "") + 2; /* spinner + space + message */
     tui_hide_cursor(out);
     while (elapsed < duration_ms) {
         fputs("\r\033[2K", out);
         tui_print_margin(out, msg_w);
-        fprintf(out, "%s%s%s ",
+        fprintf(out, "%s%s%s %s%s%s",
             GRADIENT_COLORS[frame % GRADIENT_COUNT],
             SPINNER_FRAMES[frame % SPINNER_FRAME_COUNT],
-            TUI_RESET);
-        if (use_mosaic) {
-            tui_print_mosaic_strip(out, mosaic_width, frame * 2);
-            fputc(' ', out);
-        }
-        fprintf(out, "%s%s%s",
+            TUI_RESET,
             TUI_DIM,
             message != 0 ? message : "",
             TUI_RESET);

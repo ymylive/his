@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## [7.2.3] - 2026-04-17
+
+### Fixed
+
+- **回退 v7.2.0 的动态马赛克艺术对 TUI 的侵入** — 马赛克条使 `tui_print_header` 每次多占 2 行、`tui_print_banner` 改写顶底线、`tui_print_success/error/warning/info` 加左装饰导致布局错位 + 窄终端换行；`tui_print_logo` / `tui_print_welcome` / `tui_print_goodbye` 的马赛克 splash 累计阻塞启动近 2 秒。全部挂钩回退到 v7.1.0 行为，辅助函数保留以待下一代方案（高级感+灵动感）重做
+
 ## [7.2.2] - 2026-04-17
 
 ### Changed
