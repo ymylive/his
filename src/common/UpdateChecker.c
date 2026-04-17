@@ -716,12 +716,17 @@ static int verify_download_sha256(
     if (!http_fetch_to_buffer(sums_url, sums_text, sizeof(sums_text), &sums_len) ||
         sums_len == 0) {
         tui_print_error(out, "未找到发布者签署的 SHA256SUMS，拒绝安装未校验的更新包。");
+        tui_print_info(out, "可改用一键升级脚本：");
+        tui_print_info(out, "  curl -fsSL https://raw.githubusercontent.com/ymylive/his/main/scripts/update.sh | bash");
+        tui_print_info(out, "  Windows: irm https://raw.githubusercontent.com/ymylive/his/main/scripts/update.ps1 | iex");
         return 0;
     }
 
     fname = url_basename(asset_url);
     if (!sha256sums_lookup(sums_text, fname, expected_hex)) {
         tui_print_error(out, "SHA256SUMS 中缺少当前平台安装包的摘要记录。");
+        tui_print_info(out, "可改用一键升级脚本：");
+        tui_print_info(out, "  curl -fsSL https://raw.githubusercontent.com/ymylive/his/main/scripts/update.sh | bash");
         return 0;
     }
 

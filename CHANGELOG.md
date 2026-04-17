@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## [7.2.2] - 2026-04-17
+
+### Changed
+
+- **内置更新校验失败时打印一键升级脚本** — SHA256SUMS 下载失败或摘要缺失时，除错误信息外额外提示 `scripts/update.sh` / `scripts/update.ps1` 的一行命令，让用户始终有明确的人工回退路径
+
 ## [7.2.1] - 2026-04-17
 
 ### Fixed
