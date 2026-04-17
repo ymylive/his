@@ -174,65 +174,122 @@ static int tui_fputc_utf8(FILE *out, const unsigned char *p) {
 }
 
 /* ═══════════════════════════════════════════════════════════════
- *  马赛克艺术 - 动态装饰色块系统
+ *  Aurora Whisper - 极光微光装饰系统
+ *
+ *  设计目标："深色玻璃上偶尔有一缕冷光掠过" —— 高级感 + 灵动感
+ *
+ *  色相家族 220° (indigo) → 200° (cyan)，不跨色相、饱和度 ≤ 0.65
+ *  渲染：以 phase 为扫描中心，Gaussian falloff 决定每列的亮度/字形
+ *  动效：phase-based 静态渲染（time(NULL) 驱动，每次重绘画面不同）
+ *        + 短 sweep 动画（登录/登出场景，≤ 250ms）
  * ═══════════════════════════════════════════════════════════════ */
 
-/* 26 色平滑渐变（外部引用 TUI_GRADIENT_256）+ 4 档浓淡块字符，
- * 用 phase + index 混合哈希出一个 "像随机但其实确定" 的马赛克图案。 */
-static const char *MOSAIC_BLOCKS[] = {
-    "\xe2\x96\x91", /* ░ */
-    "\xe2\x96\x92", /* ▒ */
-    "\xe2\x96\x93", /* ▓ */
-    "\xe2\x96\x88"  /* █ */
-};
-#define MOSAIC_BLOCK_COUNT 4
+/* HSL → RGB（s,l ∈ [0,1], h ∈ [0,360)） */
+static void tui_hsl_to_rgb(double h, double s, double l, int *r, int *g, int *b) {
+    double c = (1.0 - fabs(2.0 * l - 1.0)) * s;
+    double hp = h / 60.0;
+    double x = c * (1.0 - fabs(fmod(hp, 2.0) - 1.0));
+    double r1 = 0, g1 = 0, b1 = 0;
+    double m;
+    if      (hp < 1) { r1 = c; g1 = x; }
+    else if (hp < 2) { r1 = x; g1 = c; }
+    else if (hp < 3) { g1 = c; b1 = x; }
+    else if (hp < 4) { g1 = x; b1 = c; }
+    else if (hp < 5) { r1 = x; b1 = c; }
+    else             { r1 = c; b1 = x; }
+    m = l - c / 2.0;
+    { int rr = (int)((r1 + m) * 255.0 + 0.5);
+      int gg = (int)((g1 + m) * 255.0 + 0.5);
+      int bb = (int)((b1 + m) * 255.0 + 0.5);
+      if (rr < 0) rr = 0; if (rr > 255) rr = 255;
+      if (gg < 0) gg = 0; if (gg > 255) gg = 255;
+      if (bb < 0) bb = 0; if (bb > 255) bb = 255;
+      *r = rr; *g = gg; *b = bb; }
+}
+
+static double tui_smoothstep(double t) {
+    if (t < 0.0) t = 0.0;
+    if (t > 1.0) t = 1.0;
+    return t * t * (3.0 - 2.0 * t);
+}
 
 int tui_mosaic_enabled(void) {
     static int cached = -1;
+    const char *env;
     if (cached < 0) {
-        const char *env = getenv("HIS_NO_MOSAIC");
+        cached = 1;
+        env = getenv("HIS_NO_MOSAIC");
         if (env != 0 && env[0] != '\0' &&
             (env[0] == '1' || env[0] == 't' || env[0] == 'T' ||
              env[0] == 'y' || env[0] == 'Y')) {
             cached = 0;
-        } else {
-            cached = 1;
+        } else if ((env = getenv("NO_COLOR")) != 0 && env[0] != '\0') {
+            cached = 0;
+        } else if ((env = getenv("CI")) != 0 && env[0] != '\0') {
+            cached = 0;
+        } else if ((env = getenv("TERM")) != 0 &&
+                   (env[0] == '\0' || strcmp(env, "dumb") == 0)) {
+            cached = 0;
         }
     }
-    return cached && tui_is_interactive();
+    if (!cached) return 0;
+    if (!tui_is_interactive()) return 0;
+    /* 窄终端运行时检测（不缓存，允许运行中 resize） */
+    if (tui_get_terminal_width() < 60) return 0;
+    return 1;
+}
+
+/* 为单列采样：在 phase 指示的扫描位置周围给出 Aurora 色和字形 */
+static void tui_aurora_sample(int col, int sweep_center,
+                              int *r, int *g, int *b, const char **glyph) {
+    /* σ = 3.5 → σ² = 12.25；带宽 ±7 列 */
+    double d = (double)(col - sweep_center);
+    double falloff = exp(-d * d / (2.0 * 12.25));
+    double fs = tui_smoothstep(falloff);
+    double H = 220.0 - 20.0 * fs; /* indigo → cyan */
+    double S = 0.45 + 0.20 * fs;  /* 上限 0.65 */
+    double L = 0.18 + 0.52 * fs;  /* 底 0.18（几乎融入深底），峰 0.70 */
+    tui_hsl_to_rgb(H, S, L, r, g, b);
+    if (falloff < 0.06)      *glyph = " ";
+    else if (falloff < 0.22) *glyph = "\xe2\x96\x91"; /* ░ */
+    else if (falloff < 0.48) *glyph = "\xe2\x96\x92"; /* ▒ */
+    else if (falloff < 0.78) *glyph = "\xe2\x96\x93"; /* ▓ */
+    else                     *glyph = "\xe2\x96\x88"; /* █ */
 }
 
 void tui_print_mosaic_strip(FILE *out, int width, int phase) {
-    int i = 0;
+    int i;
+    int r_prev = -1, g_prev = -1, b_prev = -1;
+    int sweep_range, cx;
+    int r, g, b;
+    const char *glyph;
+
     if (out == 0 || width <= 0) return;
     if (!tui_mosaic_enabled()) {
-        for (i = 0; i < width; i++) fputc(' ', out);
+        fputs(TUI_OC_DIM, out);
+        for (i = 0; i < width; i++) fputs("\xe2\x94\x80", out); /* ─ */
+        fputs(TUI_RESET, out);
         return;
     }
+
+    /* 扫描范围比宽度大 16，两端留出入/出场空间 */
+    sweep_range = width + 16;
+    cx = (int)((((unsigned)phase) % (unsigned)sweep_range)) - 8;
+
     for (i = 0; i < width; i++) {
-        int color_idx = ((phase + i) % TUI_GRADIENT_256_COUNT + TUI_GRADIENT_256_COUNT)
-                        % TUI_GRADIENT_256_COUNT;
-        int block_idx = (((phase * 7) ^ (i * 13)) & 0x7fffffff) % MOSAIC_BLOCK_COUNT;
-        fprintf(out, "\033[38;5;%dm%s", TUI_GRADIENT_256[color_idx], MOSAIC_BLOCKS[block_idx]);
+        tui_aurora_sample(i, cx, &r, &g, &b, &glyph);
+        if (r != r_prev || g != g_prev || b != b_prev) {
+            fprintf(out, "\033[38;2;%d;%d;%dm", r, g, b);
+            r_prev = r; g_prev = g; b_prev = b;
+        }
+        fputs(glyph, out);
     }
     fputs(TUI_RESET, out);
 }
 
+/* 兼容 v7.2.x API —— 在 v7.2.3 已无调用点，保留占位避免破坏 ABI */
 void tui_print_mosaic_gutter(FILE *out) {
-    int i = 0;
-    int phase = 0;
-    if (out == 0) return;
-    if (!tui_mosaic_enabled()) {
-        fputs("  ", out);
-        return;
-    }
-    phase = (int)(time(0) & 0x7fffffff);
-    for (i = 0; i < 3; i++) {
-        int color_idx = ((phase + i * 3) % TUI_GRADIENT_256_COUNT + TUI_GRADIENT_256_COUNT)
-                        % TUI_GRADIENT_256_COUNT;
-        fprintf(out, "\033[38;5;%dm%s", TUI_GRADIENT_256[color_idx], TUI_BLOCK_FULL);
-    }
-    fputs(TUI_RESET, out);
+    (void)out; /* intentionally no-op: UX decision to not decorate message gutters */
 }
 
 /* tui_mosaic_splash 定义见下方"动画系统"段（依赖 tui_sleep_ms） */
@@ -309,14 +366,23 @@ void tui_print_gradient_text(FILE *out, const char *text) {
 
 void tui_print_banner(FILE *out, const char *title) {
     int i = 0;
+    int use_aurora;
+    int phase;
 
     if (out == 0 || title == 0) return;
 
-    /* Top thin line */
+    use_aurora = tui_mosaic_enabled();
+    phase = (int)(time(0) & 0x7fffffff);
+
+    /* 顶边：Aurora 扫描 or 原 dim 横线（同占 1 行） */
     tui_print_margin(out, 46);
-    fputs(TUI_OC_DIM, out);
-    for (i = 0; i < 46; i++) fputs(TUI_H, out);
-    fputs(TUI_RESET, out);
+    if (use_aurora) {
+        tui_print_mosaic_strip(out, 46, phase);
+    } else {
+        fputs(TUI_OC_DIM, out);
+        for (i = 0; i < 46; i++) fputs(TUI_H, out);
+        fputs(TUI_RESET, out);
+    }
     fputc('\n', out);
 
     /* Bold title */
@@ -326,11 +392,15 @@ void tui_print_banner(FILE *out, const char *title) {
     fputs(TUI_RESET, out);
     fputc('\n', out);
 
-    /* Bottom thin line */
+    /* 底边：相位偏移 23，让上下的光带错位 */
     tui_print_margin(out, 46);
-    fputs(TUI_OC_DIM, out);
-    for (i = 0; i < 46; i++) fputs(TUI_H, out);
-    fputs(TUI_RESET, out);
+    if (use_aurora) {
+        tui_print_mosaic_strip(out, 46, phase + 23);
+    } else {
+        fputs(TUI_OC_DIM, out);
+        for (i = 0; i < 46; i++) fputs(TUI_H, out);
+        fputs(TUI_RESET, out);
+    }
     fputc('\n', out);
     fputc('\n', out);
 }
@@ -339,7 +409,14 @@ void tui_print_welcome(FILE *out, TuiRoleTheme theme, const char *user_id) {
     (void)theme;
     if (out == 0) return;
 
-    fputc('\n', out);
+    /* 替换原来的空行为 Aurora 横条（总行数不变） */
+    if (tui_mosaic_enabled()) {
+        tui_print_margin(out, 46);
+        tui_print_mosaic_strip(out, 46, (int)(time(0) & 0x7fffffff));
+        fputc('\n', out);
+    } else {
+        fputc('\n', out);
+    }
     tui_print_margin(out, 46);
     fprintf(out, TUI_OC_SUCCESS "%s" TUI_RESET " " TUI_OC_TEXT "\xe6\xac\xa2\xe8\xbf\x8e\xe5\x9b\x9e\xe6\x9d\xa5" TUI_RESET /* 欢迎回来 */, TUI_CHECK);
     if (user_id != 0) {
@@ -356,7 +433,12 @@ void tui_print_welcome(FILE *out, TuiRoleTheme theme, const char *user_id) {
 void tui_print_goodbye(FILE *out) {
     if (out == 0) return;
 
-    fputc('\n', out);
+    /* 会话结束，之后无交互 —— 安全释放 200ms Aurora 扫描作为告别仪式 */
+    if (tui_mosaic_enabled()) {
+        tui_mosaic_splash(out, 200);
+    } else {
+        fputc('\n', out);
+    }
     tui_print_margin(out, 46);
     fprintf(out, TUI_OC_SUCCESS "%s" TUI_RESET " " TUI_OC_TEXT "\xe5\x86\x8d\xe8\xa7\x81\xef\xbc\x81" TUI_RESET "\n" /* 再见！ */, TUI_CHECK);
 
@@ -487,11 +569,14 @@ void tui_print_gradient_hline(FILE *out, int width) {
     int i = 0;
     if (out == 0) return;
     tui_print_margin(out, 46);
-    fputs(TUI_OC_BORDER, out);
-    for (i = 0; i < width; i++) {
-        fputc('-', out);
+    if (tui_mosaic_enabled()) {
+        int w = width > 0 ? width : 46;
+        tui_print_mosaic_strip(out, w, (int)(time(0) & 0x7fffffff));
+    } else {
+        fputs(TUI_OC_BORDER, out);
+        for (i = 0; i < width; i++) fputc('-', out);
+        fputs(TUI_RESET, out);
     }
-    fputs(TUI_RESET, out);
     fputc('\n', out);
 }
 
@@ -1127,31 +1212,34 @@ void tui_spinner_run(FILE *out, const char *message, int duration_ms) {
 /* ── 马赛克动态启动画面 ──────────────────────────────────────── */
 
 void tui_mosaic_splash(FILE *out, int duration_ms) {
-    int elapsed = 0;
-    int frame = 0;
-    int step = 70;
-    int width = 0;
-    int tw = 0;
+    int tw, width, sweep_range, frame_count, f;
+    const int step_ms = 16; /* ~60fps */
 
     if (out == 0) return;
-    if (!tui_is_interactive() || !tui_mosaic_enabled()) return;
-    if (duration_ms <= 0) duration_ms = 800;
+    if (!tui_mosaic_enabled()) return;
+
+    /* 严格预算上限：避免再出现 v7.2.0 的启动卡顿 */
+    if (duration_ms <= 0) duration_ms = 200;
+    if (duration_ms > 400) duration_ms = 400;
 
     tw = tui_get_terminal_width();
-    width = tw > 10 ? tw - 4 : 40;
-    if (width > 100) width = 100;
+    width = tw > 20 ? tw - 4 : 40;
+    if (width > 72) width = 72;
+
+    sweep_range = width + 16;
+    frame_count = duration_ms / step_ms;
+    if (frame_count < 6) frame_count = 6;
 
     tui_hide_cursor(out);
-    while (elapsed < duration_ms) {
+    for (f = 0; f < frame_count; f++) {
+        /* 扫描中心从左扫到右：-8 → width+8 */
+        int phase = (int)((long)(f) * sweep_range / (frame_count - 1));
         fputs("\r\033[2K", out);
         tui_print_margin(out, width);
-        tui_print_mosaic_strip(out, width, frame * 3);
+        tui_print_mosaic_strip(out, width, phase);
         fflush(out);
-        tui_sleep_ms(step);
-        elapsed += step;
-        frame++;
+        tui_sleep_ms(step_ms);
     }
-    /* 留下最后一帧作为装饰，换行进入下文 */
     fputc('\n', out);
     fflush(out);
     tui_show_cursor(out);

@@ -4,6 +4,28 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## [7.3.0] - 2026-04-17
+
+### Added
+
+- **Aurora Whisper 极光微光装饰** — 重新设计动态色块系统。单色相家族（220° indigo → 200° cyan），Gaussian falloff 驱动单条光带扫过深底画布；饱和度≤0.65、亮度差≤0.52，三路设计团队（UI Designer + UX Architect + Technical Artist）并行产出后融合的"高级感+灵动感"方案，替代 v7.2.0 被回退的随机拼色块
+- **HSL-based 真彩色插值** — 新增 `tui_hsl_to_rgb` + `tui_smoothstep`，色相沿最短弧插值、亮度走 smoothstep 缓动，避免 RGB 直插的"灰泥过渡"
+- **Phase-based 静态渲染** — `tui_print_mosaic_strip(out, w, phase)` 每次重绘用 `time(NULL)` 计算扫描中心，画面静止但进入不同页面/时刻呈现不同切片；同色相邻 cell 去重避免重复 SGR 序列
+- **短扫描动画** — `tui_mosaic_splash(out, ms)` 用于会话结束仪式，固定 ≤400ms 预算、60fps 帧步、不进入菜单循环
+
+### Changed
+
+- **装饰承载点（只改 4 处会话边界）**：
+  - `tui_print_gradient_hline`（分隔线）→ Aurora 横条（同占 1 行）
+  - `tui_print_banner` 顶/底细横线 → Aurora 横条（相位偏移 23 错位；同占 2 行）
+  - `tui_print_welcome` 原 leading `\n` → Aurora 横条（同占 1 行）
+  - `tui_print_goodbye` → 200ms Aurora 扫描 splash（会话已结束，零交互风险）
+- **明确不改**：`tui_print_header` / `tui_print_success/error/warning/info` / `tui_spinner_run` / `tui_print_logo` —— 过去的坑不再踩，菜单循环和输入路径保持零装饰
+
+### Fixed
+
+- **扩展降级条件** — `tui_mosaic_enabled` 增加 `NO_COLOR` / `CI` / `TERM=dumb` / 终端宽度<60 的自动回退
+
 ## [7.2.3] - 2026-04-17
 
 ### Fixed
