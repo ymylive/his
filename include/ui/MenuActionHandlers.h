@@ -93,6 +93,29 @@ Result MenuApplication_prompt_select_doctor(
     size_t out_doctor_id_capacity
 );
 
+/**
+ * @brief 交互式选择可挂号时段
+ *
+ * 根据医生 schedule 字段（如 "Mon-Fri AM"）在未来 7 天内展开候选时段，
+ * 每个时段显示剩余号数。患者直接按编号选择，无需手工输入时间。
+ *
+ * @param application         应用实例
+ * @param context             提示上下文
+ * @param prompt              提示文本
+ * @param doctor_id           目标医生ID
+ * @param out_slot_time       输出缓冲区，保存形如 "YYYY-MM-DD HH:MM" 的时间字符串
+ * @param out_slot_time_capacity 输出缓冲区容量（建议 HIS_DOMAIN_TIME_CAPACITY）
+ * @return Result             success=1 表示成功选择
+ */
+Result MenuApplication_prompt_select_registration_slot(
+    MenuApplication *application,
+    MenuApplicationPromptContext *context,
+    const char *prompt,
+    const char *doctor_id,
+    char *out_slot_time,
+    size_t out_slot_time_capacity
+);
+
 Result MenuApplication_prompt_select_registration(
     MenuApplication *application,
     MenuApplicationPromptContext *context,

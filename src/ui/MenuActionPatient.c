@@ -68,19 +68,18 @@ Result MenuAction_handle_patient(MenuApplication *app, MenuAction action, FILE *
             if (result.success == 0) {
                 return result;
             }
-            /* 输入挂号时间 */
-            result = MenuApplication_prompt_line(
+            /* 选择可挂号时段（由医生排班 + 剩余号数自动展开） */
+            result = MenuApplication_prompt_select_registration_slot(
+                app,
                 &context,
-                "挂号时间(如 2026-04-09 09:00): ",
+                "选择可挂号时段: ",
+                second_id,
                 time_value,
                 sizeof(time_value)
             );
             if (result.success == 0) {
+                tui_print_error(output, result.message);
                 return result;
-            }
-            if (!RepositoryUtils_is_safe_field_text(time_value)) {
-                tui_print_error(output, "输入包含非法字符，请勿使用 | 等特殊符号");
-                return Result_make_failure("invalid input characters");
             }
             /* 选择挂号类型 */
             {

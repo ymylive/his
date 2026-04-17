@@ -4,6 +4,13 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## [7.2.0] - 2026-04-16
+
+### Added
+
+- **自助挂号时段选择** — 新增 `MenuApplication_prompt_select_registration_slot`，患者自助挂号不再手工输入时间，根据医生 `schedule`（如 `Mon-Fri AM`）在未来 7 天内展开候选时段（AM 09:00–11:00、PM 14:00–16:00 每 30 分钟一档），每个时段显示剩余号数（上限 5/时段），已过时/约满时段自动剔除
+- **动态马赛克艺术系统** — 新增 `tui_mosaic_enabled` / `tui_print_mosaic_strip` / `tui_print_mosaic_gutter` / `tui_mosaic_splash`；Logo/Banner/Header/Success/Error/Warning/Info/Spinner/Welcome/Goodbye 全部挂上按 `time(NULL)` 相位变化的马赛克装饰；支持 `HIS_NO_MOSAIC=1` 环境变量关闭，非交互终端（管道/重定向）自动降级
+
 ## [7.1.0] - 2026-04-16
 
 ### Security

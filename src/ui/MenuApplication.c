@@ -3765,6 +3765,287 @@ Result MenuApplication_prompt_select_doctor(
     return result;
 }
 
+/* ─── 可挂号时段选择 ───────────────────────────────────────────────── */
+
+#define MENU_APP_SLOT_CAPACITY 5          /* 每个时段的号数上限 */
+#define MENU_APP_SLOT_LOOKAHEAD_DAYS 7    /* 向后展开的天数 */
+
+/** @brief 将 3 字母英文星期缩写映射为 Mon=0..Sun=6 */
+static int MenuApplication_day_abbrev_index(const char *abbrev) {
+    if (abbrev == 0) return -1;
+    if (strncmp(abbrev, "Mon", 3) == 0) return 0;
+    if (strncmp(abbrev, "Tue", 3) == 0) return 1;
+    if (strncmp(abbrev, "Wed", 3) == 0) return 2;
+    if (strncmp(abbrev, "Thu", 3) == 0) return 3;
+    if (strncmp(abbrev, "Fri", 3) == 0) return 4;
+    if (strncmp(abbrev, "Sat", 3) == 0) return 5;
+    if (strncmp(abbrev, "Sun", 3) == 0) return 6;
+    return -1;
+}
+
+/**
+ * @brief 解析医生排班字符串
+ *
+ * 支持形如 "Mon-Fri AM" / "Tue-Sat" / "Mon-Sun" / "Wed-Sun PM" 的排班。
+ * 未识别的排班默认视为"全周全时段"。
+ */
+static void MenuApplication_parse_schedule(
+    const char *schedule,
+    int *out_start_day,
+    int *out_end_day,
+    int *out_has_am,
+    int *out_has_pm
+) {
+    const char *p = 0;
+    int start = 0;
+    int end = 6;
+    int has_am = 1;
+    int has_pm = 1;
+    int first = -1;
+    int second = -1;
+
+    *out_start_day = 0;
+    *out_end_day = 6;
+    *out_has_am = 1;
+    *out_has_pm = 1;
+    if (schedule == 0 || schedule[0] == '\0') {
+        return;
+    }
+
+    for (p = schedule; *p != '\0'; p++) {
+        int d = MenuApplication_day_abbrev_index(p);
+        if (d >= 0) {
+            first = d;
+            p += 3;
+            break;
+        }
+    }
+    if (first < 0) {
+        return;
+    }
+    if (*p == '-') {
+        int d = MenuApplication_day_abbrev_index(p + 1);
+        if (d >= 0) {
+            second = d;
+        }
+    }
+    start = first;
+    end = second >= 0 ? second : first;
+
+    if (strstr(schedule, "AM") != 0 && strstr(schedule, "PM") == 0) {
+        has_am = 1;
+        has_pm = 0;
+    } else if (strstr(schedule, "PM") != 0 && strstr(schedule, "AM") == 0) {
+        has_am = 0;
+        has_pm = 1;
+    } else {
+        has_am = 1;
+        has_pm = 1;
+    }
+
+    *out_start_day = start;
+    *out_end_day = end;
+    *out_has_am = has_am;
+    *out_has_pm = has_pm;
+}
+
+/** @brief 判断 day_mon0（Mon=0..Sun=6）是否落在 [start,end] 区间（支持跨周） */
+static int MenuApplication_day_in_range(int day_mon0, int start, int end) {
+    if (start <= end) {
+        return day_mon0 >= start && day_mon0 <= end;
+    }
+    return day_mon0 >= start || day_mon0 <= end;
+}
+
+/** @brief 交互式选择可挂号时段 */
+Result MenuApplication_prompt_select_registration_slot(
+    MenuApplication *application,
+    MenuApplicationPromptContext *context,
+    const char *prompt,
+    const char *doctor_id,
+    char *out_slot_time,
+    size_t out_slot_time_capacity
+) {
+    static const char *am_times[] = {"09:00", "09:30", "10:00", "10:30", "11:00"};
+    static const char *pm_times[] = {"14:00", "14:30", "15:00", "15:30", "16:00"};
+    static const char *week_labels[] = {
+        "\xe5\x91\xa8\xe4\xb8\x80", /* 周一 */
+        "\xe5\x91\xa8\xe4\xba\x8c", /* 周二 */
+        "\xe5\x91\xa8\xe4\xb8\x89", /* 周三 */
+        "\xe5\x91\xa8\xe5\x9b\x9b", /* 周四 */
+        "\xe5\x91\xa8\xe4\xba\x94", /* 周五 */
+        "\xe5\x91\xa8\xe5\x85\xad", /* 周六 */
+        "\xe5\x91\xa8\xe6\x97\xa5"  /* 周日 */
+    };
+    const int times_per_period = 5;
+    Doctor doctor;
+    MenuApplicationSelectionOption options[MENU_APPLICATION_SELECT_OPTION_MAX];
+    char slot_times[MENU_APPLICATION_SELECT_OPTION_MAX][HIS_DOMAIN_TIME_CAPACITY];
+    int option_count = 0;
+    LinkedList registrations;
+    int start_day = 0;
+    int end_day = 6;
+    int has_am = 1;
+    int has_pm = 1;
+    time_t now_t = (time_t)0;
+    struct tm now_tm;
+    int d = 0;
+    int period = 0;
+    int t_index = 0;
+    char selected_id[HIS_DOMAIN_ID_CAPACITY];
+    Result result;
+
+    if (application == 0 || context == 0 || doctor_id == 0 ||
+        out_slot_time == 0 || out_slot_time_capacity == 0) {
+        return Result_make_failure("slot selection arguments invalid");
+    }
+
+    memset(&doctor, 0, sizeof(doctor));
+    memset(&now_tm, 0, sizeof(now_tm));
+    LinkedList_init(&registrations);
+
+    result = DoctorRepository_find_by_doctor_id(
+        &application->doctor_service.doctor_repository,
+        doctor_id,
+        &doctor
+    );
+    if (result.success == 0) {
+        return Result_make_failure("doctor not found");
+    }
+
+    MenuApplication_parse_schedule(doctor.schedule, &start_day, &end_day, &has_am, &has_pm);
+
+    now_t = time(0);
+    if (now_t == (time_t)-1 || !MenuApplication_localtime_safe(&now_t, &now_tm)) {
+        return Result_make_failure("current time unavailable");
+    }
+
+    /* 一次性加载该医生的全部挂号记录，逐时段统计未取消号数 */
+    result = RegistrationService_find_by_doctor_id(
+        &application->registration_service,
+        doctor_id,
+        0,
+        &registrations
+    );
+    if (result.success == 0) {
+        LinkedList_init(&registrations);
+    }
+
+    for (d = 0; d < MENU_APP_SLOT_LOOKAHEAD_DAYS &&
+                option_count < MENU_APPLICATION_SELECT_OPTION_MAX; d++) {
+        struct tm day_tm;
+        time_t day_t = (time_t)0;
+        int day_mon0 = 0;
+
+        day_tm = now_tm;
+        day_tm.tm_mday = now_tm.tm_mday + d;
+        day_tm.tm_hour = 0;
+        day_tm.tm_min = 0;
+        day_tm.tm_sec = 0;
+        day_tm.tm_isdst = -1;
+        day_t = mktime(&day_tm);
+        if (day_t == (time_t)-1) {
+            continue;
+        }
+        day_mon0 = (day_tm.tm_wday + 6) % 7;
+        if (!MenuApplication_day_in_range(day_mon0, start_day, end_day)) {
+            continue;
+        }
+
+        for (period = 0; period < 2 &&
+                         option_count < MENU_APPLICATION_SELECT_OPTION_MAX; period++) {
+            const char **times_array = period == 0 ? am_times : pm_times;
+            const char *period_label = period == 0
+                ? "\xe4\xb8\x8a\xe5\x8d\x88"  /* 上午 */
+                : "\xe4\xb8\x8b\xe5\x8d\x88"; /* 下午 */
+            if ((period == 0 && !has_am) || (period == 1 && !has_pm)) {
+                continue;
+            }
+            for (t_index = 0; t_index < times_per_period &&
+                              option_count < MENU_APPLICATION_SELECT_OPTION_MAX; t_index++) {
+                char slot_time[HIS_DOMAIN_TIME_CAPACITY];
+                const LinkedListNode *current = 0;
+                int used_count = 0;
+                int remaining = 0;
+                time_t slot_t = (time_t)0;
+
+                snprintf(slot_time, sizeof(slot_time), "%04d-%02d-%02d %s",
+                         day_tm.tm_year + 1900,
+                         day_tm.tm_mon + 1,
+                         day_tm.tm_mday,
+                         times_array[t_index]);
+
+                /* 当天已过时的时段不显示 */
+                if (d == 0 && MenuApplication_parse_registration_time(slot_time, &slot_t)) {
+                    if (difftime(slot_t, now_t) < 0.0) {
+                        continue;
+                    }
+                }
+
+                current = registrations.head;
+                while (current != 0) {
+                    const Registration *r = (const Registration *)current->data;
+                    if (r != 0 &&
+                        r->status != REG_STATUS_CANCELLED &&
+                        strcmp(r->registered_at, slot_time) == 0) {
+                        used_count++;
+                    }
+                    current = current->next;
+                }
+                remaining = MENU_APP_SLOT_CAPACITY - used_count;
+                if (remaining <= 0) {
+                    continue;
+                }
+
+                MenuApplication_copy_text(
+                    slot_times[option_count],
+                    sizeof(slot_times[option_count]),
+                    slot_time
+                );
+                snprintf(options[option_count].id,
+                         sizeof(options[option_count].id),
+                         "S%d", option_count);
+                snprintf(options[option_count].label,
+                         sizeof(options[option_count].label),
+                         "%s (%s %s) | \xe4\xbd\x99 %d/%d",
+                         slot_time,
+                         week_labels[day_mon0],
+                         period_label,
+                         remaining,
+                         MENU_APP_SLOT_CAPACITY);
+                option_count++;
+            }
+        }
+    }
+
+    RegistrationRepository_clear_list(&registrations);
+
+    if (option_count == 0) {
+        return Result_make_failure("no available registration slots in next 7 days");
+    }
+
+    result = MenuApplication_prompt_select_option(
+        context,
+        prompt,
+        options,
+        option_count,
+        selected_id,
+        sizeof(selected_id)
+    );
+    if (result.success == 0) {
+        return result;
+    }
+
+    if (selected_id[0] == 'S') {
+        int index = atoi(selected_id + 1);
+        if (index >= 0 && index < option_count) {
+            MenuApplication_copy_text(out_slot_time, out_slot_time_capacity, slot_times[index]);
+            return Result_make_success("slot selected");
+        }
+    }
+    return Result_make_failure("invalid slot selection");
+}
+
 /** @brief 交互式选择挂号记录（可按患者、医生、状态过滤） */
 Result MenuApplication_prompt_select_registration(
     MenuApplication *application,

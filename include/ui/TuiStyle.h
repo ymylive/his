@@ -248,6 +248,38 @@ int tui_display_width(const char *text);
 void tui_pad_right(FILE *out, const char *text, int width);
 
 /* ═══════════════════════════════════════════════════════════════
+ *  马赛克艺术 - 动态装饰色块系统
+ * ═══════════════════════════════════════════════════════════════ */
+
+/**
+ * @brief 马赛克艺术是否启用
+ *
+ * 读取环境变量 HIS_NO_MOSAIC。为 "1" / "true" / "yes" 时禁用；
+ * 非交互终端（管道/文件重定向）一律禁用。
+ *
+ * @return 1 表示启用，0 表示回退到静态样式
+ */
+int tui_mosaic_enabled(void);
+
+/**
+ * @brief 打印一条动态马赛克横条
+ *
+ * 根据 phase 生成渐变色 + 浓淡随机的色块序列，相同参数下输出一致；
+ * phase 通常取自 time(NULL)，保证每次屏幕重绘都呈现不同配色。
+ *
+ * @param out   输出流
+ * @param width 横条字符宽度
+ * @param phase 相位种子（任意 int，越大偏移越多）
+ */
+void tui_print_mosaic_strip(FILE *out, int width, int phase);
+
+/** @brief 打印 3 格马赛克左装饰（用于成功/错误/警告/提示行首） */
+void tui_print_mosaic_gutter(FILE *out);
+
+/** @brief 播放一段马赛克波浪动画（单行内循环，duration_ms 毫秒） */
+void tui_mosaic_splash(FILE *out, int duration_ms);
+
+/* ═══════════════════════════════════════════════════════════════
  *  Logo 与 Banner - 系统标识打印
  * ═══════════════════════════════════════════════════════════════ */
 
