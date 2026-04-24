@@ -558,6 +558,54 @@ int InputHelper_is_esc_cancel(const char *message) {
     return strcmp(message, INPUT_HELPER_ESC_MESSAGE) == 0 ? 1 : 0;
 }
 
+static InputEvent InputHelper_read_key_from_stream(FILE *input) {
+    InputEvent event;
+    int ch = 0;
+
+    event.key = INPUT_KEY_NONE;
+    event.ch = '\0';
+
+    ch = fgetc(input);
+    if (ch == EOF) {
+        return event;
+    }
+
+    if (ch == INPUT_ESC_CHAR) {
+        int next = fgetc(input);
+        if (next == '[') {
+            int code = fgetc(input);
+            switch (code) {
+                case 'A': event.key = INPUT_KEY_UP;    break;
+                case 'B': event.key = INPUT_KEY_DOWN;  break;
+                case 'C': event.key = INPUT_KEY_RIGHT; break;
+                case 'D': event.key = INPUT_KEY_LEFT;  break;
+                default:  event.key = INPUT_KEY_ESC;   break;
+            }
+        } else {
+            event.key = INPUT_KEY_ESC;
+            if (next != EOF) {
+                ungetc(next, input);
+            }
+        }
+        clearerr(input);
+    } else if (ch == '\n' || ch == '\r') {
+        event.key = INPUT_KEY_ENTER;
+    } else if (ch == INPUT_BACKSPACE_DEL || ch == INPUT_BACKSPACE_BS) {
+        event.key = INPUT_KEY_BACKSPACE;
+    } else if (ch == '\t') {
+        event.key = INPUT_KEY_TAB;
+    } else if (ch == INPUT_CTRL_Q) {
+        event.key = INPUT_KEY_CTRL_Q;
+    } else if (ch == INPUT_CTRL_C) {
+        event.key = INPUT_KEY_CTRL_C;
+    } else if (ch >= 32 && ch <= 126) {
+        event.key = INPUT_KEY_CHAR;
+        event.ch = (char)ch;
+    }
+
+    return event;
+}
+
 /* ── InputHelper_read_key 实现 ─────────────────────────────── */
 
 /**
@@ -580,8 +628,14 @@ InputEvent InputHelper_read_key(FILE *input) {
 
 #ifdef _WIN32
     {
-        int ch = _getch();
+        int input_fd = _fileno(input);
+        int ch = 0;
 
+        if (input_fd < 0 || !_isatty(input_fd)) {
+            return InputHelper_read_key_from_stream(input);
+        }
+
+        ch = _getch();
         if (ch == 0 || ch == 0xE0) {
             /* 扩展按键 */
             int ext = _getch();
@@ -623,6 +677,9 @@ InputEvent InputHelper_read_key(FILE *input) {
 
         if (input_fd < 0) {
             return event;
+        }
+        if (!isatty(input_fd)) {
+            return InputHelper_read_key_from_stream(input);
         }
 
         /* 保存终端设置并切换到 raw 模式 */
