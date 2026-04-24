@@ -16,6 +16,7 @@
 #include "common/UpdateChecker.h"
 
 #include <ctype.h>
+#include <limits.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -261,6 +262,80 @@ static const MenuOption *MenuController_options_for_role(
             *out_count = 0;
             return 0;
     }
+}
+
+static int MenuController_find_action_by_selection(
+    const MenuOption *options,
+    size_t option_count,
+    int selection,
+    MenuAction *out_action
+) {
+    size_t index = 0;
+
+    if (options == 0) {
+        return 0;
+    }
+
+    for (index = 0; index < option_count; index++) {
+        if (options[index].selection == selection) {
+            if (out_action != 0) {
+                *out_action = options[index].action;
+            }
+            return 1;
+        }
+    }
+
+    return 0;
+}
+
+static int MenuController_has_longer_selection_prefix(
+    const MenuOption *options,
+    size_t option_count,
+    const char *prefix
+) {
+    size_t index = 0;
+    size_t prefix_length = 0;
+
+    if (options == 0 || prefix == 0 || prefix[0] == '\0') {
+        return 0;
+    }
+
+    prefix_length = strlen(prefix);
+    for (index = 0; index < option_count; index++) {
+        char selection_text[16];
+        int written = snprintf(
+            selection_text,
+            sizeof(selection_text),
+            "%d",
+            options[index].selection
+        );
+        if (written > 0 &&
+            (size_t)written < sizeof(selection_text) &&
+            (size_t)written > prefix_length &&
+            strncmp(selection_text, prefix, prefix_length) == 0) {
+            return 1;
+        }
+    }
+
+    return 0;
+}
+
+static int MenuController_parse_digit_buffer(const char *digits, int *out_value) {
+    char *end_pointer = 0;
+    long value = 0;
+
+    if (digits == 0 || digits[0] == '\0' || out_value == 0) {
+        return 0;
+    }
+
+    value = strtol(digits, &end_pointer, 10);
+    if (end_pointer == digits || end_pointer == 0 || *end_pointer != '\0' ||
+        value < 0 || value > INT_MAX) {
+        return 0;
+    }
+
+    *out_value = (int)value;
+    return 1;
 }
 
 /**
@@ -652,6 +727,8 @@ Result MenuController_interactive_select(
     size_t selected = 0;
     int redraw = 1;
     size_t i = 0;
+    char number_buffer[16];
+    size_t number_length = 0;
     InputEvent ev;
 
     if (out_action == 0 || panel == 0 || input == 0) {
@@ -662,6 +739,7 @@ Result MenuController_interactive_select(
     if (options == 0 || option_count == 0) {
         return Result_make_failure("interactive select: role menu not found");
     }
+    number_buffer[0] = '\0';
 
     for (;;) {
         if (redraw) {
@@ -687,18 +765,33 @@ Result MenuController_interactive_select(
 
         switch (ev.key) {
             case INPUT_KEY_UP:
+                number_length = 0;
+                number_buffer[0] = '\0';
                 if (selected > 0) {
                     selected--;
                     redraw = 1;
                 }
                 break;
             case INPUT_KEY_DOWN:
+                number_length = 0;
+                number_buffer[0] = '\0';
                 if (selected < option_count - 1) {
                     selected++;
                     redraw = 1;
                 }
                 break;
             case INPUT_KEY_ENTER:
+                if (number_length > 0) {
+                    int num = 0;
+                    if (MenuController_parse_digit_buffer(number_buffer, &num) &&
+                        MenuController_find_action_by_selection(options, option_count, num, out_action)) {
+                        return Result_make_success("interactive select: direct");
+                    }
+                    number_length = 0;
+                    number_buffer[0] = '\0';
+                    redraw = 1;
+                    break;
+                }
                 *out_action = options[selected].action;
                 return Result_make_success("interactive select: confirmed");
             case INPUT_KEY_ESC:
@@ -707,16 +800,49 @@ Result MenuController_interactive_select(
                 return Result_make_success("interactive select: cancelled");
             case INPUT_KEY_CHAR:
                 if (ev.ch >= '0' && ev.ch <= '9') {
-                    int num = ev.ch - '0';
-                    for (i = 0; i < option_count; i++) {
-                        if (options[i].selection == num) {
-                            *out_action = options[i].action;
-                            return Result_make_success("interactive select: direct");
-                        }
+                    int num = 0;
+                    int has_exact = 0;
+                    int has_longer_prefix = 0;
+
+                    if (number_length + 1 >= sizeof(number_buffer)) {
+                        number_length = 0;
+                        number_buffer[0] = '\0';
+                        break;
+                    }
+
+                    number_buffer[number_length++] = ev.ch;
+                    number_buffer[number_length] = '\0';
+
+                    if (!MenuController_parse_digit_buffer(number_buffer, &num)) {
+                        number_length = 0;
+                        number_buffer[0] = '\0';
+                        break;
+                    }
+
+                    has_exact = MenuController_find_action_by_selection(
+                        options,
+                        option_count,
+                        num,
+                        out_action
+                    );
+                    has_longer_prefix = MenuController_has_longer_selection_prefix(
+                        options,
+                        option_count,
+                        number_buffer
+                    );
+
+                    if (has_exact && !has_longer_prefix && number_length == 1) {
+                        return Result_make_success("interactive select: direct");
+                    }
+                    if (!has_exact && !has_longer_prefix) {
+                        number_length = 0;
+                        number_buffer[0] = '\0';
                     }
                 }
                 break;
             default:
+                number_length = 0;
+                number_buffer[0] = '\0';
                 break;
         }
     }

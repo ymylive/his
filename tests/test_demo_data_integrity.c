@@ -20,8 +20,17 @@
 #include "ui/DemoData.h"
 
 static const char *resolve_demo_data_path(const char *file_name) {
-    static char path[128];
+    static char path[512];
     FILE *file = 0;
+
+#ifdef HIS_TEST_SOURCE_DIR
+    snprintf(path, sizeof(path), "%s/data/%s", HIS_TEST_SOURCE_DIR, file_name);
+    file = fopen(path, "r");
+    if (file != 0) {
+        fclose(file);
+        return path;
+    }
+#endif
 
     snprintf(path, sizeof(path), "../data/%s", file_name);
     file = fopen(path, "r");
@@ -35,8 +44,17 @@ static const char *resolve_demo_data_path(const char *file_name) {
 }
 
 static const char *resolve_demo_seed_path(const char *file_name) {
-    static char path[160];
+    static char path[512];
     FILE *file = 0;
+
+#ifdef HIS_TEST_SOURCE_DIR
+    snprintf(path, sizeof(path), "%s/data/demo_seed/%s", HIS_TEST_SOURCE_DIR, file_name);
+    file = fopen(path, "r");
+    if (file != 0) {
+        fclose(file);
+        return path;
+    }
+#endif
 
     snprintf(path, sizeof(path), "../data/demo_seed/%s", file_name);
     file = fopen(path, "r");

@@ -557,6 +557,27 @@ Result MenuApplication_query_patient_history(
     size_t capacity
 );
 
+Result MenuApplication_query_visits_by_patient(
+    MenuApplication *application,
+    const char *patient_id,
+    char *buffer,
+    size_t capacity
+);
+
+Result MenuApplication_query_examinations_by_patient(
+    MenuApplication *application,
+    const char *patient_id,
+    char *buffer,
+    size_t capacity
+);
+
+Result MenuApplication_query_admissions_by_patient(
+    MenuApplication *application,
+    const char *patient_id,
+    char *buffer,
+    size_t capacity
+);
+
 /**
  * @brief 创建检查记录
  * @param application  应用程序实例指针

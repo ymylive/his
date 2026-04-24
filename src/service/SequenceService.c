@@ -11,7 +11,7 @@
  *   REGISTRATION|4
  *
  * 文件权限与落盘：直接复用 TextFileRepository_save_file，
- * 保持与其它 data/*.txt 一致（0600 + fsync + rename 原子替换）。
+ * 保持与其它 data 目录下的 txt 文件一致（0600 + fsync + rename 原子替换）。
  */
 
 #include "service/SequenceService.h"

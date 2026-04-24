@@ -52,7 +52,7 @@
 /**
  * @brief 启动时收紧数据目录与 *.txt 文件权限，防止 PHI 泄露
  *
- * 合规（HIPAA / 个保法）：`data/*.txt` 含身份证、手机号、病史等 PHI。
+ * 合规（HIPAA / 个保法）：data 目录下的 txt 文件含身份证、手机号、病史等 PHI。
  * 仓库内 demo fixture 以 0644 入 git，首次启动时必须收紧到 0600；
  * 目录收紧到 0700。仅处理 HIS 项目自己的 data/ 与 data/demo_seed/。
  * Windows 上无等效 POSIX 权限位，保留 TODO 以 ACL 方式实现。
@@ -60,7 +60,7 @@
 static void his_harden_data_permissions(void) {
 #ifdef _WIN32
     /* TODO(security): Windows 下通过 SetNamedSecurityInfo 设置 ACL，
-       限制只有当前用户可读写 data/*.txt。当前版本跳过。 */
+       限制只有当前用户可读写 data 目录下的 txt 文件。当前版本跳过。 */
     return;
 #else
     const char *directories[] = { HIS_DATA_DIR, HIS_DEMO_SEED_DIR };

@@ -1,7 +1,9 @@
 #include <assert.h>
+#include <stdio.h>
 #include <string.h>
 
 #include "ui/MenuController.h"
+#include "ui/TuiPanel.h"
 
 static void test_render_main_menu_contains_all_roles(void) {
     char buffer[8192];
@@ -114,6 +116,28 @@ static void test_parse_role_selection_and_back(void) {
     assert(result.success == 0);
 }
 
+static void test_interactive_role_selection_accepts_two_digit_number(void) {
+    FILE *input = tmpfile();
+    TuiPanel panel;
+    MenuAction action = MENU_ACTION_INVALID;
+    Result result;
+
+    assert(input != 0);
+    memset(&panel, 0, sizeof(panel));
+    fputs("10\n", input);
+    rewind(input);
+
+    result = MenuController_interactive_select(
+        MENU_ROLE_INPATIENT_MANAGER,
+        &panel,
+        input,
+        &action
+    );
+    assert(result.success == 1);
+    assert(action == MENU_ACTION_INPATIENT_QUERY_ORDERS);
+    fclose(input);
+}
+
 static void test_format_action_feedback(void) {
     char buffer[256];
     Result result = MenuController_format_action_feedback(
@@ -133,6 +157,7 @@ int main(void) {
     test_parse_main_menu_selection();
     test_render_patient_and_inpatient_menus();
     test_parse_role_selection_and_back();
+    test_interactive_role_selection_accepts_two_digit_number();
     test_format_action_feedback();
     return 0;
 }

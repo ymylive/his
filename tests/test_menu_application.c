@@ -19,6 +19,7 @@
 #include "repository/DoctorRepository.h"
 #include "repository/ExaminationRecordRepository.h"
 #include "repository/PatientRepository.h"
+#include "repository/PrescriptionRepository.h"
 #include "repository/RegistrationRepository.h"
 #include "repository/VisitRecordRepository.h"
 #include "repository/WardRepository.h"
@@ -1375,6 +1376,7 @@ static void test_patient_session_authorizes_only_bound_patient_routes(void) {
     assert(result.success == 1);
     assert(strstr(output, "PAT7001") != 0);
     assert(strstr(output, "PAT7002") == 0);
+    assert(strstr(output, "患者挂号记录") != 0);
 
     result = execute_action_with_text_io(
         &application,
@@ -1386,6 +1388,8 @@ static void test_patient_session_authorizes_only_bound_patient_routes(void) {
     assert(result.success == 1);
     assert(strstr(output, "PAT7001") != 0);
     assert(strstr(output, "PAT7002") == 0);
+    assert(strstr(output, "患者看诊历史") != 0);
+    assert(strstr(output, "VIS0001") != 0);
 
     result = execute_action_with_text_io(
         &application,
@@ -1397,6 +1401,7 @@ static void test_patient_session_authorizes_only_bound_patient_routes(void) {
     assert(result.success == 1);
     assert(strstr(output, "PAT7001") != 0);
     assert(strstr(output, "PAT7002") == 0);
+    assert(strstr(output, "患者检查历史") != 0);
 
     result = execute_action_with_text_io(
         &application,
@@ -1408,6 +1413,7 @@ static void test_patient_session_authorizes_only_bound_patient_routes(void) {
     assert(result.success == 1);
     assert(strstr(output, "PAT7001") != 0);
     assert(strstr(output, "PAT7002") == 0);
+    assert(strstr(output, "患者住院历史") != 0);
 
     result = execute_action_with_text_io(
         &application,
@@ -1420,6 +1426,7 @@ static void test_patient_session_authorizes_only_bound_patient_routes(void) {
     assert(strstr(output, "PAT7001") != 0);
     assert(strstr(output, "RX7001") != 0);
     assert(strstr(output, "RX7002") == 0);
+    assert(strstr(output, "发药记录") != 0);
 
     result = MenuApplication_login(&application, "PAT7999", "wrong-pass", USER_ROLE_PATIENT);
     assert(result.success == 0);
@@ -1615,6 +1622,108 @@ static void test_execute_action_doctor_exam_record_create_and_complete(void) {
     );
     assert(record.status == EXAM_STATUS_COMPLETED);
     assert(strcmp(record.result, "All clear") == 0);
+}
+
+static void test_execute_action_doctor_prescription_auto_generates_id(void) {
+    MenuApplicationTestContext context;
+    MenuApplication application;
+    PrescriptionRepository prescription_repository;
+    Prescription prescription;
+    char output[8192];
+    Result result;
+
+    setup_context(&context, "execute_doctor_prescription");
+    seed_department_and_doctor(&context);
+
+    result = MenuApplication_init(&application, &context.paths);
+    assert(result.success == 1);
+    result = MenuApplication_add_patient(
+        &application,
+        &(Patient){
+            "PAT6101",
+            "Iris",
+            PATIENT_GENDER_FEMALE,
+            29,
+            "13800006101",
+            "110101199702020101",
+            "None",
+            "Cough",
+            0,
+            "prescription route"
+        },
+        output,
+        sizeof(output)
+    );
+    assert(result.success == 1);
+    result = MenuApplication_create_registration(
+        &application,
+        "PAT6101",
+        "DOC0001",
+        "DEP0001",
+        "2026-03-20T18:00",
+        REG_TYPE_STANDARD,
+        5.00,
+        output,
+        sizeof(output)
+    );
+    assert(result.success == 1);
+    result = MenuApplication_create_visit_record(
+        &application,
+        "REG0001",
+        "Cough",
+        "Bronchitis",
+        "Medication",
+        0,
+        0,
+        1,
+        "2026-03-20T18:30",
+        output,
+        sizeof(output)
+    );
+    assert(result.success == 1);
+    result = MenuApplication_add_medicine(
+        &application,
+        &(Medicine){
+            "MED6101",
+            "RxMed",
+            "",
+            "Respiratory",
+            9.50,
+            20,
+            "DEP0001",
+            3
+        },
+        output,
+        sizeof(output)
+    );
+    assert(result.success == 1);
+
+    result = PrescriptionRepository_init(&prescription_repository, context.prescription_path);
+    assert(result.success == 1);
+    result = execute_action_with_text_io(
+        &application,
+        MENU_ACTION_DOCTOR_PRESCRIPTION_STOCK,
+        "2\n"
+        "VIS0001\n"
+        "MED6101\n"
+        "3\n"
+        "tid po\n",
+        output,
+        sizeof(output)
+    );
+    assert(result.success == 1);
+    assert(strstr(output, "处方创建成功") != 0);
+    assert(strstr(output, "RX0001") != 0);
+    assert(
+        PrescriptionRepository_find_by_id(
+            &prescription_repository,
+            "RX0001",
+            &prescription
+        ).success == 1
+    );
+    assert(strcmp(prescription.visit_id, "VIS0001") == 0);
+    assert(strcmp(prescription.medicine_id, "MED6101") == 0);
+    assert(prescription.quantity == 3);
 }
 
 static void test_execute_action_doctor_pending_list_filters_diagnosed(void) {
@@ -2084,6 +2193,7 @@ int main(void) {
     test_patient_session_authorizes_only_bound_patient_routes();
     test_execute_action_patient_query_dispense_lists_records();
     test_execute_action_doctor_exam_record_create_and_complete();
+    test_execute_action_doctor_prescription_auto_generates_id();
     test_execute_action_doctor_pending_list_filters_diagnosed();
     test_execute_action_admin_patient_management_deletes_patient();
     test_execute_action_admin_doctor_department_adds_and_lists_doctor();

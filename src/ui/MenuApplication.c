@@ -827,6 +827,53 @@ static Result MenuApplication_generate_medicine_id(
     return Result_make_success("medicine id generated");
 }
 
+/** @brief 自动生成处方编号（格式 "RX0001" 等） */
+static Result MenuApplication_generate_prescription_id(
+    MenuApplication *application,
+    char *buffer,
+    size_t capacity
+) {
+    LinkedList prescriptions;
+    const LinkedListNode *current = 0;
+    Result result;
+    int max_sequence = 0;
+
+    if (application == 0 || buffer == 0 || capacity == 0) {
+        return Result_make_failure("prescription id generation arguments missing");
+    }
+
+    LinkedList_init(&prescriptions);
+    result = PrescriptionService_load_all(&application->prescription_service, &prescriptions);
+    if (result.success == 0) {
+        return result;
+    }
+
+    current = prescriptions.head;
+    while (current != 0) {
+        const Prescription *prescription = (const Prescription *)current->data;
+        const char *id_text = prescription != 0 ? prescription->prescription_id : "";
+        char *end_pointer = 0;
+        long value = 0;
+
+        if (strncmp(id_text, "RX", 2) == 0 && id_text[2] != '\0') {
+            value = strtol(id_text + 2, &end_pointer, 10);
+            if (end_pointer != id_text + 2 && end_pointer != 0 && *end_pointer == '\0' &&
+                value > max_sequence && value <= INT_MAX) {
+                max_sequence = (int)value;
+            }
+        }
+
+        current = current->next;
+    }
+
+    PrescriptionService_clear_results(&prescriptions);
+    if (!IdGenerator_format(buffer, capacity, "RX", max_sequence + 1, 4)) {
+        return Result_make_failure("failed to generate prescription id");
+    }
+
+    return Result_make_success("prescription id generated");
+}
+
 /** @brief 安全复制字符串到目标缓冲区 */
 void MenuApplication_copy_text(
     char *destination,
@@ -2037,6 +2084,182 @@ Result MenuApplication_query_patient_history(
     return result;
 }
 
+Result MenuApplication_query_visits_by_patient(
+    MenuApplication *application,
+    const char *patient_id,
+    char *buffer,
+    size_t capacity
+) {
+    MedicalRecordHistory history;
+    const LinkedListNode *current = 0;
+    size_t used = 0;
+    Result result = MedicalRecordService_find_patient_history(
+        &application->medical_record_service,
+        patient_id,
+        &history
+    );
+
+    if (result.success == 0) {
+        return MenuApplication_write_failure(result.message, buffer, capacity);
+    }
+
+    result = MenuApplication_write_text(
+        buffer,
+        capacity,
+        "患者看诊历史: %s | count=%zu",
+        patient_id,
+        LinkedList_count(&history.visits)
+    );
+    if (result.success == 0) {
+        MedicalRecordHistory_clear(&history);
+        return result;
+    }
+
+    used = strlen(buffer);
+    current = history.visits.head;
+    while (current != 0) {
+        const VisitRecord *visit = (const VisitRecord *)current->data;
+        result = MenuApplication_append_text(
+            buffer,
+            capacity,
+            &used,
+            "\n%s | 挂号=%s | 患者=%s | 医生=%s | 诊断=%s | 时间=%s",
+            visit->visit_id,
+            visit->registration_id,
+            visit->patient_id,
+            visit->doctor_id,
+            visit->diagnosis,
+            visit->visit_time
+        );
+        if (result.success == 0) {
+            MedicalRecordHistory_clear(&history);
+            return result;
+        }
+        current = current->next;
+    }
+
+    MedicalRecordHistory_clear(&history);
+    return Result_make_success("patient visits ready");
+}
+
+Result MenuApplication_query_examinations_by_patient(
+    MenuApplication *application,
+    const char *patient_id,
+    char *buffer,
+    size_t capacity
+) {
+    MedicalRecordHistory history;
+    const LinkedListNode *current = 0;
+    size_t used = 0;
+    Result result = MedicalRecordService_find_patient_history(
+        &application->medical_record_service,
+        patient_id,
+        &history
+    );
+
+    if (result.success == 0) {
+        return MenuApplication_write_failure(result.message, buffer, capacity);
+    }
+
+    result = MenuApplication_write_text(
+        buffer,
+        capacity,
+        "患者检查历史: %s | count=%zu",
+        patient_id,
+        LinkedList_count(&history.examinations)
+    );
+    if (result.success == 0) {
+        MedicalRecordHistory_clear(&history);
+        return result;
+    }
+
+    used = strlen(buffer);
+    current = history.examinations.head;
+    while (current != 0) {
+        const ExaminationRecord *exam = (const ExaminationRecord *)current->data;
+        result = MenuApplication_append_text(
+            buffer,
+            capacity,
+            &used,
+            "\n%s | 就诊=%s | 项目=%s | 类型=%s | 费用=%.2f | 状态=%s | 申请=%s",
+            exam->examination_id,
+            exam->visit_id,
+            exam->exam_item,
+            exam->exam_type,
+            exam->exam_fee,
+            exam->status == EXAM_STATUS_COMPLETED ? "已完成" : "待检查",
+            exam->requested_at
+        );
+        if (result.success == 0) {
+            MedicalRecordHistory_clear(&history);
+            return result;
+        }
+        current = current->next;
+    }
+
+    MedicalRecordHistory_clear(&history);
+    return Result_make_success("patient examinations ready");
+}
+
+Result MenuApplication_query_admissions_by_patient(
+    MenuApplication *application,
+    const char *patient_id,
+    char *buffer,
+    size_t capacity
+) {
+    MedicalRecordHistory history;
+    const LinkedListNode *current = 0;
+    size_t used = 0;
+    Result result = MedicalRecordService_find_patient_history(
+        &application->medical_record_service,
+        patient_id,
+        &history
+    );
+
+    if (result.success == 0) {
+        return MenuApplication_write_failure(result.message, buffer, capacity);
+    }
+
+    result = MenuApplication_write_text(
+        buffer,
+        capacity,
+        "患者住院历史: %s | count=%zu",
+        patient_id,
+        LinkedList_count(&history.admissions)
+    );
+    if (result.success == 0) {
+        MedicalRecordHistory_clear(&history);
+        return result;
+    }
+
+    used = strlen(buffer);
+    current = history.admissions.head;
+    while (current != 0) {
+        const Admission *admission = (const Admission *)current->data;
+        result = MenuApplication_append_text(
+            buffer,
+            capacity,
+            &used,
+            "\n%s | 患者=%s | 病房=%s | 床位=%s | 状态=%s | 入院=%s | 出院=%s",
+            admission->admission_id,
+            admission->patient_id,
+            admission->ward_id,
+            admission->bed_id,
+            MenuApplication_admission_status_label(admission->status),
+            admission->admitted_at,
+            admission->discharged_at
+        );
+        if (result.success == 0) {
+            MedicalRecordHistory_clear(&history);
+            return result;
+        }
+        current = current->next;
+    }
+
+    MedicalRecordHistory_clear(&history);
+    return Result_make_success("patient admissions ready");
+}
+
 Result MenuApplication_create_examination_record(
     MenuApplication *application,
     const char *visit_id,
@@ -2568,6 +2791,7 @@ Result MenuApplication_create_prescription(
     char *buffer,
     size_t capacity
 ) {
+    Prescription stored_prescription;
     VisitRecord visit;
     Medicine medicine;
     Result result;
@@ -2576,10 +2800,22 @@ Result MenuApplication_create_prescription(
         return MenuApplication_write_failure("arguments missing", buffer, capacity);
     }
 
+    stored_prescription = *prescription;
+    if (MenuApplication_is_blank(stored_prescription.prescription_id)) {
+        result = MenuApplication_generate_prescription_id(
+            application,
+            stored_prescription.prescription_id,
+            sizeof(stored_prescription.prescription_id)
+        );
+        if (result.success == 0) {
+            return MenuApplication_write_failure(result.message, buffer, capacity);
+        }
+    }
+
     /* 校验就诊记录是否存在 */
     result = VisitRecordRepository_find_by_visit_id(
         &application->medical_record_service.visit_repository,
-        prescription->visit_id,
+        stored_prescription.visit_id,
         &visit
     );
     if (result.success == 0) {
@@ -2589,7 +2825,7 @@ Result MenuApplication_create_prescription(
     /* 校验药品是否存在 */
     result = MedicineRepository_find_by_medicine_id(
         &application->pharmacy_service.medicine_repository,
-        prescription->medicine_id,
+        stored_prescription.medicine_id,
         &medicine
     );
     if (result.success == 0) {
@@ -2597,14 +2833,14 @@ Result MenuApplication_create_prescription(
     }
 
     /* 检查药品库存 */
-    if (medicine.stock < prescription->quantity) {
+    if (medicine.stock < stored_prescription.quantity) {
         return MenuApplication_write_failure("medicine stock insufficient", buffer, capacity);
     }
 
     /* 创建处方 */
     result = PrescriptionService_create_prescription(
         &application->prescription_service,
-        prescription
+        &stored_prescription
     );
     if (result.success == 0) {
         return MenuApplication_write_failure(result.message, buffer, capacity);
@@ -2614,11 +2850,11 @@ Result MenuApplication_create_prescription(
         buffer,
         capacity,
         "处方创建成功: 处方ID=%s | 就诊ID=%s | 药品ID=%s | 数量=%d | 用法=%s",
-        prescription->prescription_id,
-        prescription->visit_id,
-        prescription->medicine_id,
-        prescription->quantity,
-        prescription->usage
+        stored_prescription.prescription_id,
+        stored_prescription.visit_id,
+        stored_prescription.medicine_id,
+        stored_prescription.quantity,
+        stored_prescription.usage
     );
 }
 

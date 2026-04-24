@@ -230,6 +230,8 @@ add_executable(test_demo_data_integrity
 )
 
 target_link_libraries(test_demo_data_integrity PRIVATE his_common)
+target_compile_definitions(test_demo_data_integrity
+    PRIVATE HIS_TEST_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}")
 
 add_test(NAME test_demo_data_integrity COMMAND test_demo_data_integrity)
 
