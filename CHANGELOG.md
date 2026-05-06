@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## [7.3.2] - 2026-05-06
+
+### Changed
+
+- **同步队友 `data/users.txt` 用户夹具** — 切换为含账号锁定字段的新 schema：`user_id|password_hash|role|patient_id|force_password_change|failed_count|locked_until`，与 `AuthService` 的失败计数 / 强制改密路径对齐。`ADM0001` 同步采用新 PBKDF2 哈希。
+
 ## [7.3.0] - 2026-04-17
 
 ### Added
