@@ -4,6 +4,16 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## [7.4.4] - 2026-05-08
+
+### Fixed
+
+- **新建药品后无法发药"处方不存在或已失效"** — 发药 UI 现状把 visit_id 当 prescription_id 传给底层；校验器现在先按 prescription_id 查，未命中则按 visit_id 查询该次就诊的所有处方并匹配药品，给出明确错误信息（如"该就诊未开具此药品的处方"或"发药数量与处方开药数量不一致（处方=N）"）
+
+### Internal
+
+- HIS_VERSION 7.4.3 → 7.4.4
+
 ## [7.4.3] - 2026-05-07
 
 ### Removed

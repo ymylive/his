@@ -13,7 +13,7 @@
 #include <stdio.h>
 
 /** 当前软件版本号 */
-#define HIS_VERSION "7.4.3"
+#define HIS_VERSION "7.4.4"
 
 /**
  * @brief 更新信息结构体

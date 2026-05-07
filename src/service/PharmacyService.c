@@ -659,22 +659,63 @@ static Result PharmacyService_validate_prescription_for_dispense(
         result = PrescriptionRepository_ensure_storage(&prescription_repository);
     }
     if (result.success == 1) {
-        result = PrescriptionRepository_find_by_id(
+        /* UI 现状：发药入口先选"就诊"，再选药品；上层把 visit_id 当作
+         * prescription_id 传入。因此先按 prescription_id 直接查；命中 → 严格校验。
+         * 若按 ID 查不到，回退按 visit_id 查询该次就诊的所有处方，匹配药品。
+         * 这样既保留审计要求的"必须存在合法处方"业务规则，也兼容现有 UI。 */
+        Result by_id_result = PrescriptionRepository_find_by_id(
             &prescription_repository, prescription_id, &prescription
         );
-        if (result.success == 0) {
-            /* 处方仓库可访问但条目缺失：拒绝（生产语义） */
-            return Result_make_failure("处方不存在或已失效");
-        }
+        if (by_id_result.success == 1) {
+            /* 2. 处方药品ID必须匹配 */
+            if (strcmp(prescription.medicine_id, medicine_id) != 0) {
+                return Result_make_failure("处方药品与发药请求不一致");
+            }
+            /* 3. 发药数量必须等于处方开药数量（系统按整方发放） */
+            if (prescription.quantity != quantity) {
+                return Result_make_failure("发药数量与处方开药数量不一致");
+            }
+        } else {
+            /* 把 prescription_id 当作 visit_id 解析 */
+            LinkedList visit_prescriptions;
+            LinkedListNode *node = 0;
+            int matched = 0;
+            int qty_mismatch = 0;
+            int prescribed_qty = 0;
 
-        /* 2. 处方药品ID必须匹配 */
-        if (strcmp(prescription.medicine_id, medicine_id) != 0) {
-            return Result_make_failure("处方药品与发药请求不一致");
-        }
+            LinkedList_init(&visit_prescriptions);
+            result = PrescriptionRepository_find_by_visit_id(
+                &prescription_repository, prescription_id, &visit_prescriptions
+            );
+            if (result.success == 0) {
+                PrescriptionRepository_clear_list(&visit_prescriptions);
+                return Result_make_failure("处方不存在或已失效");
+            }
 
-        /* 3. 发药数量必须等于处方开药数量（系统按整方发放） */
-        if (prescription.quantity != quantity) {
-            return Result_make_failure("发药数量与处方开药数量不一致");
+            node = visit_prescriptions.head;
+            while (node != 0) {
+                const Prescription *p = (const Prescription *)node->data;
+                if (p != 0 && strcmp(p->medicine_id, medicine_id) == 0) {
+                    matched = 1;
+                    prescribed_qty = p->quantity;
+                    if (p->quantity != quantity) {
+                        qty_mismatch = 1;
+                    }
+                    break;
+                }
+                node = node->next;
+            }
+            PrescriptionRepository_clear_list(&visit_prescriptions);
+
+            if (matched == 0) {
+                return Result_make_failure("该就诊未开具此药品的处方");
+            }
+            if (qty_mismatch != 0) {
+                char msg[RESULT_MESSAGE_CAPACITY];
+                snprintf(msg, sizeof(msg),
+                         "发药数量与处方开药数量不一致（处方=%d）", prescribed_qty);
+                return Result_make_failure(msg);
+            }
         }
     }
     /* 若 result.success == 0 且发生在 derive/init/ensure 阶段：
