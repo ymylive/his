@@ -4,6 +4,16 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## [7.4.2] - 2026-05-07
+
+### Changed
+
+- **删除药品录入表单的"库存预警"字段** — `MenuApplication_prompt_medicine_form` 不再要求填写 `low_stock_threshold`，新建药品默认 threshold=0。`Medicine.low_stock_threshold` 字段、`MedicineRepository` 序列化、admin 端 low-stock 报表、`PharmacyService` 阈值比较逻辑全部保留，需要时可由管理员通过编辑数据文件调整
+
+### Internal
+
+- HIS_VERSION 7.4.0 → 7.4.2
+
 ## [7.4.0] - 2026-05-07
 
 ### Added
