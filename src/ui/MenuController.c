@@ -254,8 +254,6 @@ static const MenuOption MENU_INPATIENT_OPTIONS[] = {
     {9, MENU_ACTION_INPATIENT_QUERY_ORDERS, "查看医嘱", TUI_CIRCLE},
     {10, MENU_ACTION_INPATIENT_EXECUTE_ORDER, "执行医嘱", TUI_MEDICAL},
     {11, MENU_ACTION_INPATIENT_CANCEL_ORDER, "取消医嘱", TUI_HEAVY_CROSS},
-    {12, MENU_ACTION_INPATIENT_NURSING_CREATE, "记录护理", TUI_HEART},
-    {13, MENU_ACTION_INPATIENT_NURSING_QUERY, "查看护理记录", TUI_MEDICAL},
     {0, MENU_ACTION_BACK, "返回上级菜单", TUI_ARROW_R}
 };
 
@@ -751,10 +749,6 @@ const char *MenuController_action_label(MenuAction action) {
             return "执行医嘱";
         case MENU_ACTION_INPATIENT_CANCEL_ORDER:
             return "取消医嘱";
-        case MENU_ACTION_INPATIENT_NURSING_CREATE:
-            return "记录护理";
-        case MENU_ACTION_INPATIENT_NURSING_QUERY:
-            return "查看护理记录";
         case MENU_ACTION_PHARMACY_ADD_MEDICINE:
             return "添加药品";
         case MENU_ACTION_PHARMACY_RESTOCK:

@@ -8663,8 +8663,6 @@ Result MenuApplication_execute_action(
         case MENU_ACTION_INPATIENT_QUERY_ORDERS:
         case MENU_ACTION_INPATIENT_EXECUTE_ORDER:
         case MENU_ACTION_INPATIENT_CANCEL_ORDER:
-        case MENU_ACTION_INPATIENT_NURSING_CREATE:
-        case MENU_ACTION_INPATIENT_NURSING_QUERY:
             return MenuAction_handle_inpatient(application, action, input, output);
 
         case MENU_ACTION_PHARMACY_ADD_MEDICINE:

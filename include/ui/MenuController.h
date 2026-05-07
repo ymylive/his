@@ -92,8 +92,6 @@ typedef enum MenuAction {
     MENU_ACTION_INPATIENT_QUERY_ORDERS = 510,      /**< 查看医嘱 */
     MENU_ACTION_INPATIENT_EXECUTE_ORDER = 511,     /**< 执行医嘱 */
     MENU_ACTION_INPATIENT_CANCEL_ORDER = 512,      /**< 取消医嘱 */
-    MENU_ACTION_INPATIENT_NURSING_CREATE = 513,    /**< 记录护理 */
-    MENU_ACTION_INPATIENT_NURSING_QUERY = 514,     /**< 查看护理记录 */
 
     /* 药房人员操作 (7xx) */
     MENU_ACTION_PHARMACY_ADD_MEDICINE = 701,       /**< 添加药品 */
