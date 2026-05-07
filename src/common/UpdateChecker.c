@@ -1078,12 +1078,14 @@ static int do_download_and_install(FILE *out, const UpdateInfo *info) {
         }
     }
 #else
-    rlen = readlink("/proc/self/exe", exe_dir, sizeof(exe_dir) - 1);
-    if (rlen < 0) {
-        tui_print_error(out, "无法获取程序路径。");
-        return 0;
+    {
+        ssize_t rlen = readlink("/proc/self/exe", exe_dir, sizeof(exe_dir) - 1);
+        if (rlen < 0) {
+            tui_print_error(out, "无法获取程序路径。");
+            return 0;
+        }
+        exe_dir[rlen] = '\0';
     }
-    exe_dir[rlen] = '\0';
 #endif
     last_slash = strrchr(exe_dir, '/');
     if (last_slash) *(last_slash + 1) = '\0';
