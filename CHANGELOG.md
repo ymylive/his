@@ -4,6 +4,16 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## [7.4.3] - 2026-05-07
+
+### Removed
+
+- **住院管理员菜单删除"记录护理"和"查看护理记录"**（原第 12、13 项）；同步移除 `MENU_ACTION_INPATIENT_NURSING_CREATE` / `MENU_ACTION_INPATIENT_NURSING_QUERY` 枚举、case handler、dispatch 分支、label 映射。`nursing_records.txt` 数据文件、`MenuApplication_create_nursing_record` / `_query_nursing_records` UI 辅助函数、`NursingRecord` 实体与服务层全部保留以供 admin 报表与未来护士入口复用
+
+### Internal
+
+- HIS_VERSION 7.4.2 → 7.4.3
+
 ## [7.4.2] - 2026-05-07
 
 ### Changed
