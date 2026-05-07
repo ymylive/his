@@ -5152,10 +5152,6 @@ Result MenuApplication_prompt_medicine_form(
     panel.fields[idx].is_required = 1;
     idx++;
 
-    snprintf(panel.fields[idx].label, FORM_LABEL_CAPACITY, "\xe5\xba\x93\xe5\xad\x98\xe9\xa2\x84\xe8\xad\xa6:");
-    panel.fields[idx].is_required = 1;
-    idx++;
-
     panel.field_count = idx;
 
     /* FIX 2: 自动填充 "时间" 字段的当前时间默认值 */
@@ -5191,8 +5187,8 @@ Result MenuApplication_prompt_medicine_form(
     out_medicine->stock = atoi(panel.fields[idx].value);
     idx++;
     strncpy(out_medicine->department_id, panel.fields[idx].value, sizeof(out_medicine->department_id) - 1);
-    idx++;
-    out_medicine->low_stock_threshold = atoi(panel.fields[idx].value);
+    /* 库存预警表单字段已移除；low_stock_threshold 保留在 Medicine 实体中，
+       由 memset 初始化为 0，需要管理员通过其他入口（数据文件 / 后续编辑）调整 */
 
     return Result_make_success("medicine form ready");
 }
