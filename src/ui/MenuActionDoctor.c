@@ -92,6 +92,25 @@ Result MenuAction_handle_doctor(MenuApplication *app, MenuAction action, FILE *i
             MenuApplication_print_result(output, output_buffer, result.success);
             return result;
 
+        case MENU_ACTION_DOCTOR_VIEW_DIAGNOSED:
+            if (app->has_authenticated_user != 0 && app->authenticated_user.role == USER_ROLE_DOCTOR) {
+                MenuApplication_copy_text(first_id, sizeof(first_id), app->authenticated_user.user_id);
+            } else {
+                result = MenuApplication_prompt_select_doctor(
+                    app,
+                    &context,
+                    "\xe5\x8c\xbb\xe7\x94\x9f\xe6\x90\x9c\xe7\xb4\xa2\xe5\x85\xb3\xe9\x94\xae\xe5\xad\x97/\xe5\xb7\xa5\xe5\x8f\xb7(\xe5\x9b\x9e\xe8\xbd\xa6\xe5\x88\x97\xe5\x87\xba\xe5\x85\xa8\xe9\x83\xa8): ",
+                    "",
+                    first_id,
+                    sizeof(first_id)
+                );
+                if (result.success == 0) {
+                    return result;
+                }
+            }
+            result = MenuApplication_browse_diagnosed_table(app, &context, first_id);
+            return Result_make_success("browse complete");
+
         case MENU_ACTION_DOCTOR_VISIT_RECORD:
             result = MenuApplication_prompt_select_registration(
                 app,

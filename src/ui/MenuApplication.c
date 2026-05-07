@@ -4807,7 +4807,8 @@ Result MenuApplication_prompt_patient_form(
     idx++;
 
     snprintf(panel.fields[idx].label, FORM_LABEL_CAPACITY, "\xe8\x81\x94\xe7\xb3\xbb\xe6\x96\xb9\xe5\xbc\x8f:");
-    panel.fields[idx].is_required = 1;
+    panel.fields[idx].is_required = 0;
+    snprintf(panel.fields[idx].hint, FORM_HINT_CAPACITY, "\xe9\x9a\x8f\xe4\xbe\xbf\xe5\xa1\xab");
     if (is_edit && out_patient->contact[0]) {
         strncpy(panel.fields[idx].value, out_patient->contact, FORM_VALUE_CAPACITY - 1);
         panel.fields[idx].is_filled = 1;
@@ -4816,6 +4817,7 @@ Result MenuApplication_prompt_patient_form(
 
     snprintf(panel.fields[idx].label, FORM_LABEL_CAPACITY, "\xe8\xba\xab\xe4\xbb\xbd\xe8\xaf\x81\xe5\x8f\xb7:");
     panel.fields[idx].is_required = 1;
+    snprintf(panel.fields[idx].hint, FORM_HINT_CAPACITY, "\u8981\u6c4218\u4f4d");
     if (is_edit && out_patient->id_card[0]) {
         strncpy(panel.fields[idx].value, out_patient->id_card, FORM_VALUE_CAPACITY - 1);
         panel.fields[idx].is_filled = 1;
@@ -4857,6 +4859,7 @@ Result MenuApplication_prompt_patient_form(
 
     panel.field_count = idx;
 
+validation_retry:
     result = MenuApplication_form_dispatch(context, &panel);
     if (result.success == 0) {
         return result;
@@ -4885,6 +4888,50 @@ Result MenuApplication_prompt_patient_form(
     out_patient->is_inpatient = atoi(panel.fields[idx].value);
     idx++;
     strncpy(out_patient->remarks, panel.fields[idx].value, sizeof(out_patient->remarks) - 1);
+
+    /* 输入验证：性别只能填 0, 1, 2 */
+    if (out_patient->gender < 0 || out_patient->gender > 2) {
+        fprintf(context->output, "\n");
+        tui_print_error(context->output, "性别输入错误：只能填 0(未知)、1(男)、2(女)");
+        fprintf(context->output, "\n");
+        fflush(context->output);
+        panel.fields[is_edit ? 3 : 2].is_filled = 0;
+        memset(panel.fields[is_edit ? 3 : 2].value, 0, sizeof(panel.fields[is_edit ? 3 : 2].value));
+        goto validation_retry;
+    }
+
+    /* 输入验证：年龄只能填正数 */
+    if (out_patient->age <= 0) {
+        fprintf(context->output, "\n");
+        tui_print_error(context->output, "年龄输入错误：只能填正整数");
+        fprintf(context->output, "\n");
+        fflush(context->output);
+        panel.fields[is_edit ? 4 : 3].is_filled = 0;
+        memset(panel.fields[is_edit ? 4 : 3].value, 0, sizeof(panel.fields[is_edit ? 4 : 3].value));
+        goto validation_retry;
+    }
+
+    /* 输入验证：身份证号必须18位 */
+    if (strlen(out_patient->id_card) != 18) {
+        fprintf(context->output, "\n");
+        tui_print_error(context->output, "身份证号输入错误：必须为18位");
+        fprintf(context->output, "\n");
+        fflush(context->output);
+        panel.fields[is_edit ? 6 : 5].is_filled = 0;
+        memset(panel.fields[is_edit ? 6 : 5].value, 0, sizeof(panel.fields[is_edit ? 6 : 5].value));
+        goto validation_retry;
+    }
+
+    /* 输入验证：是否住院只能填 0, 1 */
+    if (out_patient->is_inpatient < 0 || out_patient->is_inpatient > 1) {
+        fprintf(context->output, "\n");
+        tui_print_error(context->output, "是否住院输入错误：只能填 0(否) 或 1(是)");
+        fprintf(context->output, "\n");
+        fflush(context->output);
+        panel.fields[is_edit ? 9 : 8].is_filled = 0;
+        memset(panel.fields[is_edit ? 9 : 8].value, 0, sizeof(panel.fields[is_edit ? 9 : 8].value));
+        goto validation_retry;
+    }
 
     return Result_make_success("patient form ready");
 }
@@ -5934,6 +5981,82 @@ Result MenuApplication_browse_pending_table(
         out_id_capacity
     );
     RegistrationRepository_clear_list(&registrations);
+    return result;
+}
+
+/** @brief 交互式已诊断病人列表浏览（搜索/过滤/选择） */
+Result MenuApplication_browse_diagnosed_table(
+    MenuApplication *application,
+    MenuApplicationPromptContext *context,
+    const char *doctor_id
+) {
+    LinkedList visits;
+    const LinkedListNode *current = 0;
+    MenuApplicationSelectionOption options[MENU_APPLICATION_SELECT_OPTION_MAX];
+    int option_count = 0;
+    Result result;
+    char selected_visit_id[HIS_DOMAIN_ID_CAPACITY];
+    char detail_buf[4096];
+    char patient_id[HIS_DOMAIN_ID_CAPACITY] = {0};
+
+    LinkedList_init(&visits);
+
+    result = MedicalRecordService_find_visits_by_doctor(
+        &application->medical_record_service, doctor_id, &visits);
+    if (result.success == 0) {
+        return result;
+    }
+
+    current = visits.head;
+    while (current != 0 && option_count < MENU_APPLICATION_SELECT_OPTION_MAX) {
+        const VisitRecord *v = (const VisitRecord *)current->data;
+        MenuApplication_copy_text(options[option_count].id, sizeof(options[option_count].id), v->visit_id);
+        snprintf(
+            options[option_count].label,
+            sizeof(options[option_count].label),
+            "%s | \xe6\x8c\x82\xe5\x8f\xb7=%s | \xe6\x82\xa3\xe8\x80\x85=%s | \xe8\xaf\x8a\xe6\x96\xad=%s | %s",
+            v->visit_id,
+            v->registration_id,
+            v->patient_id,
+            v->diagnosis,
+            v->visit_time
+        );
+        option_count++;
+        current = current->next;
+    }
+
+    result = MenuApplication_interactive_browse(
+        context,
+        "\xe5\xb7\xb2\xe8\xaf\x8a\xe6\x96\xad\xe7\x97\x85\xe4\xba\xba\xe5\x88\x97\xe8\xa1\xa8 - \xe8\xbe\x93\xe5\x85\xa5\xe5\x85\xb3\xe9\x94\xae\xe5\xad\x97\xe6\x90\x9c\xe7\xb4\xa2",
+        options,
+        option_count,
+        selected_visit_id,
+        sizeof(selected_visit_id)
+    );
+    
+    if (result.success && selected_visit_id[0] != '\0') {
+        current = visits.head;
+        while (current != 0) {
+            const VisitRecord *v = (const VisitRecord *)current->data;
+            if (strcmp(v->visit_id, selected_visit_id) == 0) {
+                MenuApplication_copy_text(patient_id, sizeof(patient_id), v->patient_id);
+                break;
+            }
+            current = current->next;
+        }
+        
+        if (patient_id[0] != '\0') {
+            result = MenuApplication_query_patient_history(
+                application,
+                patient_id,
+                detail_buf,
+                sizeof(detail_buf)
+            );
+            MenuApplication_print_result(context->output, detail_buf, result.success);
+        }
+    }
+    
+    VisitRecordRepository_clear_list(&visits);
     return result;
 }
 
@@ -8343,6 +8466,7 @@ Result MenuApplication_execute_action(
         case MENU_ACTION_DOCTOR_PENDING_LIST:
         case MENU_ACTION_DOCTOR_QUERY_PATIENT_HISTORY:
         case MENU_ACTION_DOCTOR_VISIT_RECORD:
+        case MENU_ACTION_DOCTOR_VIEW_DIAGNOSED:
         case MENU_ACTION_DOCTOR_PRESCRIPTION_STOCK:
         case MENU_ACTION_DOCTOR_EXAM_RECORD:
         case MENU_ACTION_DOCTOR_ROUND_CREATE:

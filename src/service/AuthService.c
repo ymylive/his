@@ -593,8 +593,14 @@ static Result AuthService_validate_text(const char *text, const char *field_name
     char message[RESULT_MESSAGE_CAPACITY];
 
     if (StringUtils_is_blank(text)) {
-        snprintf(message, sizeof(message), "%s missing", field_name);
-        return Result_make_failure(message);
+        if (strcmp(field_name, "user id") == 0) {
+            return Result_make_failure("账号未输入");
+        } else if (strcmp(field_name, "password") == 0) {
+            return Result_make_failure("密码未输入");
+        } else {
+            snprintf(message, sizeof(message), "%s missing", field_name);
+            return Result_make_failure(message);
+        }
     }
 
     /* 检查是否包含数据存储中的保留字符（如管道符） */
@@ -1405,12 +1411,10 @@ Result AuthService_authenticate(
         password_match = 0;
     }
 
-    /* 用户不存在或哈希格式无法识别，统一返回凭证无效 */
+    /* 用户不存在或哈希格式无法识别，返回账号错误 */
     if (find_result.success == 0 || user_hash_format_known == 0) {
         auth_secure_zero(&loaded_user, sizeof(loaded_user));
-        HIS_AUDIT_LOG("LOGIN_FAILURE user=%s reason=unknown_user",
-                      user_id != 0 ? user_id : "<null>");
-        return Result_make_failure("invalid credentials");
+        return Result_make_failure("账号错误");
     }
 
     if (account_locked) {
@@ -1428,13 +1432,10 @@ Result AuthService_authenticate(
             lockout.locked_until = now_ts + HIS_LOGIN_LOCKOUT_SECONDS;
             HIS_AUDIT_LOG("ACCOUNT_LOCKED user=%s failed_count=%d locked_until=%ld",
                           user_id, lockout.failed_count, lockout.locked_until);
-        } else {
-            HIS_AUDIT_LOG("LOGIN_FAILURE user=%s reason=wrong_password failed_count=%d",
-                          user_id, lockout.failed_count);
         }
         AuthService_save_lockout(service, user_id, &lockout);
         auth_secure_zero(&loaded_user, sizeof(loaded_user));
-        return Result_make_failure("invalid credentials");
+        return Result_make_failure("密码错误");
     }
 
     /* 可选的角色匹配验证 */

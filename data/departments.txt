@@ -1,7 +1,10 @@
 department_id|name|location|description
-DEP0001|General|Outpatient F1|General clinic and first diagnosis
-DEP0002|Surgery|Outpatient F2|General surgery and trauma
-DEP0003|Pediatrics|Outpatient F3|Pediatric clinic
-DEP0004|Respiratory|Ward Tower F2|Respiratory medicine
-DEP0005|Cardiology|Outpatient F4|Cardiac assessment
-DEP0006|Orthopedics|Outpatient F5|Bone and joint clinic
+DEP0001|普通内科|门诊楼F1|普通门诊及首诊
+DEP0002|外科|门诊楼F2|普通外科及创伤处理
+DEP0003|儿科|门诊楼F3|儿科门诊
+DEP0004|呼吸内科|住院楼F2|呼吸系统疾病诊治
+DEP0005|心内科|门诊楼F4|心脏疾病评估与治疗
+DEP0006|骨科|门诊楼F5|骨关节疾病诊治
+DEP0007|神经内科|门诊楼F6|神经系统疾病诊治
+DEP0008|皮肤科|门诊楼F7|皮肤疾病诊治
+DEP0009|NEIENI|DONGDONG|111

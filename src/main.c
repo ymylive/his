@@ -353,6 +353,7 @@ static int handle_login_flow(MenuApplication *application,
             continue; /* retry user-ID */
         }
 
+password_retry:
         tui_print_prompt(output_stream, "请输入密码 (ESC返回): ");
         read_result = InputHelper_read_line(input_stream, password, sizeof(password));
         if (read_result == 0) {
@@ -364,20 +365,26 @@ static int handle_login_flow(MenuApplication *application,
         if (read_result < 0) {
             tui_print_warning(output_stream, "输入过长，请重新输入。");
             tui_delay(800);
-            continue; /* retry from user-ID */
+            goto password_retry; /* retry password only */
         }
 
         /* 尝试登录验证。失败计数与锁定由 AuthService 持久化处理， */
         /* 不再依赖内存中的计数器（防止通过返回角色选择重置攻击）。 */
         result = MenuApplication_login(application, input, password, required_role);
-        /* 安全清除敏感缓冲区：密码和用户输入 */
+        /* 安全清除敏感缓冲区：密码 */
         secure_zero(password, sizeof(password));
 
         if (result.success == 0) {
-            secure_zero(input, sizeof(input));
             tui_animate_error(output_stream, result.message);
             tui_delay(500);
-            continue; /* retry from user-ID */
+            /* 如果是账号错误，重新输入账号；如果是密码错误，只重新输入密码 */
+            if (strcmp(result.message, "账号错误") == 0 || 
+                strcmp(result.message, "账号未输入") == 0) {
+                secure_zero(input, sizeof(input));
+                continue; /* retry from user-ID */
+            } else {
+                goto password_retry; /* retry password only */
+            }
         }
 
         /* 登录成功，保存用户编号 */

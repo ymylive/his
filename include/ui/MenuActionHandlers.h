@@ -303,6 +303,12 @@ Result MenuApplication_browse_pending_table(
     size_t out_id_capacity
 );
 
+Result MenuApplication_browse_diagnosed_table(
+    MenuApplication *application,
+    MenuApplicationPromptContext *context,
+    const char *doctor_id
+);
+
 Result MenuApplication_browse_patient_history(
     MenuApplication *application,
     MenuApplicationPromptContext *context,

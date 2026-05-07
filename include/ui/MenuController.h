@@ -67,6 +67,7 @@ typedef enum MenuAction {
     MENU_ACTION_DOCTOR_EXAM_RECORD = 305,          /**< 检查记录/检查结果 */
     MENU_ACTION_DOCTOR_ROUND_CREATE = 306,         /**< 查房记录 */
     MENU_ACTION_DOCTOR_ROUND_QUERY = 307,          /**< 查看查房记录 */
+    MENU_ACTION_DOCTOR_VIEW_DIAGNOSED = 308,       /**< 已诊断病人列表 */
 
     /* 患者操作 (4xx) */
     MENU_ACTION_PATIENT_BASIC_INFO = 401,          /**< 基本信息 */

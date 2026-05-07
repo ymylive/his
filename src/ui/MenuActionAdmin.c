@@ -32,6 +32,7 @@ Result MenuAction_handle_admin(MenuApplication *app, MenuAction action, FILE *in
     memset(second_id, 0, sizeof(second_id));
     memset(text_value, 0, sizeof(text_value));
     memset(time_value, 0, sizeof(time_value));
+    memset(&patient, 0, sizeof(patient));
 
     switch (action) {
         case MENU_ACTION_ADMIN_PATIENT_MANAGEMENT:

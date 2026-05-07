@@ -288,14 +288,62 @@ int InputHelper_read_line(FILE *input, char *buffer, size_t capacity) {
     }
 
 #ifdef _WIN32
-    /* Windows 平台：使用 _getch 在非回显模式下预读首个按键 */
+    /* Windows 平台：使用 _getch 逐字符读取，支持退格键 */
     if (_isatty(_fileno(input))) {
-        int ch = _getch();
-        if (ch == INPUT_ESC_CHAR) { /* 检测到 ESC 键 */
-            buffer[0] = '\0';
-            return -2;
+        int ch = 0;
+        length = 0;
+        buffer[0] = '\0';
+        
+        for (;;) {
+            ch = _getch();
+            
+            if (ch == INPUT_ESC_CHAR) {
+                /* ESC 检测：区分独立 ESC 键和方向键等转义序列 */
+                int next_ch = 0;
+                if (_kbhit()) {
+                    next_ch = _getch();
+                    if (next_ch == '[') {
+                        /* 方向键等转义序列，忽略 */
+                        _getch();  /* 读取第三个字符 */
+                        continue;
+                    }
+                }
+                buffer[0] = '\0';
+                return -2;
+            }
+            
+            if (ch == '\r' || ch == '\n') {
+                /* 回车键，结束输入 */
+                fputc('\n', stdout);
+                buffer[length] = '\0';
+                return 1;
+            }
+            
+            if (ch == INPUT_BACKSPACE_DEL || ch == INPUT_BACKSPACE_BS) {
+                /* 退格键，删除前一个字符 */
+                if (length > 0) {
+                    length--;
+                    buffer[length] = '\0';
+                    fputc('\b', stdout);  /* 光标回退 */
+                    fputc(' ', stdout);   /* 覆盖字符 */
+                    fputc('\b', stdout);  /* 光标回退 */
+                }
+                continue;
+            }
+            
+            if (length < capacity - 1) {
+                /* 普通字符，添加到缓冲区 */
+                buffer[length] = (char)ch;
+                length++;
+                fputc(ch, stdout);  /* 回显字符 */
+            }
         }
-        _ungetch(ch); /* 非 ESC 键，放回输入缓冲区 */
+    } else {
+        if (fgets(buffer, (int)capacity, input) == 0) {
+            buffer[0] = '\0';
+            return 0; /* EOF 或读取错误 */
+        }
+        length = strlen(buffer);
     }
 #else
     /* POSIX 平台（macOS / Linux）：全 raw 模式逐字符读取
@@ -645,6 +693,10 @@ InputEvent InputHelper_read_key(FILE *input) {
                 case 75: event.key = INPUT_KEY_LEFT;  break;
                 case 77: event.key = INPUT_KEY_RIGHT; break;
                 default: event.key = INPUT_KEY_NONE;  break;
+            }
+            /* 清空可能积压的按键缓冲区 */
+            while (_kbhit()) {
+                _getch();
             }
             return event;
         }

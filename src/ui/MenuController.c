@@ -155,11 +155,12 @@ static const MenuOption MENU_ADMIN_OPTIONS[] = {
 static const MenuOption MENU_DOCTOR_OPTIONS[] = {
     {1, MENU_ACTION_DOCTOR_PENDING_LIST, "待诊列表", TUI_LOZENGE},
     {2, MENU_ACTION_DOCTOR_QUERY_PATIENT_HISTORY, "查询患者信息与历史", TUI_HEART},
-    {3, MENU_ACTION_DOCTOR_VISIT_RECORD, "诊疗记录/诊断结果/医生建议", TUI_HEAVY_CROSS},
-    {4, MENU_ACTION_DOCTOR_PRESCRIPTION_STOCK, "处方管理/查询库存", TUI_FLASK},
-    {5, MENU_ACTION_DOCTOR_EXAM_RECORD, "检查记录/检查结果", TUI_STAR},
-    {6, MENU_ACTION_DOCTOR_ROUND_CREATE, "查房记录", TUI_MEDICAL},
-    {7, MENU_ACTION_DOCTOR_ROUND_QUERY, "查看查房记录", TUI_MEDICAL},
+    {3, MENU_ACTION_DOCTOR_VISIT_RECORD, "医生叫号", TUI_HEAVY_CROSS},
+    {4, MENU_ACTION_DOCTOR_VIEW_DIAGNOSED, "已诊断病人列表", TUI_HEART},
+    {5, MENU_ACTION_DOCTOR_PRESCRIPTION_STOCK, "处方管理/查询库存", TUI_FLASK},
+    {6, MENU_ACTION_DOCTOR_EXAM_RECORD, "检查记录/检查结果", TUI_STAR},
+    {7, MENU_ACTION_DOCTOR_ROUND_CREATE, "查房记录", TUI_MEDICAL},
+    {8, MENU_ACTION_DOCTOR_ROUND_QUERY, "查看查房记录", TUI_MEDICAL},
     {0, MENU_ACTION_BACK, "返回上级菜单", TUI_ARROW_R}
 };
 
@@ -635,7 +636,9 @@ const char *MenuController_action_label(MenuAction action) {
         case MENU_ACTION_DOCTOR_PENDING_LIST:
             return "待诊列表";
         case MENU_ACTION_DOCTOR_VISIT_RECORD:
-            return "诊疗记录/诊断结果/医生建议";
+            return "医生叫号";
+        case MENU_ACTION_DOCTOR_VIEW_DIAGNOSED:
+            return "已诊断病人列表";
         case MENU_ACTION_DOCTOR_PRESCRIPTION_STOCK:
             return "处方管理/查询库存";
         case MENU_ACTION_DOCTOR_EXAM_RECORD:

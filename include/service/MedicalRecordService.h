@@ -226,6 +226,20 @@ Result MedicalRecordService_find_records_by_time_range(
 );
 
 /**
+ * @brief 按医生ID查找就诊记录
+ *
+ * @param service        指向病历服务结构体
+ * @param doctor_id    医生工号
+ * @param out_visits  输出参数，存放匹配的就诊记录链表（必须为空链表）
+ * @return Result      操作结果，success=1 表示查找完成
+ */
+Result MedicalRecordService_find_visits_by_doctor(
+    MedicalRecordService *service,
+    const char *doctor_id,
+    LinkedList *out_visits
+);
+
+/**
  * @brief 清理病历历史记录
  *
  * 释放 MedicalRecordHistory 中所有链表的动态分配内存。

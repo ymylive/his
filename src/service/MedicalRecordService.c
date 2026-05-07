@@ -1762,3 +1762,52 @@ Result MedicalRecordService_find_records_by_time_range(
 
     return Result_make_success("time range records loaded");
 }
+
+/**
+ * @brief 按医生ID查找就诊记录
+ *
+ * @param service        指向病历服务结构体
+ * @param doctor_id    医生工号
+ * @param out_visits  输出参数，存放匹配的就诊记录链表（必须为空链表）
+ * @return Result      操作结果，success=1 表示查找完成
+ */
+Result MedicalRecordService_find_visits_by_doctor(
+    MedicalRecordService *service,
+    const char *doctor_id,
+    LinkedList *out_visits
+) {
+    LinkedList visits;
+    const LinkedListNode *current = 0;
+    Result result;
+
+    if (service == 0 || StringUtils_is_blank(doctor_id) || out_visits == 0) {
+        return Result_make_failure("find visits by doctor arguments invalid");
+    }
+
+    LinkedList_init(out_visits);
+    LinkedList_init(&visits);
+
+    result = VisitRecordRepository_load_all(&service->visit_repository, &visits);
+    if (result.success == 0) {
+        return result;
+    }
+
+    current = visits.head;
+    while (current != 0) {
+        const VisitRecord *record = (const VisitRecord *)current->data;
+
+        if (strcmp(record->doctor_id, doctor_id) == 0) {
+            result = MedicalRecordService_append_visit_copy(out_visits, record);
+            if (result.success == 0) {
+                VisitRecordRepository_clear_list(&visits);
+                VisitRecordRepository_clear_list(out_visits);
+                return result;
+            }
+        }
+
+        current = current->next;
+    }
+
+    VisitRecordRepository_clear_list(&visits);
+    return Result_make_success("doctor visits loaded");
+}
