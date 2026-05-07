@@ -344,6 +344,7 @@ int InputHelper_read_line(FILE *input, char *buffer, size_t capacity) {
             return 0; /* EOF 或读取错误 */
         }
         length = strlen(buffer);
+        goto process_buffer;
     }
 #else
     /* POSIX 平台（macOS / Linux）：全 raw 模式逐字符读取
