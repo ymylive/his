@@ -19,6 +19,19 @@
  * - JSON 解析器增加长度边界检查，拒绝 \u 转义以降低手写解析风险。
  */
 
+/* 启用 mkdtemp 等扩展 POSIX/BSD 函数声明（macOS 与 glibc 默认不导出） */
+#if !defined(_WIN32)
+#  if defined(__APPLE__)
+#    ifndef _DARWIN_C_SOURCE
+#      define _DARWIN_C_SOURCE
+#    endif
+#  else
+#    ifndef _GNU_SOURCE
+#      define _GNU_SOURCE
+#    endif
+#  endif
+#endif
+
 #include "common/UpdateChecker.h"
 #include "ui/TuiStyle.h"
 
@@ -28,6 +41,10 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+
+#ifndef _WIN32
+#include <signal.h>
+#endif
 
 #ifdef _WIN32
 #include <direct.h>
@@ -158,8 +175,9 @@ static int run_process(const char *const argv[]) {
     cmdline[0] = '\0';
     for (i = 0; argv[i] != NULL; ++i) {
         const char *a = argv[i];
-        int needs_quote = (a[0] == '\0') || strpbrk(a, " \t\"\\") != NULL;
+        int needs_quote = (a[0] == '\0') || strpbrk(a, " \t\"") != NULL;
         size_t j;
+        size_t bs_count;
 
         if (i > 0 && pos < sizeof(cmdline) - 1) {
             cmdline[pos++] = ' ';
@@ -168,12 +186,38 @@ static int run_process(const char *const argv[]) {
         if (needs_quote && pos < sizeof(cmdline) - 1) {
             cmdline[pos++] = '"';
         }
+        /* 实现 Microsoft 文档化的命令行解析规则（CommandLineToArgvW 反向）：
+         *   - 反斜杠仅在紧跟引号或位于参数末尾（处于引号内）时才被解释。
+         *   - 此时需要把 N 个反斜杠写成 2N 个；引号本身写为 \"。
+         *   - 普通位置上的反斜杠保持原样输出。
+         * 这样 C:\Program Files\foo 不会被错误地翻倍。 */
+        bs_count = 0;
         for (j = 0; a[j] != '\0'; ++j) {
-            if (pos >= sizeof(cmdline) - 3) return -1;
-            if (a[j] == '"' || a[j] == '\\') {
-                cmdline[pos++] = '\\';
+            if (a[j] == '\\') {
+                bs_count++;
+                continue;
             }
-            cmdline[pos++] = a[j];
+            if (a[j] == '"') {
+                size_t k;
+                if (pos + bs_count * 2 + 2 >= sizeof(cmdline) - 1) return -1;
+                for (k = 0; k < bs_count * 2; ++k) cmdline[pos++] = '\\';
+                cmdline[pos++] = '\\';
+                cmdline[pos++] = '"';
+            } else {
+                size_t k;
+                if (pos + bs_count + 1 >= sizeof(cmdline) - 1) return -1;
+                for (k = 0; k < bs_count; ++k) cmdline[pos++] = '\\';
+                cmdline[pos++] = a[j];
+            }
+            bs_count = 0;
+        }
+        /* 参数末尾：如果在引号内，需要把残留的反斜杠数量翻倍以避免和闭引号
+         * 形成转义。否则原样输出。 */
+        {
+            size_t k;
+            size_t out_count = needs_quote ? bs_count * 2 : bs_count;
+            if (pos + out_count + 2 >= sizeof(cmdline) - 1) return -1;
+            for (k = 0; k < out_count; ++k) cmdline[pos++] = '\\';
         }
         if (needs_quote && pos < sizeof(cmdline) - 1) {
             cmdline[pos++] = '"';
@@ -372,6 +416,25 @@ static int http_download_to_file(const char *url, const char *out_path) {
 /* ── JSON 辅助解析函数（手写，已加长度边界与 \u 拒绝） ── */
 
 /**
+ * @brief 在 [hay, hay+hay_len) 范围内查找 needle，遇到 NUL 也不停止
+ *
+ * 替代 strstr：strstr 在内嵌 NUL 处会停止，且会越过给定长度。
+ * 这里以 hay_len 为硬边界，确保不读越界。
+ */
+static const char *bounded_find(const char *hay, size_t hay_len, const char *needle) {
+    size_t nlen;
+    size_t i;
+    if (hay == NULL || needle == NULL) return NULL;
+    nlen = strlen(needle);
+    if (nlen == 0) return hay;
+    if (hay_len < nlen) return NULL;
+    for (i = 0; i + nlen <= hay_len; ++i) {
+        if (memcmp(hay + i, needle, nlen) == 0) return hay + i;
+    }
+    return NULL;
+}
+
+/**
  * @brief 从 JSON 字符串中提取指定键的字符串值
  *
  * 简易 JSON 解析器：按 "key" 文本匹配定位，然后提取双引号包围的值。
@@ -398,7 +461,7 @@ static int json_extract_string(
     plen = (size_t)snprintf(pattern, sizeof(pattern), "\"%s\"", key);
     if (plen == 0 || plen >= sizeof(pattern)) return 0;
 
-    start = strstr(json, pattern);
+    start = bounded_find(json, json_len, pattern);
     if (start == NULL || start >= hay_end) return 0;
 
     start += plen;
@@ -439,7 +502,8 @@ static int json_find_asset_url(
     const char *hay_end = json + json_len;
     const char *name_pos;
 
-    while ((name_pos = strstr(cursor, "\"name\"")) != NULL && name_pos < hay_end) {
+    while (cursor < hay_end &&
+           (name_pos = bounded_find(cursor, (size_t)(hay_end - cursor), "\"name\"")) != NULL) {
         char name[256];
         const char *ns = name_pos + 6;
         const char *ne;
@@ -460,7 +524,9 @@ static int json_find_asset_url(
         name[nlen] = '\0';
 
         if (strstr(name, keyword) != NULL && strstr(name, ".zip") != NULL) {
-            const char *url_pos = strstr(name_pos, "\"browser_download_url\"");
+            /* 在 [name_pos, hay_end) 范围内查找下载 URL 字段，避免越界 */
+            const char *url_pos = bounded_find(name_pos, (size_t)(hay_end - name_pos),
+                                               "\"browser_download_url\"");
             if (url_pos != NULL && url_pos < hay_end) {
                 const char *us = url_pos + 22;
                 const char *ue;
@@ -571,11 +637,17 @@ static const char *url_basename(const char *url) {
 /* ── 版本号比较 ──────────────────────────────────────────── */
 
 static int version_compare(const char *a, const char *b) {
-    int a1 = 0, a2 = 0, a3 = 0;
-    int b1 = 0, b2 = 0, b3 = 0;
+    /* 用 -1 哨兵初始化，sscanf 部分匹配时未赋值的字段保持 -1，
+     * 据此判断版本号格式无效，按"无更新"处理避免误升级。 */
+    int a1 = -1, a2 = -1, a3 = -1;
+    int b1 = -1, b2 = -1, b3 = -1;
+    int na, nb;
 
-    sscanf(a, "%d.%d.%d", &a1, &a2, &a3);
-    sscanf(b, "%d.%d.%d", &b1, &b2, &b3);
+    if (a == NULL || b == NULL) return 0;
+    na = sscanf(a, "%d.%d.%d", &a1, &a2, &a3);
+    nb = sscanf(b, "%d.%d.%d", &b1, &b2, &b3);
+    if (na != 3 || nb != 3) return 0;
+    if (a1 < 0 || a2 < 0 || a3 < 0 || b1 < 0 || b2 < 0 || b3 < 0) return 0;
 
     if (a1 != b1) return a1 - b1;
     if (a2 != b2) return a2 - b2;
@@ -631,6 +703,11 @@ int UpdateChecker_check(UpdateInfo *info) {
 
     if (!json_extract_string(g_api_response, g_api_response_len,
                              "tag_name", tag_name, sizeof(tag_name))) {
+        return 0;
+    }
+    /* 若 tag 占满整个缓冲区（长度 == sizeof(tag_name)-1），可能被静默截断，
+     * 截断后的版本号不可信，直接放弃本次检查。 */
+    if (strlen(tag_name) >= sizeof(tag_name) - 1) {
         return 0;
     }
 
@@ -775,9 +852,9 @@ static int do_download_and_install(FILE *out, const UpdateInfo *info) {
     /* ===== Windows 平台更新流程 ===== */
     char tmp_zip[MAX_PATH];
     char tmp_dir[MAX_PATH];
-    const char *tmp_env = getenv("TEMP");
+    char temp_path[MAX_PATH];
+    DWORD tp_len;
     char err[128];
-    if (tmp_env == NULL || tmp_env[0] == '\0') tmp_env = ".";
 
     if (!validate_url(info->asset_url, err, sizeof(err))) {
         tui_print_error(out, "下载链接安全验证失败：");
@@ -785,8 +862,42 @@ static int do_download_and_install(FILE *out, const UpdateInfo *info) {
         return 0;
     }
 
-    snprintf(tmp_zip, sizeof(tmp_zip), "%s\\his_update.zip", tmp_env);
-    snprintf(tmp_dir, sizeof(tmp_dir), "%s\\his_update", tmp_env);
+    /* 使用 GetTempPathA 获取系统 TEMP 目录，并按 PID 创建独立子目录，
+     * 避免可预测的固定路径被本机其他用户/进程抢占（symlink/race 攻击）。 */
+    tp_len = GetTempPathA(sizeof(temp_path), temp_path);
+    if (tp_len == 0 || tp_len >= sizeof(temp_path)) {
+        tui_print_error(out, "无法获取临时目录。");
+        return 0;
+    }
+
+    /* 先用 GetTempFileNameA 生成唯一 zip 文件名（系统会创建 0 字节占位文件），
+     * 后续 http_download_to_file 会以写覆盖。 */
+    if (GetTempFileNameA(temp_path, "his", 0, tmp_zip) == 0) {
+        tui_print_error(out, "无法生成临时文件名。");
+        return 0;
+    }
+
+    {
+        DWORD pid_val = GetCurrentProcessId();
+        int n = snprintf(tmp_dir, sizeof(tmp_dir),
+                         "%shis_update_%lu", temp_path, (unsigned long)pid_val);
+        if (n < 0 || (size_t)n >= sizeof(tmp_dir)) {
+            tui_print_error(out, "TEMP 路径过长。");
+            return 0;
+        }
+    }
+    /* 若残留同名目录，先删除再创建，确保权限和内容是本进程私有 */
+    {
+        const char *rd_argv[] = { "cmd.exe", "/c", "rd", "/s", "/q", tmp_dir, NULL };
+        (void)run_process(rd_argv);
+    }
+    if (!CreateDirectoryA(tmp_dir, NULL)) {
+        DWORD gle = GetLastError();
+        if (gle != ERROR_ALREADY_EXISTS) {
+            tui_print_error(out, "无法创建临时解压目录。");
+            return 0;
+        }
+    }
 
     fprintf(out, "\n");
     tui_print_info(out, "正在下载更新包...");
@@ -811,21 +922,36 @@ static int do_download_and_install(FILE *out, const UpdateInfo *info) {
         return 0;
     }
 
-    /* 清理旧的解压目录（argv 模式调用 cmd.exe /c rd） */
+    /* 解压前已在上方 CreateDirectoryA 创建并清空了 tmp_dir。 */
     tui_print_info(out, "正在解压更新包...");
     fflush(out);
-    {
-        const char *rd_argv[] = { "cmd.exe", "/c", "rd", "/s", "/q", tmp_dir, NULL };
-        (void)run_process(rd_argv); /* 目录可能不存在，忽略返回值 */
-    }
 
     /* 用 PowerShell 的 Expand-Archive 解压；-Path / -DestinationPath
-     * 由 PowerShell 参数解析器处理，不经过 shell 字符串拼接。 */
+     * 由 PowerShell 参数解析器处理，不经过 shell 字符串拼接。
+     * 路径中的反斜杠在 PowerShell 双引号字符串里需转义为 ``\``。 */
     {
-        char ps_cmd[1024];
+        char ps_cmd[2048];
+        char zip_escaped[MAX_PATH * 2];
+        char dir_escaped[MAX_PATH * 2];
+        size_t i;
+        size_t zo = 0, dout = 0;
+        for (i = 0; tmp_zip[i] != '\0' && zo + 2 < sizeof(zip_escaped); ++i) {
+            if (tmp_zip[i] == '\\' || tmp_zip[i] == '"' || tmp_zip[i] == '`' || tmp_zip[i] == '$') {
+                zip_escaped[zo++] = '`';
+            }
+            zip_escaped[zo++] = tmp_zip[i];
+        }
+        zip_escaped[zo] = '\0';
+        for (i = 0; tmp_dir[i] != '\0' && dout + 2 < sizeof(dir_escaped); ++i) {
+            if (tmp_dir[i] == '\\' || tmp_dir[i] == '"' || tmp_dir[i] == '`' || tmp_dir[i] == '$') {
+                dir_escaped[dout++] = '`';
+            }
+            dir_escaped[dout++] = tmp_dir[i];
+        }
+        dir_escaped[dout] = '\0';
         snprintf(ps_cmd, sizeof(ps_cmd),
-            "Expand-Archive -LiteralPath \"$env:TEMP\\his_update.zip\" "
-            "-DestinationPath \"$env:TEMP\\his_update\" -Force");
+            "Expand-Archive -LiteralPath \"%s\" -DestinationPath \"%s\" -Force",
+            zip_escaped, dir_escaped);
         const char *ps_argv[] = {
             "powershell.exe", "-NoProfile",
             "-ExecutionPolicy", "Bypass",
@@ -856,11 +982,11 @@ static int do_download_and_install(FILE *out, const UpdateInfo *info) {
         last_slash = strrchr(exe_dir, '\\');
         if (last_slash) *(last_slash + 1) = '\0';
 
-        if ((size_t)(strlen(tmp_env) + 40) > sizeof(bat_path)) {
+        if ((size_t)(strlen(tmp_dir) + 40) > sizeof(bat_path)) {
             tui_print_error(out, "TEMP 路径过长。");
             return 0;
         }
-        snprintf(bat_path, sizeof(bat_path), "%s\\his_update\\his_updater.bat", tmp_env);
+        snprintf(bat_path, sizeof(bat_path), "%s\\his_updater.bat", tmp_dir);
 
         bat = fopen(bat_path, "w");
         if (bat == NULL) {
@@ -872,14 +998,14 @@ static int do_download_and_install(FILE *out, const UpdateInfo *info) {
         fprintf(bat, "echo 正在等待 HIS 退出...\r\n");
         fprintf(bat, "timeout /t 2 /nobreak >NUL\r\n");
         fprintf(bat, "echo 正在安装更新...\r\n");
-        fprintf(bat, "for /d %%%%D in (\"%%TEMP%%\\his_update\\*\") do (\r\n");
+        fprintf(bat, "for /d %%%%D in (\"%s\\*\") do (\r\n", tmp_dir);
         fprintf(bat, "    xcopy /E /Y /Q \"%%%%D\\*\" \"%s\"\r\n", exe_dir);
         fprintf(bat, ")\r\n");
         fprintf(bat, "echo 更新完成！正在重新启动...\r\n");
         fprintf(bat, "timeout /t 1 /nobreak >NUL\r\n");
         fprintf(bat, "start \"\" \"%shis.exe\"\r\n", exe_dir);
-        fprintf(bat, "rd /s /q \"%%TEMP%%\\his_update\" 2>NUL\r\n");
-        fprintf(bat, "del \"%%TEMP%%\\his_update.zip\" 2>NUL\r\n");
+        fprintf(bat, "rd /s /q \"%s\" 2>NUL\r\n", tmp_dir);
+        fprintf(bat, "del \"%s\" 2>NUL\r\n", tmp_zip);
         fprintf(bat, "del \"%%~f0\" 2>NUL\r\n");
         fclose(bat);
 
@@ -900,12 +1026,13 @@ static int do_download_and_install(FILE *out, const UpdateInfo *info) {
 
 #else
     /* ===== macOS / Linux 平台更新流程 ===== */
-    const char *tmp_zip = "/tmp/his_update.zip";
-    const char *tmp_dir = "/tmp/his_update";
+    char tmp_dir_buf[64];
+    char tmp_zip_buf[128];
+    const char *tmp_zip;
+    const char *tmp_dir;
     char exe_dir[512];
     char exe_path[512];
     char desktop_path[512];
-    ssize_t rlen;
     char *last_slash;
     char err[128];
 
@@ -914,6 +1041,33 @@ static int do_download_and_install(FILE *out, const UpdateInfo *info) {
         tui_print_error(out, err);
         return 0;
     }
+
+    /* 用 mkdtemp 在 /tmp 下创建本进程独占的目录（mode 0700），
+     * 避免使用可预测的 /tmp/his_update 路径触发 symlink/race 攻击。 */
+    {
+        size_t n = sizeof(tmp_dir_buf);
+        int written = snprintf(tmp_dir_buf, n, "/tmp/his_update_XXXXXX");
+        if (written < 0 || (size_t)written >= n) {
+            tui_print_error(out, "无法构造临时目录路径。");
+            return 0;
+        }
+    }
+    if (mkdtemp(tmp_dir_buf) == NULL) {
+        tui_print_error(out, "无法创建临时目录。");
+        return 0;
+    }
+    /* mkdtemp 默认 0700，再显式 chmod 一次防御 umask 异常的实现。 */
+    (void)chmod(tmp_dir_buf, S_IRWXU);
+
+    if ((size_t)snprintf(tmp_zip_buf, sizeof(tmp_zip_buf),
+                         "%s/his_update.zip", tmp_dir_buf) >= sizeof(tmp_zip_buf)) {
+        const char *rm_argv[] = { "rm", "-rf", tmp_dir_buf, NULL };
+        (void)run_process_quiet(rm_argv);
+        tui_print_error(out, "临时路径过长。");
+        return 0;
+    }
+    tmp_dir = tmp_dir_buf;
+    tmp_zip = tmp_zip_buf;
 
 #ifdef __APPLE__
     {
@@ -963,19 +1117,9 @@ static int do_download_and_install(FILE *out, const UpdateInfo *info) {
     tui_print_info(out, "正在解压更新包...");
     fflush(out);
 
-    /* rm -rf tmp_dir（目录可能不存在，忽略返回码） */
-    {
-        const char *rm_argv[] = { "rm", "-rf", tmp_dir, NULL };
-        (void)run_process_quiet(rm_argv);
-    }
-    /* mkdir -p tmp_dir */
-    {
-        const char *mk_argv[] = { "mkdir", "-p", tmp_dir, NULL };
-        if (run_process_quiet(mk_argv) != 0) {
-            tui_print_error(out, "无法创建临时解压目录。");
-            return 0;
-        }
-    }
+    /* tmp_dir 已由 mkdtemp 创建（mode 0700，独占）。无需再 rm/mkdir，
+     * 这样避免 TOCTOU/racing：从创建到使用都是同一 inode。 */
+
     /* unzip -q -o tmp_zip -d tmp_dir */
     {
         const char *uz_argv[] = { "unzip", "-q", "-o", tmp_zip, "-d", tmp_dir, NULL };
@@ -1163,6 +1307,10 @@ int UpdateChecker_prompt(FILE *out, FILE *in, const UpdateInfo *info) {
             tui_print_error(out, err);
             return 0;
         }
+#ifndef _WIN32
+        /* 让内核自动回收子进程，避免遗留 zombie（不会再 waitpid()）。 */
+        signal(SIGCHLD, SIG_IGN);
+#endif
 #ifdef __APPLE__
         {
             pid_t pid = fork();

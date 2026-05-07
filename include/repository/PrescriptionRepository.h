@@ -7,7 +7,10 @@
  * 全量加载和全量保存操作。
  *
  * 数据文件格式：每行一条处方记录，字段以管道符 '|' 分隔。
- * 表头：prescription_id|visit_id|medicine_id|quantity|usage
+ * 表头：prescription_id|visit_id|doctor_id|medicine_id|quantity|usage
+ *
+ * 兼容性：解析时如果遇到旧的 5 列格式（缺少 doctor_id），
+ * 会自动将 doctor_id 留空以保持向后兼容。
  */
 
 #ifndef HIS_REPOSITORY_PRESCRIPTION_REPOSITORY_H
@@ -18,8 +21,10 @@
 #include "domain/Prescription.h"
 #include "repository/TextFileRepository.h"
 
-/** 处方记录的字段数量 */
-#define PRESCRIPTION_REPOSITORY_FIELD_COUNT 5
+/** 处方记录的字段数量（含 doctor_id） */
+#define PRESCRIPTION_REPOSITORY_FIELD_COUNT 6
+/** 旧版处方记录的字段数量（不含 doctor_id），用于向后兼容解析 */
+#define PRESCRIPTION_REPOSITORY_LEGACY_FIELD_COUNT 5
 
 /**
  * @brief 处方仓储结构体

@@ -20,6 +20,7 @@
 typedef struct Prescription {
     char prescription_id[HIS_DOMAIN_ID_CAPACITY];  /* 处方唯一标识ID */
     char visit_id[HIS_DOMAIN_ID_CAPACITY];         /* 关联的就诊记录ID */
+    char doctor_id[HIS_DOMAIN_ID_CAPACITY];        /* 开方医生ID（可为空，向后兼容旧数据） */
     char medicine_id[HIS_DOMAIN_ID_CAPACITY];      /* 处方药品ID */
     int quantity;                                    /* 开药数量 */
     char usage[HIS_DOMAIN_TEXT_CAPACITY];           /* 用法用量说明 */

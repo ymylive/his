@@ -18,6 +18,10 @@
 
 /** 处方数据文件的表头行 */
 static const char PRESCRIPTION_REPOSITORY_HEADER[] =
+    "prescription_id|visit_id|doctor_id|medicine_id|quantity|usage";
+
+/** 旧版处方数据文件的表头行（用于向后兼容识别） */
+static const char PRESCRIPTION_REPOSITORY_LEGACY_HEADER[] =
     "prescription_id|visit_id|medicine_id|quantity|usage";
 
 /** 按处方ID查找时使用的上下文 */
@@ -107,15 +111,15 @@ static Result PrescriptionRepository_serialize(
     Result result = PrescriptionRepository_validate(prescription);
     if (!result.success) return result;
 
-    written = snprintf(line, capacity, "%s|%s|%s|%d|%s",
+    written = snprintf(line, capacity, "%s|%s|%s|%s|%d|%s",
         prescription->prescription_id, prescription->visit_id,
-        prescription->medicine_id, prescription->quantity,
-        prescription->usage);
+        prescription->doctor_id, prescription->medicine_id,
+        prescription->quantity, prescription->usage);
     if (written < 0 || (size_t)written >= capacity) return Result_make_failure("prescription line too long");
     return Result_make_success("prescription serialized");
 }
 
-/** 将一行文本解析为处方结构体 */
+/** 将一行文本解析为处方结构体（同时支持 6 列新格式和 5 列旧格式） */
 static Result PrescriptionRepository_parse_line(const char *line, Prescription *out_prescription) {
     char buffer[TEXT_FILE_REPOSITORY_LINE_CAPACITY];
     char *fields[PRESCRIPTION_REPOSITORY_FIELD_COUNT];
@@ -129,18 +133,35 @@ static Result PrescriptionRepository_parse_line(const char *line, Prescription *
     buffer[sizeof(buffer) - 1] = '\0';
     result = RepositoryUtils_split_pipe_line(buffer, fields, PRESCRIPTION_REPOSITORY_FIELD_COUNT, &field_count);
     if (!result.success) return result;
-    result = RepositoryUtils_validate_field_count(field_count, PRESCRIPTION_REPOSITORY_FIELD_COUNT);
-    if (!result.success) return result;
+
+    /* 同时接受 6 列（含 doctor_id）与 5 列（旧格式，doctor_id 留空）两种字段数 */
+    if (field_count != PRESCRIPTION_REPOSITORY_FIELD_COUNT
+        && field_count != PRESCRIPTION_REPOSITORY_LEGACY_FIELD_COUNT) {
+        return RepositoryUtils_validate_field_count(field_count, PRESCRIPTION_REPOSITORY_FIELD_COUNT);
+    }
 
     memset(out_prescription, 0, sizeof(*out_prescription));
     RepositoryUtils_copy_text(out_prescription->prescription_id, sizeof(out_prescription->prescription_id), fields[0]);
     RepositoryUtils_copy_text(out_prescription->visit_id, sizeof(out_prescription->visit_id), fields[1]);
-    RepositoryUtils_copy_text(out_prescription->medicine_id, sizeof(out_prescription->medicine_id), fields[2]);
 
-    result = RepositoryUtils_parse_int(fields[3], &out_prescription->quantity, "prescription quantity");
-    if (!result.success) return result;
+    if (field_count == PRESCRIPTION_REPOSITORY_FIELD_COUNT) {
+        RepositoryUtils_copy_text(out_prescription->doctor_id, sizeof(out_prescription->doctor_id), fields[2]);
+        RepositoryUtils_copy_text(out_prescription->medicine_id, sizeof(out_prescription->medicine_id), fields[3]);
 
-    RepositoryUtils_copy_text(out_prescription->usage, sizeof(out_prescription->usage), fields[4]);
+        result = RepositoryUtils_parse_int(fields[4], &out_prescription->quantity, "prescription quantity");
+        if (!result.success) return result;
+
+        RepositoryUtils_copy_text(out_prescription->usage, sizeof(out_prescription->usage), fields[5]);
+    } else {
+        /* 旧 5 列格式：doctor_id 留空，其它字段顺序按旧布局读取 */
+        out_prescription->doctor_id[0] = '\0';
+        RepositoryUtils_copy_text(out_prescription->medicine_id, sizeof(out_prescription->medicine_id), fields[2]);
+
+        result = RepositoryUtils_parse_int(fields[3], &out_prescription->quantity, "prescription quantity");
+        if (!result.success) return result;
+
+        RepositoryUtils_copy_text(out_prescription->usage, sizeof(out_prescription->usage), fields[4]);
+    }
 
     return PrescriptionRepository_validate(out_prescription);
 }
@@ -233,7 +254,9 @@ Result PrescriptionRepository_ensure_storage(const PrescriptionRepository *repos
         RepositoryUtils_strip_line_endings(line);
         if (RepositoryUtils_is_blank_line(line)) continue;
         fclose(file);
-        if (strcmp(line, PRESCRIPTION_REPOSITORY_HEADER) != 0) {
+        /* 同时接受新表头与旧表头（旧表头通过解析器自动按 5 列旧格式处理） */
+        if (strcmp(line, PRESCRIPTION_REPOSITORY_HEADER) != 0
+            && strcmp(line, PRESCRIPTION_REPOSITORY_LEGACY_HEADER) != 0) {
             return Result_make_failure("unexpected prescription header");
         }
         return Result_make_success("prescription storage ready");

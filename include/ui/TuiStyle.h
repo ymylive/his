@@ -27,8 +27,10 @@
 #define TUI_RESET       "\033[0m"
 #define TUI_BOLD        "\033[1m"
 #define TUI_DIM         "\033[2m"
+/* WARNING: cmd.exe ignores; some Linux fbcon renders blink as bright bg — avoid */
 #define TUI_ITALIC      "\033[3m"
 #define TUI_UNDERLINE   "\033[4m"
+/* WARNING: cmd.exe ignores; some Linux fbcon renders blink as bright bg — avoid */
 #define TUI_BLINK       "\033[5m"
 #define TUI_REVERSE     "\033[7m"
 
@@ -90,12 +92,13 @@
 #define TUI_OC_BORDER     "\033[38;2;51;65;85m"     /* #334155 边框色 */
 
 /* 功能色 */
-#define TUI_OC_ACCENT     "\033[38;2;34;197;94m"    /* #22C55E 主强调(绿) */
+#define TUI_OC_ACCENT     "\033[38;2;22;163;74m"    /* #16A34A 主强调(深绿) */
 #define TUI_OC_AMBER      "\033[38;2;245;158;11m"   /* #F59E0B 暖琥珀(提示) */
 #define TUI_OC_BLUE       "\033[38;2;59;130;246m"   /* #3B82F6 信息蓝 */
 #define TUI_OC_ERROR      "\033[38;2;239;68;68m"    /* #EF4444 错误红 */
 #define TUI_OC_WARN       "\033[38;2;245;158;11m"   /* #F59E0B 警告黄 */
 #define TUI_OC_SUCCESS    "\033[38;2;34;197;94m"     /* #22C55E 成功绿 */
+#define TUI_OC_PROMPT     "\033[38;2;56;189;248m"   /* #38BDF8 输入提示(天空蓝) */
 
 /* 强调背景 */
 #define TUI_OC_BG_ACCENT  "\033[48;2;34;197;94m"    /* #22C55E 绿色背景 */
@@ -224,6 +227,19 @@ const char *tui_role_bg(TuiRoleTheme theme);
 const char *tui_role_icon(TuiRoleTheme theme);
 /** @brief 获取角色主题的中文标签 */
 const char *tui_role_label(TuiRoleTheme theme);
+
+/* ═══════════════════════════════════════════════════════════════
+ *  颜色启用与主题访问 - NO_COLOR / dumb-term / 浅色主题
+ * ═══════════════════════════════════════════════════════════════ */
+
+/** @brief 颜色是否启用（NO_COLOR / TERM=dumb 时禁用） */
+int tui_color_enabled(void);
+/** @brief 包装 ANSI 序列：启用时返回 seq，否则返回空字符串 */
+const char *tui_color(const char *seq);
+/** @brief 文字色访问器（受浅色主题影响） */
+const char *tui_color_text(void);
+/** @brief 边框色访问器（受浅色主题影响） */
+const char *tui_color_border(void);
 
 /* ═══════════════════════════════════════════════════════════════
  *  屏幕操作 - 清屏、光标控制

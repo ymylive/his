@@ -2,6 +2,12 @@ cmake_minimum_required(VERSION 3.20)
 
 project(lightweight_his C)
 
+# ── 默认 Release 构建（带优化），允许 -DCMAKE_BUILD_TYPE=... 覆盖 ──
+if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
+    set(CMAKE_BUILD_TYPE Release CACHE STRING "Build type" FORCE)
+    set_property(CACHE CMAKE_BUILD_TYPE PROPERTY STRINGS Debug Release RelWithDebInfo MinSizeRel)
+endif()
+
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_C_STANDARD_REQUIRED ON)
 set(CMAKE_C_EXTENSIONS OFF)
@@ -13,6 +19,13 @@ if(NOT WIN32)
 endif()
 
 include(CTest)
+
+# ── LTO/IPO（仅 Release，编译器支持时启用） ──
+include(CheckIPOSupported)
+check_ipo_supported(RESULT _his_ipo_ok OUTPUT _his_ipo_msg)
+if(_his_ipo_ok)
+    set(CMAKE_INTERPROCEDURAL_OPTIMIZATION_RELEASE ON)
+endif()
 
 add_library(his_common
     src/common/IdGenerator.c
@@ -87,6 +100,31 @@ add_executable(his
 )
 
 target_link_libraries(his PRIVATE his_common)
+
+# ── 编译警告 / 安全加固 ──
+# GCC/Clang：诊断 + 栈保护 + 仅 Release 启用 _FORTIFY_SOURCE=2（避免 -O0 下的告警）
+# MSVC：等价的 /W3 /sdl
+if(MSVC)
+    target_compile_options(his_common PRIVATE /W3 /sdl)
+    target_compile_options(his        PRIVATE /W3 /sdl)
+else()
+    set(_his_warn_flags
+        -Wall
+        -Wextra
+        -Wformat=2
+        -Wshadow
+        -Wstrict-prototypes
+        -Wpointer-arith
+        -Wcast-align
+        -fstack-protector-strong
+    )
+    target_compile_options(his_common PRIVATE ${_his_warn_flags})
+    target_compile_options(his        PRIVATE ${_his_warn_flags})
+    target_compile_options(his_common PRIVATE
+        $<$<CONFIG:Release>:-D_FORTIFY_SOURCE=2>)
+    target_compile_options(his        PRIVATE
+        $<$<CONFIG:Release>:-D_FORTIFY_SOURCE=2>)
+endif()
 
 add_executable(test_result
     tests/test_result.c

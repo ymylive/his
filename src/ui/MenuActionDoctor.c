@@ -192,7 +192,6 @@ Result MenuAction_handle_doctor(MenuApplication *app, MenuAction action, FILE *i
                 &context,
                 "\n  " TUI_BOLD_YELLOW "[1]" TUI_RESET " 查询药品库存\n"
                 "  " TUI_BOLD_YELLOW "[2]" TUI_RESET " 开具处方\n"
-                "  " TUI_BOLD_YELLOW "[3]" TUI_RESET " 查看处方\n"
                 "\n请选择操作编号: ",
                 first_id,
                 sizeof(first_id)
@@ -268,6 +267,12 @@ Result MenuAction_handle_doctor(MenuApplication *app, MenuAction action, FILE *i
                     Prescription prescription;
                     memset(&prescription, 0, sizeof(prescription));
                     MenuApplication_copy_text(prescription.visit_id, sizeof(prescription.visit_id), second_id);
+                    /* 当前登录医生的 user_id 即为 doctor_id（约定：医生账号 user_id == doctor_id） */
+                    MenuApplication_copy_text(
+                        prescription.doctor_id,
+                        sizeof(prescription.doctor_id),
+                        app->has_authenticated_user != 0 ? app->authenticated_user.user_id : ""
+                    );
                     MenuApplication_copy_text(prescription.medicine_id, sizeof(prescription.medicine_id), third_id);
                     prescription.quantity = flag_one;
                     MenuApplication_copy_text(prescription.usage, sizeof(prescription.usage), text_value);
@@ -279,25 +284,6 @@ Result MenuAction_handle_doctor(MenuApplication *app, MenuAction action, FILE *i
                         sizeof(output_buffer)
                     );
                 }
-            } else if (strcmp(first_id, "3") == 0) {
-                result = MenuApplication_prompt_select_visit(
-                    app,
-                    &context,
-                    "就诊搜索关键字/编号(回车列出全部): ",
-                    "",
-                    app->has_authenticated_user != 0 ? app->authenticated_user.user_id : "",
-                    second_id,
-                    sizeof(second_id)
-                );
-                if (result.success == 0) {
-                    return result;
-                }
-                result = MenuApplication_query_prescriptions_by_visit(
-                    app,
-                    second_id,
-                    output_buffer,
-                    sizeof(output_buffer)
-                );
             } else {
                 return Result_make_failure("invalid prescription action");
             }

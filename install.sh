@@ -153,6 +153,43 @@ do_install() {
     curl -fSL --progress-bar -o "$DL_FILE" "$DOWNLOAD_URL" || fail "下载失败，请检查网络连接\n  URL: $DOWNLOAD_URL"
     success "下载完成"
 
+    # ── 校验 SHA-256（与 release 同目录的 SHA256SUMS 比对） ──
+    # 用 artifact 文件名替换为 SHA256SUMS，得到校验文件 URL
+    ARTIFACT_NAME="${DOWNLOAD_URL##*/}"
+    SUMS_URL="${DOWNLOAD_URL%/*}/SHA256SUMS"
+    SUMS_FILE="${TMPDIR_DL}/SHA256SUMS"
+
+    info "正在校验 SHA-256..."
+    if ! curl -fsSL -o "$SUMS_FILE" "$SUMS_URL" 2>/dev/null; then
+        rm -rf "$TMPDIR_DL"
+        echo "校验失败: SHA-256 不匹配，已中止安装"
+        exit 1
+    fi
+
+    EXPECTED_SHA="$(awk -v f="$ARTIFACT_NAME" '$2 == f {print $1}' "$SUMS_FILE" | head -n1)"
+    if [ -z "$EXPECTED_SHA" ]; then
+        rm -rf "$TMPDIR_DL"
+        echo "校验失败: SHA-256 不匹配，已中止安装"
+        exit 1
+    fi
+
+    if command -v shasum >/dev/null 2>&1; then
+        ACTUAL_SHA="$(shasum -a 256 "$DL_FILE" | awk '{print $1}')"
+    elif command -v sha256sum >/dev/null 2>&1; then
+        ACTUAL_SHA="$(sha256sum "$DL_FILE" | awk '{print $1}')"
+    else
+        rm -rf "$TMPDIR_DL"
+        echo "校验失败: SHA-256 不匹配，已中止安装"
+        exit 1
+    fi
+
+    if [ "$EXPECTED_SHA" != "$ACTUAL_SHA" ]; then
+        rm -rf "$TMPDIR_DL"
+        echo "校验失败: SHA-256 不匹配，已中止安装"
+        exit 1
+    fi
+    success "SHA-256 校验通过"
+
     # ── 解压 ──
     info "正在解压..."
     EXTRACT_DIR="${TMPDIR_DL}/extracted"
@@ -169,9 +206,53 @@ do_install() {
         INNER_DIR="$EXTRACT_DIR"
     fi
 
-    # ── 安装文件 ──
+    # ── 安装文件（白名单 — 拒绝任意路径穿越/可疑文件） ──
     info "正在安装到 $INSTALL_DIR ..."
-    cp -Rf "$INNER_DIR"/* "$INSTALL_DIR/" 2>/dev/null || true
+    mkdir -p "$INSTALL_DIR"
+
+    # 允许的顶层文件名（macOS bash 3.2 兼容：用普通数组 + 空格分隔的字符串）
+    HIS_ALLOW_FILES="his his.exe his_desktop his-wrapper README README.md README.txt LICENSE LICENSE.txt LICENSE.md start.command setup-macos.sh run_console.sh run_console.bat"
+    HIS_ALLOW_DIRS="data"
+
+    is_allowed_file() {
+        _name="$1"
+        for _a in $HIS_ALLOW_FILES; do
+            [ "$_name" = "$_a" ] && return 0
+        done
+        return 1
+    }
+    is_allowed_dir() {
+        _name="$1"
+        for _a in $HIS_ALLOW_DIRS; do
+            [ "$_name" = "$_a" ] && return 0
+        done
+        return 1
+    }
+
+    # 仅遍历 INNER_DIR 顶层；拒绝绝对路径、含 .. 的名字与未列入白名单的条目
+    for entry in "$INNER_DIR"/* "$INNER_DIR"/.[!.]*; do
+        [ -e "$entry" ] || continue
+        bn="$(basename "$entry")"
+        case "$bn" in
+            ''|.|..) continue ;;
+            /*|*..*|*/*) warn "拒绝可疑路径: $bn"; continue ;;
+        esac
+        if [ -d "$entry" ]; then
+            if is_allowed_dir "$bn"; then
+                cp -Rf "$entry" "$INSTALL_DIR/" 2>/dev/null || true
+            else
+                warn "跳过未授权目录: $bn"
+            fi
+        elif [ -f "$entry" ] || [ -L "$entry" ]; then
+            if is_allowed_file "$bn"; then
+                cp -f "$entry" "$INSTALL_DIR/" 2>/dev/null || true
+            else
+                warn "跳过未授权文件: $bn"
+            fi
+        else
+            warn "跳过未知类型: $bn"
+        fi
+    done
     rm -rf "$TMPDIR_DL"
 
     # ── 授权 ──

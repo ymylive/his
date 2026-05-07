@@ -131,23 +131,91 @@ function Do-Install {
     }
     Write-Ok "下载完成"
 
+    # ── 校验 SHA-256（与 release 同目录的 SHA256SUMS 比对） ──
+    $artifactName = [System.IO.Path]::GetFileName($downloadUrl)
+    $sumsUrl      = ($downloadUrl -replace '/[^/]+$', '/SHA256SUMS')
+    $sumsPath     = Join-Path $env:TEMP "his_install_SHA256SUMS"
+
+    Write-Info "正在校验 SHA-256..."
+    try {
+        $ProgressPreference = "SilentlyContinue"
+        Invoke-WebRequest -Uri $sumsUrl -OutFile $sumsPath -UseBasicParsing
+        $ProgressPreference = "Continue"
+    } catch {
+        Remove-Item -Force $tmpZip   -ErrorAction SilentlyContinue
+        Remove-Item -Force $sumsPath -ErrorAction SilentlyContinue
+        Write-Error "校验失败: SHA-256 不匹配，已中止安装"
+        exit 1
+    }
+
+    $expected = $null
+    foreach ($line in Get-Content $sumsPath) {
+        $parts = $line -split '\s+', 2
+        if ($parts.Length -ge 2 -and $parts[1].Trim() -eq $artifactName) {
+            $expected = $parts[0].Trim().ToLowerInvariant()
+            break
+        }
+    }
+    if (-not $expected) {
+        Remove-Item -Force $tmpZip   -ErrorAction SilentlyContinue
+        Remove-Item -Force $sumsPath -ErrorAction SilentlyContinue
+        Write-Error "校验失败: SHA-256 不匹配，已中止安装"
+        exit 1
+    }
+
+    $actual = (Get-FileHash -Algorithm SHA256 -Path $tmpZip).Hash.ToLowerInvariant()
+    if ($expected -ne $actual) {
+        Remove-Item -Force $tmpZip   -ErrorAction SilentlyContinue
+        Remove-Item -Force $sumsPath -ErrorAction SilentlyContinue
+        Write-Error "校验失败: SHA-256 不匹配，已中止安装"
+        exit 1
+    }
+    Remove-Item -Force $sumsPath -ErrorAction SilentlyContinue
+    Write-Ok "SHA-256 校验通过"
+
     # ── 解压 ──
     Write-Info "正在解压..."
     if (Test-Path $tmpDir) { Remove-Item -Recurse -Force $tmpDir }
     Expand-Archive -Path $tmpZip -DestinationPath $tmpDir -Force
     Write-Ok "解压完成"
 
-    # ── 安装 ──
+    # ── 安装（白名单 — 拒绝任意路径穿越/可疑文件） ──
     Write-Info "正在安装到 $InstallDir ..."
     New-Item -ItemType Directory -Force -Path $InstallDir | Out-Null
     New-Item -ItemType Directory -Force -Path $BinDir | Out-Null
 
     # 找到解压后的顶层文件夹
     $innerDir = Get-ChildItem -Path $tmpDir -Directory | Select-Object -First 1
-    if ($innerDir) {
-        Copy-Item -Path (Join-Path $innerDir.FullName "*") -Destination $InstallDir -Recurse -Force
-    } else {
-        Copy-Item -Path (Join-Path $tmpDir "*") -Destination $InstallDir -Recurse -Force
+    $sourceRoot = if ($innerDir) { $innerDir.FullName } else { $tmpDir }
+
+    $allowFiles = @(
+        "his", "his.exe", "his_desktop", "his_desktop.exe", "his-wrapper",
+        "README", "README.md", "README.txt",
+        "LICENSE", "LICENSE.txt", "LICENSE.md",
+        "start.command", "setup-macos.sh", "run_console.sh", "run_console.bat"
+    )
+    $allowDirs = @("data")
+
+    Get-ChildItem -Path $sourceRoot -Force | ForEach-Object {
+        $name = $_.Name
+        # 拒绝绝对路径片段、含 .. 的名字、含路径分隔符的怪名字
+        if ($name -match '\.\.' -or $name -match '[\\/]' -or [System.IO.Path]::IsPathRooted($name)) {
+            Write-Warn "拒绝可疑路径: $name"
+            return
+        }
+        if ($_.PSIsContainer) {
+            if ($allowDirs -contains $name) {
+                Copy-Item -Path $_.FullName -Destination $InstallDir -Recurse -Force
+            } else {
+                Write-Warn "跳过未授权目录: $name"
+            }
+        } else {
+            if ($allowFiles -contains $name) {
+                Copy-Item -Path $_.FullName -Destination $InstallDir -Force
+            } else {
+                Write-Warn "跳过未授权文件: $name"
+            }
+        }
     }
 
     # ── 创建 launcher bat ──

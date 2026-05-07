@@ -134,7 +134,7 @@ static void test_interactive_role_selection_accepts_two_digit_number(void) {
         &action
     );
     assert(result.success == 1);
-    assert(action == MENU_ACTION_INPATIENT_QUERY_ORDERS);
+    assert(action == MENU_ACTION_INPATIENT_EXECUTE_ORDER);
     fclose(input);
 }
 

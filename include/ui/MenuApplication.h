@@ -217,7 +217,7 @@ void MenuApplication_reset_patient_session(MenuApplication *application);
  */
 Result MenuApplication_add_patient(
     MenuApplication *application,
-    const Patient *patient,
+    Patient *patient,
     char *buffer,
     size_t capacity
 );

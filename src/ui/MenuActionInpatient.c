@@ -3,15 +3,16 @@
  * @brief Inpatient domain action handlers for the HIS menu system
  *
  * Handles: MENU_ACTION_INPATIENT_QUERY_BED, MENU_ACTION_INPATIENT_LIST_WARDS,
- *          MENU_ACTION_INPATIENT_LIST_BEDS, MENU_ACTION_INPATIENT_ADMIT,
- *          MENU_ACTION_INPATIENT_DISCHARGE, MENU_ACTION_INPATIENT_QUERY_RECORD,
- *          MENU_ACTION_INPATIENT_TRANSFER_BED, MENU_ACTION_INPATIENT_DISCHARGE_CHECK
+ *          MENU_ACTION_INPATIENT_ADMIT, MENU_ACTION_INPATIENT_DISCHARGE,
+ *          MENU_ACTION_INPATIENT_QUERY_RECORD, MENU_ACTION_INPATIENT_TRANSFER_BED,
+ *          MENU_ACTION_INPATIENT_DISCHARGE_CHECK
  */
 
 #include "ui/MenuActionHandlers.h"
 
 #include <string.h>
 #include "ui/TuiStyle.h"
+#include "common/InputHelper.h"
 
 Result MenuAction_handle_inpatient(MenuApplication *app, MenuAction action, FILE *input, FILE *output) {
     MenuApplicationPromptContext context;
@@ -35,8 +36,7 @@ Result MenuAction_handle_inpatient(MenuApplication *app, MenuAction action, FILE
     switch (action) {
         case MENU_ACTION_INPATIENT_QUERY_BED:
         case MENU_ACTION_INPATIENT_LIST_WARDS:
-        case MENU_ACTION_INPATIENT_LIST_BEDS:
-            /* All three actions share the same ward->bed browse flow */
+            /* Both actions share the same ward->bed browse flow */
         {
             char selected_ward_id[HIS_DOMAIN_ID_CAPACITY] = {0};
             result = MenuApplication_browse_ward_table(app, &context, selected_ward_id, sizeof(selected_ward_id));
@@ -239,6 +239,10 @@ Result MenuAction_handle_inpatient(MenuApplication *app, MenuAction action, FILE
             if (result.success == 0) {
                 return result;
             }
+            if (!InputHelper_confirm(input, output, "确认执行转床?")) {
+                tui_print_warning(output, "已取消转床。");
+                return Result_make_failure("用户取消");
+            }
             result = MenuApplication_transfer_bed(
                 app,
                 first_id,
@@ -431,6 +435,10 @@ Result MenuAction_handle_inpatient(MenuApplication *app, MenuAction action, FILE
 
                 strncpy(first_id, cancel_panel.fields[0].value, sizeof(first_id) - 1);
                 strncpy(time_value, cancel_panel.fields[1].value, sizeof(time_value) - 1);
+            }
+            if (!InputHelper_confirm(input, output, "确认取消该医嘱? 此操作不可恢复")) {
+                tui_print_warning(output, "已取消操作。");
+                return Result_make_failure("用户取消");
             }
             tui_spinner_run(output, "正在取消医嘱...", 400);
             result = MenuApplication_cancel_inpatient_order(

@@ -16,8 +16,15 @@
 #include <windows.h>
 #else
 #include <dirent.h>
+#include <limits.h>
 #include <sys/stat.h>
 #include <sys/types.h>
+#endif
+
+/* 兜底：极少数老旧 toolchain 不通过 <limits.h> 暴露 PATH_MAX；
+   这里只用作 his_harden_data_permissions 的本地缓冲区上限。 */
+#ifndef PATH_MAX
+#define PATH_MAX 4096
 #endif
 
 /**
@@ -70,7 +77,8 @@ static void his_harden_data_permissions(void) {
         const char *dir_path = directories[i];
         DIR *dir = opendir(dir_path);
         struct dirent *entry;
-        char file_path[512];
+        /* 用 PATH_MAX 替换原 512 字节缓冲区，长路径不再被静默截断而漏 chmod。 */
+        char file_path[PATH_MAX];
 
         if (dir == NULL) {
             continue; /* 目录不存在（例如首次运行）由仓储按需创建 */
@@ -261,21 +269,7 @@ static int handle_patient_registration(MenuApplication *application,
         return 0;
     }
 
-    /* 从输出中提取系统生成的患者编号
-     * 输出格式: "患者已添加: PAT0101 | ..."
-     * 提取 ": " 后到 " |" 之间的 ID */
-    {
-        const char *id_start = strstr(reg_output, ": ");
-        const char *id_end = 0;
-        if (id_start) {
-            id_start += 2; /* skip ": " */
-            id_end = strstr(id_start, " |");
-            if (id_end && (size_t)(id_end - id_start) < sizeof(new_patient.patient_id)) {
-                memset(new_patient.patient_id, 0, sizeof(new_patient.patient_id));
-                memcpy(new_patient.patient_id, id_start, (size_t)(id_end - id_start));
-            }
-        }
-    }
+    /* MenuApplication_add_patient 已经把最终生成的 patient_id 回写到 new_patient.patient_id */
 
     /* 创建用户账号（用自定义用户名作为登录账号） */
     result = AuthService_register_user(
@@ -298,7 +292,7 @@ static int handle_patient_registration(MenuApplication *application,
     fprintf(output_stream, "\n");
     tui_print_kv_colored(output_stream, "您的用户名", reg_username, TUI_BOLD_CYAN);
     tui_print_kv_colored(output_stream, "您的患者编号", new_patient.patient_id, TUI_BOLD_CYAN);
-    tui_print_info(output_stream, "请牢记您的用户名和密码，使用用户名登录系统。");
+    tui_print_info(output_stream, "请牢记您的用户名和密码。登录时可使用「用户名」或「患者编号」任一项。");
     fprintf(output_stream, "\n");
     tui_print_info(output_stream, "按回车返回登录...");
     fflush(output_stream);
@@ -336,9 +330,17 @@ static int handle_login_flow(MenuApplication *application,
     for (;;) {
         int read_result = 0;
 
-        snprintf(prompt_buf, sizeof(prompt_buf),
-            "请输入[%s]用户名 (ESC返回): ",
-            MenuController_role_label(role));
+        /* 患者支持两种登录账号：自定义用户名 或 PAT#### 患者编号；
+         * 其他角色仅按本角色的用户名登录。 */
+        if (required_role == USER_ROLE_PATIENT) {
+            snprintf(prompt_buf, sizeof(prompt_buf),
+                "请输入[%s]用户名或患者编号(PAT####) (ESC返回): ",
+                MenuController_role_label(role));
+        } else {
+            snprintf(prompt_buf, sizeof(prompt_buf),
+                "请输入[%s]用户名 (ESC返回): ",
+                MenuController_role_label(role));
+        }
         tui_print_prompt(output_stream, prompt_buf);
         read_result = InputHelper_read_line(input_stream, input, sizeof(input));
         if (read_result == 0) {
@@ -633,6 +635,11 @@ int main(void) {
         if (role == MENU_ROLE_RESET_DEMO) {
             char reset_message[RESULT_MESSAGE_CAPACITY];
             tui_print_section(stdout, TUI_SPARKLE, "重置演示数据");
+            tui_print_warning(stdout, "此操作将清空当前所有数据并加载演示种子，且不可撤销。");
+            if (!InputHelper_confirm(stdin, stdout, "确认重置演示数据?")) {
+                tui_print_warning(stdout, "已取消重置。");
+                continue;
+            }
             tui_spinner_run(stdout, "正在重置数据...", 600);
             result = DemoData_reset(&paths, reset_message, sizeof(reset_message));
             if (RESULT_FAILED(result)) {
@@ -659,9 +666,11 @@ int main(void) {
             int read_result = 0;
 
             tui_print_section(stdout, TUI_HEART, "患者入口");
-            fprintf(stdout,
-                "\n  " TUI_BOLD_YELLOW "[1]" TUI_RESET " 登录已有账号\n"
-                "  " TUI_BOLD_YELLOW "[2]" TUI_RESET " 注册新账号\n\n");
+            fputc('\n', stdout);
+            tui_print_margin(stdout, 16);
+            fprintf(stdout, TUI_BOLD_YELLOW "[1]" TUI_RESET " 登录已有账号\n");
+            tui_print_margin(stdout, 16);
+            fprintf(stdout, TUI_BOLD_YELLOW "[2]" TUI_RESET " 注册新账号\n\n");
             tui_print_prompt(stdout, "请选择 (ESC返回): ");
             read_result = InputHelper_read_line(stdin, choice, sizeof(choice));
             if (read_result == 0) {

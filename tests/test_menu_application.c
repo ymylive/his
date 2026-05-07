@@ -282,6 +282,31 @@ static void seed_patient(
     assert(PatientRepository_append(&repository, &patient).success == 1);
 }
 
+static void seed_prescription(
+    const MenuApplicationTestContext *context,
+    const char *prescription_id,
+    const char *visit_id,
+    const char *medicine_id,
+    int quantity
+) {
+    PrescriptionRepository repository;
+    Prescription prescription;
+    Result result;
+
+    memset(&prescription, 0, sizeof(prescription));
+    copy_text(prescription.prescription_id, sizeof(prescription.prescription_id), prescription_id);
+    copy_text(prescription.visit_id, sizeof(prescription.visit_id), visit_id);
+    copy_text(prescription.medicine_id, sizeof(prescription.medicine_id), medicine_id);
+    prescription.quantity = quantity;
+    copy_text(prescription.usage, sizeof(prescription.usage), "tid po");
+
+    result = PrescriptionRepository_init(&repository, context->prescription_path);
+    assert(result.success == 1);
+    result = PrescriptionRepository_ensure_storage(&repository);
+    assert(result.success == 1);
+    assert(PrescriptionRepository_append(&repository, &prescription).success == 1);
+}
+
 static void seed_ward_and_bed(const MenuApplicationTestContext *context) {
     WardRepository ward_repository;
     BedRepository bed_repository;
@@ -851,6 +876,9 @@ static void test_pharmacy_flow_add_restock_dispense_and_low_stock(void) {
     result = DispenseRecordRepository_init(&record_repository, context.dispense_record_path);
     assert(result.success == 1);
 
+    /* 发药严格校验依赖 prescriptions.txt 中存在匹配处方 */
+    seed_prescription(&context, "RX4001", "VIS4001", "MED4001", 6);
+
     memset(output, 0, sizeof(output));
     result = MenuApplication_add_medicine(
         &application,
@@ -1007,7 +1035,8 @@ static void test_execute_action_ward_transfer_bed_moves_inpatient_to_target_bed(
         MENU_ACTION_INPATIENT_TRANSFER_BED,
         "ADM0001\n"
         "BED0002\n"
-        "2026-03-21T09:00\n",
+        "2026-03-21T09:00\n"
+        "y\n",
         output,
         sizeof(output)
     );
@@ -1316,6 +1345,8 @@ static void test_patient_session_authorizes_only_bound_patient_routes(void) {
         sizeof(output)
     );
     assert(result.success == 1);
+    seed_prescription(&context, "RX7001", "VIS7001", "MED7001", 2);
+    seed_prescription(&context, "RX7002", "VIS7002", "MED7001", 1);
     result = MenuApplication_dispense_medicine(
         &application,
         "PAT7001",
@@ -1471,6 +1502,7 @@ static void test_execute_action_patient_query_dispense_lists_records(void) {
     );
     assert(result.success == 1);
 
+    seed_prescription(&context, "RX8001", "VIS8001", "MED8001", 3);
     result = MenuApplication_dispense_medicine(
         &application,
         "PAT8001",

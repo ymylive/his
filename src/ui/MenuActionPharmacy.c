@@ -3,14 +3,14 @@
  * @brief Pharmacy domain action handlers for the HIS menu system
  *
  * Handles: MENU_ACTION_PHARMACY_ADD_MEDICINE, MENU_ACTION_PHARMACY_RESTOCK,
- *          MENU_ACTION_PHARMACY_DISPENSE, MENU_ACTION_PHARMACY_QUERY_STOCK,
- *          MENU_ACTION_PHARMACY_LOW_STOCK
+ *          MENU_ACTION_PHARMACY_DISPENSE, MENU_ACTION_PHARMACY_QUERY_STOCK
  */
 
 #include "ui/MenuActionHandlers.h"
 
 #include <string.h>
 #include "ui/TuiStyle.h"
+#include "common/InputHelper.h"
 
 Result MenuAction_handle_pharmacy(MenuApplication *app, MenuAction action, FILE *input, FILE *output) {
     MenuApplicationPromptContext context;
@@ -47,12 +47,9 @@ Result MenuAction_handle_pharmacy(MenuApplication *app, MenuAction action, FILE 
             fprintf(output, "  库存: %d\n", medicine.stock);
             fprintf(output, "  低库存阈值: %d\n", medicine.low_stock_threshold);
             fprintf(output, "\n");
-            {
-                char confirm[16] = {0};
-                result = MenuApplication_prompt_line(&context, "确认添加? (Enter确认, ESC取消): ", confirm, sizeof(confirm));
-                if (result.success == 0) {
-                    return result;
-                }
+            if (!InputHelper_confirm(input, output, "确认添加该药品?")) {
+                tui_print_warning(output, "已取消添加。");
+                return Result_make_failure("用户取消");
             }
             result = MenuApplication_add_medicine(
                 app,
@@ -187,23 +184,6 @@ Result MenuAction_handle_pharmacy(MenuApplication *app, MenuAction action, FILE 
             );
             MenuApplication_print_result(output, output_buffer, result.success);
             return result;
-
-        case MENU_ACTION_PHARMACY_LOW_STOCK:
-        {
-            char selected_medicine_id[HIS_DOMAIN_ID_CAPACITY] = {0};
-            result = MenuApplication_browse_low_stock_table(app, &context, selected_medicine_id, sizeof(selected_medicine_id));
-            if (result.success && selected_medicine_id[0] != '\0') {
-                result = MenuApplication_query_medicine_detail(
-                    app,
-                    selected_medicine_id,
-                    output_buffer,
-                    sizeof(output_buffer),
-                    0
-                );
-                MenuApplication_print_result(output, output_buffer, result.success);
-            }
-            return Result_make_success("browse complete");
-        }
 
         default:
             return Result_make_failure("unknown pharmacy action");

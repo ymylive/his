@@ -24,6 +24,7 @@
 #if defined(_WIN32)
 #include <direct.h>
 #include <io.h>
+#include <windows.h>
 #define HIS_MKDIR(path) _mkdir(path)
 #define his_fsync(fd) _commit(fd)
 #define his_fileno(f) _fileno(f)
@@ -35,6 +36,17 @@
 #define his_fsync(fd) fsync(fd)
 #define his_fileno(f) fileno(f)
 #endif
+
+/*
+ * TODO(durability): header_validated 缓存字段
+ * 审计建议：在 ensure_header 调用路径上加一个 header_validated 标志位，避免每次写入都
+ * 重新校验文件首行表头。但 TextFileRepository 结构体在公共头文件 (TextFileRepository.h)
+ * 中定义，且 ensure_header 实际位于各业务仓储（UserRepository / PatientRepository 等）
+ * 内部，本任务仅允许编辑 TextFileRepository.c 与 main.c，无法在不修改头文件的情况下
+ * 新增字段，也无法跨文件修改各业务仓储的 ensure_header 实现。按任务说明此为 medium
+ * 优先级，暂时跳过；后续可在统一重构时把 header_validated 提升到本结构体并在此函数
+ * 中提供查询接口。
+ */
 
 #include "repository/RepositoryUtils.h"
 
@@ -449,8 +461,8 @@ Result TextFileRepository_append_line(
     }
 
     fclose(file);
-    /* 合规：每次追加后重申 0600，防御外部进程 chmod 或恢复默认 umask 的情况 */
-    TextFileRepository_secure_mode(repository->path);
+    /* 性能：不再每次追加都 chmod。文件在 ensure_file_exists 创建时已经是 0600，
+       O_APPEND 不会改变模式。统一在创建/保存路径上设权限即可。 */
     return Result_make_success("repository line appended");
 }
 
@@ -538,18 +550,29 @@ Result TextFileRepository_save_file(
         return Result_make_failure("failed to close temp file");
     }
 
-    /* Windows 平台上 rename 不支持覆盖已有文件，需先删除 */
+    /* 原子替换：将临时文件重命名为正式文件
+       - Windows: rename 不支持覆盖已有文件且非原子。改用 MoveFileExA 的
+         MOVEFILE_REPLACE_EXISTING + MOVEFILE_WRITE_THROUGH，保证替换在
+         文件系统层是原子的，并把元数据落盘，避免崩溃丢文件。
+       - POSIX: rename 本身就是原子覆盖，无需先 remove。 */
 #if defined(_WIN32)
-    remove(repository->path);
-#endif
-
-    /* 原子替换：将临时文件重命名为正式文件 */
+    if (!MoveFileExA(tmp_path, repository->path,
+                     MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH)) {
+        remove(tmp_path);
+        return Result_make_failure("failed to replace repository file");
+    }
+#else
     if (rename(tmp_path, repository->path) != 0) {
         remove(tmp_path);
         return Result_make_failure("failed to replace repository file");
     }
+#endif
 
-    /* 合规：rename 保留源文件权限（临时文件虽已创建为 0600，仍显式重申一次） */
+    /* 合规：rename/MoveFileExA 后强制 0600，修复 data/round_records.txt 等
+       历史文件可能残留的 0644 权限漂移（POSIX 显式 chmod；Windows 留待 ACL）。 */
+#ifndef _WIN32
+    (void)chmod(repository->path, 0600);
+#endif
     TextFileRepository_secure_mode(repository->path);
     return Result_make_success("repository file saved");
 }

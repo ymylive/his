@@ -798,3 +798,48 @@ InputEvent InputHelper_read_key(FILE *input) {
     }
 #endif
 }
+
+/**
+ * @brief Y/N 确认提示读取器
+ *
+ * 输出 prompt + " [y/N]: "，读取一行；返回 1 仅当首个非空白字符为
+ * 'y' 或 'Y'（默认拒绝）。读取失败、EOF、ESC 取消或空行返回 0。
+ *
+ * @param input  输入流（通常为 stdin）
+ * @param output 输出流（通常为 stdout）
+ * @param prompt 提示文本（不含 [y/N] 后缀；由本函数追加）
+ * @return 用户确认返回 1，否则返回 0
+ */
+int InputHelper_confirm(FILE *input, FILE *output, const char *prompt) {
+    char buffer[64];
+    int read_status = 0;
+    const char *cursor = 0;
+
+    if (input == 0) {
+        return 0;
+    }
+
+    if (output != 0) {
+        if (prompt != 0 && prompt[0] != '\0') {
+            fprintf(output, "%s [y/N]: ", prompt);
+        } else {
+            fprintf(output, "[y/N]: ");
+        }
+        fflush(output);
+    }
+
+    read_status = InputHelper_read_line(input, buffer, sizeof(buffer));
+    if (read_status != 1) {
+        return 0;
+    }
+
+    cursor = buffer;
+    while (*cursor != '\0' && isspace((unsigned char)*cursor) != 0) {
+        cursor++;
+    }
+
+    if (*cursor == 'y' || *cursor == 'Y') {
+        return 1;
+    }
+    return 0;
+}

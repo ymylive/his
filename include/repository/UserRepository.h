@@ -71,4 +71,24 @@ Result UserRepository_find_by_user_id(
     User *out_user
 );
 
+/**
+ * @brief 按关联的患者编号查找用户
+ *
+ * 用于患者使用 PAT#### 格式的患者编号登录的场景：
+ * 该编号不是 user_id，但记录在 User.patient_id 字段中，需要按这个字段
+ * 反向查找对应的用户账号（自定义用户名）。
+ *
+ * 仅匹配 role == USER_ROLE_PATIENT 的记录，避免与其他角色冲突。
+ *
+ * @param repository  用户仓储实例指针
+ * @param patient_id  患者编号（如 "PAT0001"）
+ * @param out_user    输出参数，存放找到的用户数据
+ * @return 找到返回 success；未找到或参数无效时返回 failure
+ */
+Result UserRepository_find_by_patient_id(
+    const UserRepository *repository,
+    const char *patient_id,
+    User *out_user
+);
+
 #endif

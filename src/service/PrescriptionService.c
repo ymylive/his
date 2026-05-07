@@ -89,6 +89,12 @@ static Result PrescriptionService_validate_prescription(const Prescription *pres
         return result;
     }
 
+    /* doctor_id 为可选字段，仅校验其字符合法性（向后兼容旧数据可为空） */
+    result = PrescriptionService_validate_optional_text(prescription->doctor_id, "doctor id");
+    if (result.success == 0) {
+        return result;
+    }
+
     result = PrescriptionService_validate_required_text(prescription->medicine_id, "medicine id");
     if (result.success == 0) {
         return result;

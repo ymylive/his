@@ -93,4 +93,17 @@ typedef struct InputEvent {
 
 InputEvent InputHelper_read_key(FILE *input);
 
+/**
+ * @brief Y/N 确认提示读取器
+ *
+ * 打印 prompt 后追加 " [y/N]: "，读取一行，仅当首个非空白字符为
+ * 'y' 或 'Y' 时返回 1（默认拒绝/否决）。
+ *
+ * @param input  输入流（通常为 stdin）
+ * @param output 输出流（通常为 stdout，传 NULL 表示不打印提示）
+ * @param prompt 提示文本（不需要包含 [y/N]）
+ * @return 用户确认返回 1，否则返回 0
+ */
+int InputHelper_confirm(FILE *input, FILE *output, const char *prompt);
+
 #endif

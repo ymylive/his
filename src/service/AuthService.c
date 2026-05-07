@@ -20,6 +20,8 @@
 
 #ifdef _WIN32
 #include <windows.h>
+#else
+#include <unistd.h>
 #endif
 
 #include "common/StringUtils.h"
@@ -78,11 +80,47 @@ static long AuthService_now(void) {
 }
 
 /**
- * @brief 审计日志记录（若 AuditService 未就绪则输出到 stderr）
+ * @brief 审计日志记录（若 AuditService 未就绪则输出到 stderr 并追加 data/audit.log）
+ *
+ * Fallback 路径不仅打印到 stderr（保留 dev 模式可见性），同时追加到
+ * data/audit.log，使日志在缺少 AuditService 注入时仍然落盘。日志行格式
+ * 与 AuditService_record 保持一致：
+ *   <iso8601>|<event>|||||fallback|<formatted-detail>
+ * 其中 actor/role/entity/target/result 字段留空（fallback 路径无上下文），
+ * detail 为根据 fmt + 可变参数渲染出的整行原文。
  */
 #ifndef HIS_HAS_AUDIT
+static void AuthService_audit_fallback(const char *event, const char *rendered) {
+    FILE *fp = 0;
+    char ts[24];
+    time_t now = time(NULL);
+    struct tm *utc = gmtime(&now);
+
+    if (utc != 0 && strftime(ts, sizeof(ts), "%Y-%m-%dT%H:%M:%SZ", utc) == 0) {
+        ts[0] = '\0';
+    } else if (utc == 0) {
+        ts[0] = '\0';
+    }
+
+    fp = fopen("data/audit.log", "a");
+    if (fp != 0) {
+        fprintf(fp, "%s|%s|||||fallback|%s\n",
+                ts,
+                (event != 0) ? event : "AUDIT",
+                (rendered != 0) ? rendered : "");
+        fflush(fp);
+        fclose(fp);
+    }
+}
+
 #define HIS_AUDIT_LOG(fmt, ...) \
-    fprintf(stderr, "AUDIT: " fmt "\n", __VA_ARGS__)
+    do { \
+        char _his_audit_buf[512]; \
+        int _his_audit_n = snprintf(_his_audit_buf, sizeof(_his_audit_buf), fmt, __VA_ARGS__); \
+        (void)_his_audit_n; \
+        fprintf(stderr, "AUDIT: %s\n", _his_audit_buf); \
+        AuthService_audit_fallback("AUTH_EVENT", _his_audit_buf); \
+    } while (0)
 #endif
 
 /**
@@ -257,9 +295,8 @@ static void AuthService_save_lockout(
 ) {
     char path[TEXT_FILE_REPOSITORY_PATH_CAPACITY + 16];
     char tmp_path[TEXT_FILE_REPOSITORY_PATH_CAPACITY + 32];
-    char content[AUTH_LOCKOUT_FILE_CAPACITY];
-    FILE *file = 0;
-    size_t offset = 0;
+    FILE *src = 0;
+    FILE *dst = 0;
     int written = 0;
     int found_user = 0;
     char line[AUTH_LOCKOUT_LINE_CAPACITY];
@@ -271,18 +308,27 @@ static void AuthService_save_lockout(
         return;
     }
 
-    memset(content, 0, sizeof(content));
-    written = snprintf(content, sizeof(content), "%s\n", AUTH_LOCKOUT_HEADER);
-    if (written < 0 || (size_t)written >= sizeof(content)) return;
-    offset = (size_t)written;
+    /* 直接以流式方式写入临时文件，避免 32KB 栈缓冲在大量用户时静默截断 */
+    written = snprintf(tmp_path, sizeof(tmp_path), "%s.tmp", path);
+    if (written < 0 || (size_t)written >= sizeof(tmp_path)) return;
 
-    file = fopen(path, "r");
-    if (file != 0) {
-        while (fgets(line, sizeof(line), file) != 0) {
+    dst = fopen(tmp_path, "w");
+    if (dst == 0) return;
+
+    if (fprintf(dst, "%s\n", AUTH_LOCKOUT_HEADER) < 0) {
+        fclose(dst);
+        remove(tmp_path);
+        return;
+    }
+
+    src = fopen(path, "r");
+    if (src != 0) {
+        while (fgets(line, sizeof(line), src) != 0) {
             size_t len = strlen(line);
             char id_buf[HIS_DOMAIN_ID_CAPACITY];
             const char *pipe1 = 0;
             size_t id_len = 0;
+            int rc = 0;
 
             while (len > 0 && (line[len - 1] == '\n' || line[len - 1] == '\r')) {
                 line[--len] = '\0';
@@ -300,52 +346,64 @@ static void AuthService_save_lockout(
 
             if (strcmp(id_buf, user_id) == 0) {
                 /* 目标用户：写入新状态 */
-                written = snprintf(content + offset, sizeof(content) - offset,
-                                   "%s|%d|%ld\n",
-                                   user_id, state->failed_count, state->locked_until);
+                rc = fprintf(dst, "%s|%d|%ld\n",
+                             user_id, state->failed_count, state->locked_until);
                 found_user = 1;
             } else {
                 /* 其他用户：原样保留 */
-                written = snprintf(content + offset, sizeof(content) - offset,
-                                   "%s\n", line);
+                rc = fprintf(dst, "%s\n", line);
             }
-            if (written < 0 || (size_t)written >= sizeof(content) - offset) {
-                fclose(file);
+            if (rc < 0) {
+                fclose(src);
+                fclose(dst);
+                remove(tmp_path);
                 return;
             }
-            offset += (size_t)written;
         }
-        fclose(file);
+        fclose(src);
     }
 
     if (found_user == 0) {
-        written = snprintf(content + offset, sizeof(content) - offset,
-                           "%s|%d|%ld\n",
-                           user_id, state->failed_count, state->locked_until);
-        if (written < 0 || (size_t)written >= sizeof(content) - offset) {
+        if (fprintf(dst, "%s|%d|%ld\n",
+                    user_id, state->failed_count, state->locked_until) < 0) {
+            fclose(dst);
+            remove(tmp_path);
             return;
         }
-        offset += (size_t)written;
     }
 
-    /* 原子写：先写入临时文件再重命名 */
-    written = snprintf(tmp_path, sizeof(tmp_path), "%s.tmp", path);
-    if (written < 0 || (size_t)written >= sizeof(tmp_path)) return;
-    file = fopen(tmp_path, "w");
-    if (file == 0) return;
-    if (fwrite(content, 1, offset, file) != offset) {
-        fclose(file);
+    /* fflush + fsync 保证落盘后再重命名（崩溃安全） */
+    if (fflush(dst) != 0) {
+        fclose(dst);
         remove(tmp_path);
         return;
     }
-    if (fflush(file) != 0 || fclose(file) != 0) {
+#ifndef _WIN32
+    {
+        int fd = fileno(dst);
+        if (fd >= 0) {
+            (void)fsync(fd);
+        }
+    }
+#endif
+    if (fclose(dst) != 0) {
         remove(tmp_path);
         return;
     }
-    remove(path);
+
+    /* POSIX rename 是原子操作，会替换已存在的目标。不要先 remove(path)，
+     * 否则会出现 path 短暂消失的窗口，并发读取可能误判为 "未锁定"。 */
+#ifdef _WIN32
+    /* Windows 上 rename 不允许覆盖已有文件；用 MoveFileExA 实现原子替换。 */
+    if (!MoveFileExA(tmp_path, path,
+                     MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH)) {
+        remove(tmp_path);
+    }
+#else
     if (rename(tmp_path, path) != 0) {
         remove(tmp_path);
     }
+#endif
 }
 
 /**
@@ -1312,6 +1370,11 @@ Result AuthService_authenticate(
     AuthLockoutState lockout;
     long now_ts = 0;
     int account_locked = 0;
+    /* 解析后用于锁定/审计的真实 user_id：
+     *  - 若按 user_id 直查命中，等于输入串；
+     *  - 若按 PAT#### 反向查 patient_id 命中，则等于该用户的真实 user_id；
+     *  - 若都未命中，则保留原始输入串（让攻击者无法通过差异推断）。 */
+    const char *lockout_key = 0;
     Result result;
     Result find_result;
 
@@ -1336,15 +1399,32 @@ Result AuthService_authenticate(
         return Result_make_failure("required role invalid");
     }
 
-    /* 从存储中查找用户 */
+    /* 从存储中查找用户：先按 user_id 精确匹配。 */
     memset(&loaded_user, 0, sizeof(loaded_user));
     find_result = UserRepository_find_by_user_id(&service->user_repository, user_id, &loaded_user);
+
+    /* 兜底：若 user_id 直查未命中、且输入串形如 PAT#### / PAT 开头，
+     * 视为患者编号反向查 User.patient_id。命中后续流程仍按真实 user_id 走。
+     * 仅对患者角色账号生效（UserRepository_find_by_patient_id 内已做 role 过滤）。 */
+    if (find_result.success == 0 &&
+        (user_id[0] == 'P' || user_id[0] == 'p') &&
+        (user_id[1] == 'A' || user_id[1] == 'a') &&
+        (user_id[2] == 'T' || user_id[2] == 't')) {
+        Result patient_lookup =
+            UserRepository_find_by_patient_id(&service->user_repository, user_id, &loaded_user);
+        if (patient_lookup.success != 0) {
+            find_result = patient_lookup;
+        }
+    }
+
+    /* 选定锁定/审计 key：命中真实账号时用真实 user_id，否则保留输入串。 */
+    lockout_key = (find_result.success != 0) ? loaded_user.user_id : user_id;
 
     /* 加载锁定状态（找不到用户时返回零值） */
     lockout.failed_count = 0;
     lockout.locked_until = 0;
     if (find_result.success != 0) {
-        AuthService_load_lockout(service, user_id, &lockout);
+        AuthService_load_lockout(service, lockout_key, &lockout);
     }
     now_ts = AuthService_now();
     if (lockout.locked_until > now_ts) {
@@ -1411,8 +1491,28 @@ Result AuthService_authenticate(
         password_match = 0;
     }
 
-    /* 用户不存在或哈希格式无法识别，返回账号错误 */
+    /* 用户不存在或哈希格式无法识别，返回账号错误。
+     *
+     * 安全修复：未知用户也走与已知用户相同的锁定计数路径，避免攻击者
+     * 通过 "锁定 vs 仅密码错误" 的差异枚举有效用户。键采用调用方传入的
+     * user_id（已经通过 AuthService_validate_text 规范化）。 */
     if (find_result.success == 0 || user_hash_format_known == 0) {
+        AuthLockoutState unknown_lockout;
+        unknown_lockout.failed_count = 0;
+        unknown_lockout.locked_until = 0;
+        AuthService_load_lockout(service, lockout_key, &unknown_lockout);
+        if (unknown_lockout.locked_until != 0 && unknown_lockout.locked_until <= now_ts) {
+            unknown_lockout.failed_count = 0;
+            unknown_lockout.locked_until = 0;
+        }
+        unknown_lockout.failed_count += 1;
+        if (unknown_lockout.failed_count >= HIS_LOGIN_MAX_FAILURES) {
+            unknown_lockout.locked_until = now_ts + HIS_LOGIN_LOCKOUT_SECONDS;
+            HIS_AUDIT_LOG("ACCOUNT_LOCKED user=%s failed_count=%d locked_until=%ld",
+                          lockout_key, unknown_lockout.failed_count,
+                          unknown_lockout.locked_until);
+        }
+        AuthService_save_lockout(service, lockout_key, &unknown_lockout);
         auth_secure_zero(&loaded_user, sizeof(loaded_user));
         return Result_make_failure("账号错误");
     }
@@ -1421,7 +1521,7 @@ Result AuthService_authenticate(
         /* 即便密码正确，在锁定期内也拒绝登录 */
         auth_secure_zero(&loaded_user, sizeof(loaded_user));
         HIS_AUDIT_LOG("LOGIN_BLOCKED user=%s reason=account_locked locked_until=%ld",
-                      user_id, lockout.locked_until);
+                      lockout_key, lockout.locked_until);
         return Result_make_failure("account temporarily locked");
     }
 
@@ -1431,9 +1531,9 @@ Result AuthService_authenticate(
         if (lockout.failed_count >= HIS_LOGIN_MAX_FAILURES) {
             lockout.locked_until = now_ts + HIS_LOGIN_LOCKOUT_SECONDS;
             HIS_AUDIT_LOG("ACCOUNT_LOCKED user=%s failed_count=%d locked_until=%ld",
-                          user_id, lockout.failed_count, lockout.locked_until);
+                          lockout_key, lockout.failed_count, lockout.locked_until);
         }
-        AuthService_save_lockout(service, user_id, &lockout);
+        AuthService_save_lockout(service, lockout_key, &lockout);
         auth_secure_zero(&loaded_user, sizeof(loaded_user));
         return Result_make_failure("密码错误");
     }
@@ -1441,7 +1541,7 @@ Result AuthService_authenticate(
     /* 可选的角色匹配验证 */
     if (required_role != USER_ROLE_UNKNOWN && loaded_user.role != required_role) {
         auth_secure_zero(&loaded_user, sizeof(loaded_user));
-        HIS_AUDIT_LOG("LOGIN_FAILURE user=%s reason=role_mismatch", user_id);
+        HIS_AUDIT_LOG("LOGIN_FAILURE user=%s reason=role_mismatch", lockout_key);
         return Result_make_failure("user role mismatch");
     }
 
@@ -1449,10 +1549,14 @@ Result AuthService_authenticate(
     if (lockout.failed_count != 0 || lockout.locked_until != 0) {
         lockout.failed_count = 0;
         lockout.locked_until = 0;
-        AuthService_save_lockout(service, user_id, &lockout);
+        AuthService_save_lockout(service, lockout_key, &lockout);
     }
 
-    /* 惰性迁移：旧 FNV 哈希验证通过 → 以 pbkdf2v1 格式重写该用户记录 */
+    /* 惰性迁移：旧 FNV 哈希验证通过 → 以 pbkdf2v1 格式重写该用户记录。
+     *
+     * 安全增强：若原存储为无盐 legacy 哈希（最弱形式），同时把
+     * force_password_change 置 1，强制下次登录时本人修改密码。这样即便
+     * 旧哈希文件曾经泄露，攻击者也无法借由静默升级长期使用。 */
     if (stored_is_legacy) {
         char new_salt[33];
         char new_hash[HIS_USER_PASSWORD_HASH_CAPACITY];
@@ -1462,12 +1566,21 @@ Result AuthService_authenticate(
                 password, new_salt, HIS_PBKDF2_ITERATIONS,
                 new_hash, sizeof(new_hash));
             if (hash_result.success != 0) {
+                int was_nosalt = AuthService_is_legacy_nosalt_hash(loaded_user.password_hash);
                 strncpy(loaded_user.password_hash, new_hash,
                         sizeof(loaded_user.password_hash) - 1);
                 loaded_user.password_hash[sizeof(loaded_user.password_hash) - 1] = '\0';
+                if (was_nosalt) {
+                    /* 强制本人在下一次登录时修改密码 */
+                    loaded_user.force_password_change = 1;
+                    HIS_AUDIT_LOG(
+                        "PASSWORD_LEGACY_DETECTED user=%s detail=%s",
+                        lockout_key,
+                        "legacy unsalted hash auto-upgraded; force password change set");
+                }
                 /* 尝试保存更新后的用户（失败不影响本次登录） */
                 AuthService_update_user_hash(service, &loaded_user);
-                HIS_AUDIT_LOG("PASSWORD_HASH_UPGRADED user=%s algo=pbkdf2v1", user_id);
+                HIS_AUDIT_LOG("PASSWORD_HASH_UPGRADED user=%s algo=pbkdf2v1", lockout_key);
             }
             auth_secure_zero(new_hash, sizeof(new_hash));
         }

@@ -160,6 +160,7 @@ static void test_domain_entities_exist(void) {
     Prescription prescription = {
         "PRE0001",
         "VIS0001",
+        "DOC0001",
         "MED0001",
         2,
         "twice daily"

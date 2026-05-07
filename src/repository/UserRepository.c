@@ -464,3 +464,86 @@ Result UserRepository_find_by_user_id(
 
     return Result_make_success("user found");
 }
+
+/**
+ * @brief 按 patient_id 反向查找用户的回调上下文
+ */
+typedef struct UserRepositoryFindByPatientContext {
+    const char *patient_id;
+    User *out_user;
+    int found;
+} UserRepositoryFindByPatientContext;
+
+/**
+ * @brief 按 patient_id 查找的行处理回调（仅匹配 PATIENT 角色）
+ *
+ * 行处理与 find_by_user_id 类似：解析行，比对 patient_id 字段，命中后通过
+ * 返回 failure 提前终止 for_each_data_line 遍历（沿用既有惯例）。
+ */
+static Result UserRepository_find_by_patient_line_handler(const char *line, void *context) {
+    UserRepositoryFindByPatientContext *find_context =
+        (UserRepositoryFindByPatientContext *)context;
+    User parsed_user;
+    Result result = UserRepository_parse_line(line, &parsed_user);
+
+    if (result.success == 0) {
+        return result;
+    }
+
+    /* 仅认可患者角色账号通过 patient_id 反查；其他角色保留 user_id 单一登录路径 */
+    if (parsed_user.role != USER_ROLE_PATIENT) {
+        return Result_make_success("user role mismatch");
+    }
+    if (parsed_user.patient_id[0] == '\0') {
+        return Result_make_success("patient id empty");
+    }
+    if (strcmp(parsed_user.patient_id, find_context->patient_id) != 0) {
+        return Result_make_success("patient id mismatch");
+    }
+
+    *(find_context->out_user) = parsed_user;
+    find_context->found = 1;
+    return Result_make_failure("user found"); /* 提前终止遍历 */
+}
+
+/**
+ * @brief 按关联的患者编号查找用户（仅返回患者角色）
+ */
+Result UserRepository_find_by_patient_id(
+    const UserRepository *repository,
+    const char *patient_id,
+    User *out_user
+) {
+    UserRepositoryFindByPatientContext context;
+    Result result;
+
+    if (repository == 0 || patient_id == 0 || patient_id[0] == '\0' || out_user == 0) {
+        return Result_make_failure("user find arguments missing");
+    }
+
+    result = UserRepository_ensure_header(repository);
+    if (result.success == 0) {
+        return result;
+    }
+
+    memset(&context, 0, sizeof(context));
+    context.patient_id = patient_id;
+    context.out_user = out_user;
+
+    result = TextFileRepository_for_each_data_line(
+        &repository->file_repository,
+        UserRepository_find_by_patient_line_handler,
+        &context
+    );
+
+    if (context.found != 0) {
+        return Result_make_success("user found");
+    }
+
+    /* 与 find_by_user_id 一致：区分真正的错误与 "未找到" */
+    if (result.success == 0 && strcmp(result.message, "user found") != 0) {
+        return result;
+    }
+
+    return Result_make_failure("user not found");
+}

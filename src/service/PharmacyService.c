@@ -17,6 +17,8 @@
 
 #include "common/IdGenerator.h"
 #include "common/StringUtils.h"
+#include "domain/Prescription.h"
+#include "repository/PrescriptionRepository.h"
 #include "repository/RepositoryUtils.h"
 
 /**
@@ -410,6 +412,10 @@ Result PharmacyService_init(
         return Result_make_failure("pharmacy service missing");
     }
 
+    /* 默认未配置处方路径 → 严格校验降级为仅防双发；调用方需通过
+     * PharmacyService_set_prescription_path 显式启用严格校验。 */
+    service->prescription_path[0] = '\0';
+
     result = MedicineRepository_init(&service->medicine_repository, medicine_path);
     if (result.success == 0) {
         return result;
@@ -425,6 +431,30 @@ Result PharmacyService_init(
 
     /* 确保发药记录存储文件已就绪 */
     return DispenseRecordRepository_ensure_storage(&service->dispense_record_repository);
+}
+
+Result PharmacyService_set_prescription_path(
+    PharmacyService *service,
+    const char *prescription_path
+) {
+    size_t len;
+
+    if (service == 0) {
+        return Result_make_failure("pharmacy service missing");
+    }
+
+    if (prescription_path == 0 || prescription_path[0] == '\0') {
+        service->prescription_path[0] = '\0';
+        return Result_make_success("prescription path cleared");
+    }
+
+    len = strlen(prescription_path);
+    if (len + 1 > sizeof(service->prescription_path)) {
+        return Result_make_failure("prescription path too long");
+    }
+
+    memcpy(service->prescription_path, prescription_path, len + 1);
+    return Result_make_success("prescription path set");
 }
 
 /**
@@ -521,10 +551,168 @@ Result PharmacyService_restock_medicine(
 }
 
 /**
+ * @brief 由药品文件路径派生处方文件路径
+ *
+ * 处方文件按惯例与药品文件同目录命名（"medicines.txt" -> "prescriptions.txt"）。
+ * 该派生方式与 main.c 中 HIS_DATA_DIR 默认配置一致；若未匹配到约定后缀，
+ * 则返回 failure，调用方可降级到“仅扫描发药记录防双发”的兜底逻辑。
+ *
+ * @param medicine_path  药品数据文件路径
+ * @param buffer         输出缓冲区
+ * @param buffer_size    缓冲区容量
+ * @return Result        派生成功返回 success；约定不匹配或溢出返回 failure
+ */
+static Result PharmacyService_derive_prescription_path(
+    const char *medicine_path,
+    char *buffer,
+    size_t buffer_size
+) {
+    static const char kMedicineSuffix[] = "medicines.txt";
+    static const char kPrescriptionSuffix[] = "prescriptions.txt";
+    size_t medicine_len = 0;
+    size_t suffix_len = sizeof(kMedicineSuffix) - 1;
+    size_t replacement_len = sizeof(kPrescriptionSuffix) - 1;
+    size_t prefix_len = 0;
+
+    if (medicine_path == 0 || buffer == 0 || buffer_size == 0) {
+        return Result_make_failure("prescription path arguments missing");
+    }
+
+    medicine_len = strlen(medicine_path);
+    if (medicine_len < suffix_len) {
+        return Result_make_failure("medicine path too short");
+    }
+
+    if (strcmp(medicine_path + medicine_len - suffix_len, kMedicineSuffix) != 0) {
+        return Result_make_failure("medicine path suffix unexpected");
+    }
+
+    prefix_len = medicine_len - suffix_len;
+    if (prefix_len + replacement_len + 1 > buffer_size) {
+        return Result_make_failure("prescription path overflow");
+    }
+
+    memcpy(buffer, medicine_path, prefix_len);
+    memcpy(buffer + prefix_len, kPrescriptionSuffix, replacement_len);
+    buffer[prefix_len + replacement_len] = '\0';
+
+    return Result_make_success("prescription path derived");
+}
+
+/**
+ * @brief 校验处方与发药请求的一致性，并防止双发
+ *
+ * 该函数实现核心业务安全校验：
+ *   1. 处方必须存在；
+ *   2. 请求的药品ID必须与处方记录的药品ID一致（防止处方与药品错位）；
+ *   3. 请求的发药数量必须等于处方开药数量（系统按整方发放，无 remaining_qty）；
+ *   4. 同一处方+同一药品不得已存在已完成的发药记录（兜底：处方模型当前无
+ *      status / dispense_record_id 字段，故以发药记录的存在性作为已发标记）。
+ *
+ * @param service          指向药房服务结构体
+ * @param prescription_id  请求发药的处方ID
+ * @param medicine_id      请求发放的药品ID
+ * @param quantity         请求发放的数量
+ * @return Result          校验通过返回 success；否则返回带有中文消息的 failure
+ */
+static Result PharmacyService_validate_prescription_for_dispense(
+    PharmacyService *service,
+    const char *prescription_id,
+    const char *medicine_id,
+    int quantity
+) {
+    char prescription_path[TEXT_FILE_REPOSITORY_PATH_CAPACITY];
+    PrescriptionRepository prescription_repository;
+    Prescription prescription;
+    LinkedList existing_records;
+    LinkedListNode *current = 0;
+    Result result;
+
+    if (service == 0) {
+        return Result_make_failure("药房服务未初始化");
+    }
+
+    /* 1. 解析处方路径并尝试加载处方
+     *
+     * 优先级：调用方已通过 PharmacyService_set_prescription_path 设置的显式路径；
+     *        否则尝试由 medicine_path 按 medicines.txt → prescriptions.txt 派生。
+     * 都失败/未设置 → 退化为仅依赖第 4 步的"防双发扫描"，仍能阻止重复发药。 */
+    result.success = 0;
+    if (service->prescription_path[0] != '\0') {
+        size_t plen = strlen(service->prescription_path);
+        if (plen + 1 <= sizeof(prescription_path)) {
+            memcpy(prescription_path, service->prescription_path, plen + 1);
+            result = Result_make_success("prescription path from setter");
+        }
+    }
+    if (result.success == 0) {
+        result = PharmacyService_derive_prescription_path(
+            service->medicine_repository.storage.path,
+            prescription_path,
+            sizeof(prescription_path)
+        );
+    }
+    if (result.success == 1) {
+        result = PrescriptionRepository_init(&prescription_repository, prescription_path);
+    }
+    if (result.success == 1) {
+        result = PrescriptionRepository_ensure_storage(&prescription_repository);
+    }
+    if (result.success == 1) {
+        result = PrescriptionRepository_find_by_id(
+            &prescription_repository, prescription_id, &prescription
+        );
+        if (result.success == 0) {
+            /* 处方仓库可访问但条目缺失：拒绝（生产语义） */
+            return Result_make_failure("处方不存在或已失效");
+        }
+
+        /* 2. 处方药品ID必须匹配 */
+        if (strcmp(prescription.medicine_id, medicine_id) != 0) {
+            return Result_make_failure("处方药品与发药请求不一致");
+        }
+
+        /* 3. 发药数量必须等于处方开药数量（系统按整方发放） */
+        if (prescription.quantity != quantity) {
+            return Result_make_failure("发药数量与处方开药数量不一致");
+        }
+    }
+    /* 若 result.success == 0 且发生在 derive/init/ensure 阶段：
+     * 处方仓库不可用 → 跳过 1-3，仅依赖第 4 步防双发。 */
+
+    /* 4. 防双发：扫描已有发药记录，若同一处方+同一药品已发过则拒绝 */
+    LinkedList_init(&existing_records);
+    result = DispenseRecordRepository_find_by_prescription_id(
+        &service->dispense_record_repository, prescription_id, &existing_records
+    );
+    if (result.success == 0) {
+        DispenseRecordRepository_clear_list(&existing_records);
+        return Result_make_failure("无法核验处方发药历史");
+    }
+
+    current = existing_records.head;
+    while (current != 0) {
+        const DispenseRecord *existing = (const DispenseRecord *)current->data;
+
+        if (existing != 0 &&
+            strcmp(existing->medicine_id, medicine_id) == 0 &&
+            existing->status == DISPENSE_STATUS_COMPLETED) {
+            DispenseRecordRepository_clear_list(&existing_records);
+            return Result_make_failure("处方已发药，请勿重复发放");
+        }
+
+        current = current->next;
+    }
+    DispenseRecordRepository_clear_list(&existing_records);
+
+    return Result_make_success("prescription valid for dispense");
+}
+
+/**
  * @brief 发药操作的内部实现
  *
  * 统一处理普通发药和指定患者发药两种场景。
- * 流程：校验所有参数 -> 加载药品数据 -> 查找目标药品 ->
+ * 流程：校验所有参数 -> 校验处方一致性与防双发 -> 加载药品数据 -> 查找目标药品 ->
  * 检查库存是否充足 -> 构建发药记录 -> 扣减库存 -> 保存药品数据 ->
  * 追加发药记录 -> 若追加失败则回滚库存。
  *
@@ -589,6 +777,14 @@ static Result PharmacyService_dispense_medicine_internal(
     }
 
     result = PharmacyService_validate_quantity(quantity, "dispense quantity");
+    if (result.success == 0) {
+        return result;
+    }
+
+    /* 业务安全校验：处方真实性、药品/数量一致性、防双发 */
+    result = PharmacyService_validate_prescription_for_dispense(
+        service, prescription_id, medicine_id, quantity
+    );
     if (result.success == 0) {
         return result;
     }

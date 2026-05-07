@@ -20,9 +20,72 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
 
 #define MENU_BOX_WIDTH 44              /**< 菜单框的总宽度（字符数） */
 #define MENU_INNER     (MENU_BOX_WIDTH - 2)  /**< 菜单框内部可用宽度 */
+
+/* ── 持久状态栏缓存（由 MenuApplication 在登录时设置） ── */
+static char g_status_label[128] = {0};
+static int  g_status_theme = 0;
+
+void MenuController_set_status_label(const char *label) {
+    if (label == 0 || label[0] == '\0') {
+        g_status_label[0] = '\0';
+        return;
+    }
+    strncpy(g_status_label, label, sizeof(g_status_label) - 1);
+    g_status_label[sizeof(g_status_label) - 1] = '\0';
+}
+
+void MenuController_set_status_theme(int theme_id) {
+    g_status_theme = theme_id;
+}
+
+/**
+ * @brief 在菜单重绘起点打印持久状态栏（无登录时静默跳过）
+ *
+ * 拼接形如 "医生 王大夫 (12:34)" 的标签：原标签 + 当前 HH:MM。
+ * 调用 tui_print_status_bar_themed 输出，配色由当前角色主题决定。
+ */
+static void MenuController_render_status_bar(FILE *out) {
+    char composed[160];
+    time_t now = 0;
+    struct tm *lt = 0;
+    char hhmm[8] = {0};
+    int term_width = 0;
+    int label_width = 0;
+    const char *hint = "[F1 \xe5\xb8\xae\xe5\x8a\xa9 / Q \xe9\x80\x80\xe5\x87\xba]"; /* [F1 帮助 / Q 退出] */
+
+    if (out == 0 || g_status_label[0] == '\0') {
+        return;
+    }
+
+    now = time(0);
+    lt = localtime(&now);
+    if (lt != 0) {
+        strftime(hhmm, sizeof(hhmm), "%H:%M", lt);
+    }
+
+    if (hhmm[0] != '\0') {
+        snprintf(composed, sizeof(composed), "%s (%s)", g_status_label, hhmm);
+    } else {
+        snprintf(composed, sizeof(composed), "%s", g_status_label);
+    }
+
+    tui_print_status_bar_themed(out, (TuiRoleTheme)g_status_theme, composed);
+
+    /* 右对齐键位提示：仅在终端宽度可用时尝试，否则左对齐另起一行 */
+    term_width = tui_get_terminal_width();
+    label_width = tui_display_width(composed) + 6; /* 状态栏图标/边距估算 */
+    if (term_width > 0 && term_width > label_width + tui_display_width(hint) + 2) {
+        int pad = term_width - label_width - tui_display_width(hint) - 1;
+        /* 在已经打印的状态栏行之上叠加：上移一行、移到指定列 */
+        fprintf(out, "\033[1A\033[%dC" TUI_OC_DIM "%s" TUI_RESET "\n", pad > 0 ? pad : 1, hint);
+    } else {
+        fprintf(out, TUI_OC_DIM "%s" TUI_RESET "\n", hint);
+    }
+}
 
 /**
  * @brief 菜单选项结构体 - 描述菜单中的一个可选项
@@ -185,15 +248,14 @@ static const MenuOption MENU_INPATIENT_OPTIONS[] = {
     {3, MENU_ACTION_INPATIENT_DISCHARGE, "出院办理", TUI_TRIANGLE},
     {4, MENU_ACTION_INPATIENT_QUERY_RECORD, "住院状态查询", TUI_LOZENGE},
     {5, MENU_ACTION_INPATIENT_LIST_WARDS, "查看病房信息", TUI_STAR},
-    {6, MENU_ACTION_INPATIENT_LIST_BEDS, "查看床位状态", TUI_CIRCLE_O},
-    {7, MENU_ACTION_INPATIENT_TRANSFER_BED, "床位调整/转床", TUI_DIAMOND},
-    {8, MENU_ACTION_INPATIENT_DISCHARGE_CHECK, "出院前检查", TUI_MEDICAL},
-    {9, MENU_ACTION_INPATIENT_CREATE_ORDER, "开具医嘱", TUI_STAR},
-    {10, MENU_ACTION_INPATIENT_QUERY_ORDERS, "查看医嘱", TUI_CIRCLE},
-    {11, MENU_ACTION_INPATIENT_EXECUTE_ORDER, "执行医嘱", TUI_MEDICAL},
-    {12, MENU_ACTION_INPATIENT_CANCEL_ORDER, "取消医嘱", TUI_HEAVY_CROSS},
-    {13, MENU_ACTION_INPATIENT_NURSING_CREATE, "记录护理", TUI_HEART},
-    {14, MENU_ACTION_INPATIENT_NURSING_QUERY, "查看护理记录", TUI_MEDICAL},
+    {6, MENU_ACTION_INPATIENT_TRANSFER_BED, "床位调整/转床", TUI_DIAMOND},
+    {7, MENU_ACTION_INPATIENT_DISCHARGE_CHECK, "出院前检查", TUI_MEDICAL},
+    {8, MENU_ACTION_INPATIENT_CREATE_ORDER, "开具医嘱", TUI_STAR},
+    {9, MENU_ACTION_INPATIENT_QUERY_ORDERS, "查看医嘱", TUI_CIRCLE},
+    {10, MENU_ACTION_INPATIENT_EXECUTE_ORDER, "执行医嘱", TUI_MEDICAL},
+    {11, MENU_ACTION_INPATIENT_CANCEL_ORDER, "取消医嘱", TUI_HEAVY_CROSS},
+    {12, MENU_ACTION_INPATIENT_NURSING_CREATE, "记录护理", TUI_HEART},
+    {13, MENU_ACTION_INPATIENT_NURSING_QUERY, "查看护理记录", TUI_MEDICAL},
     {0, MENU_ACTION_BACK, "返回上级菜单", TUI_ARROW_R}
 };
 
@@ -203,7 +265,6 @@ static const MenuOption MENU_PHARMACY_OPTIONS[] = {
     {2, MENU_ACTION_PHARMACY_RESTOCK, "药品入库", TUI_TRIANGLE},
     {3, MENU_ACTION_PHARMACY_DISPENSE, "药品出库/发药", TUI_DIAMOND},
     {4, MENU_ACTION_PHARMACY_QUERY_STOCK, "库存盘点/查询库存", TUI_STAR},
-    {5, MENU_ACTION_PHARMACY_LOW_STOCK, "缺药提醒/库存不足提醒", TUI_LIGHTNING},
     {0, MENU_ACTION_BACK, "返回上级菜单", TUI_ARROW_R}
 };
 
@@ -414,6 +475,9 @@ Result MenuController_render_main_menu(char *buffer, size_t capacity) {
         return Result_make_failure("menu buffer too small");
     }
     if (menu_append_item(buffer, capacity, &used, 6, TUI_SPARKLE, "重置演示数据", 0) < 0) {
+        return Result_make_failure("menu buffer too small");
+    }
+    if (menu_append_item(buffer, capacity, &used, 7, TUI_HEART, "护士", 0) < 0) {
         return Result_make_failure("menu buffer too small");
     }
     if (menu_append_item(buffer, capacity, &used, 0, TUI_ARROW_R, "退出系统", 1) < 0) {
@@ -675,8 +739,6 @@ const char *MenuController_action_label(MenuAction action) {
             return "病区床位查询";
         case MENU_ACTION_INPATIENT_LIST_WARDS:
             return "查看病房信息";
-        case MENU_ACTION_INPATIENT_LIST_BEDS:
-            return "查看床位状态";
         case MENU_ACTION_INPATIENT_TRANSFER_BED:
             return "床位调整/转床";
         case MENU_ACTION_INPATIENT_DISCHARGE_CHECK:
@@ -701,8 +763,6 @@ const char *MenuController_action_label(MenuAction action) {
             return "药品出库/发药";
         case MENU_ACTION_PHARMACY_QUERY_STOCK:
             return "库存盘点/查询库存";
-        case MENU_ACTION_PHARMACY_LOW_STOCK:
-            return "缺药提醒/库存不足提醒";
         case MENU_ACTION_BACK:
             return "返回上级菜单";
         default:
@@ -746,6 +806,13 @@ Result MenuController_interactive_select(
 
     for (;;) {
         if (redraw) {
+            /* 持久状态栏：在菜单标题之前显示 "角色 用户名 (HH:MM)" */
+            if (g_status_label[0] != '\0') {
+                fprintf(stdout, "\0337");           /* 保存光标 */
+                fprintf(stdout, "\033[1;1H\033[K"); /* 跳到第1行并清行 */
+                MenuController_render_status_bar(stdout);
+                fprintf(stdout, "\0338");           /* 恢复光标 */
+            }
             for (i = 0; i < option_count; i++) {
                 TuiPanel_move_to(stdout, p, (int)(3 + i), 2);
                 if (i == selected) {
@@ -760,6 +827,16 @@ Result MenuController_interactive_select(
                             options[i].selection, options[i].label);
                 }
             }
+            /* FIX 3: 在选项列表之后打印按键提示（dim） */
+            TuiPanel_move_to(stdout, p, (int)(3 + option_count + 1), 2);
+            fprintf(stdout,
+                    TUI_OC_DIM
+                    "\xe2\x86\x91/\xe2\x86\x93 \xe9\x80\x89\xe6\x8b\xa9   "
+                    "Enter \xe7\xa1\xae\xe8\xae\xa4   "
+                    "1-9 \xe7\x9b\xb4\xe6\x8e\xa5\xe9\x80\x89   "
+                    "Esc \xe8\xbf\x94\xe5\x9b\x9e"
+                    TUI_RESET "\033[K");
+            /* ↑/↓ 选择   Enter 确认   1-9 直接选   Esc 返回 */
             fflush(stdout);
             redraw = 0;
         }
@@ -885,6 +962,13 @@ Result MenuController_interactive_main_select(
 
     for (;;) {
         if (redraw) {
+            /* 持久状态栏（如已登录） */
+            if (g_status_label[0] != '\0') {
+                fprintf(stdout, "\0337");
+                fprintf(stdout, "\033[1;1H\033[K");
+                MenuController_render_status_bar(stdout);
+                fprintf(stdout, "\0338");
+            }
             for (i = 0; i < MAIN_MENU_OPTION_COUNT; i++) {
                 /* 用 tui_print_margin 居中，每行一个选项 */
                 fprintf(stdout, "\033[K");  /* 清除当前行 */

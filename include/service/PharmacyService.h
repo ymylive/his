@@ -15,6 +15,7 @@
 #include "domain/Medicine.h"
 #include "repository/DispenseRecordRepository.h"
 #include "repository/MedicineRepository.h"
+#include "repository/TextFileRepository.h"
 
 /**
  * @brief 药房服务结构体
@@ -24,6 +25,7 @@
 typedef struct PharmacyService {
     MedicineRepository medicine_repository;              /* 药品数据仓库 */
     DispenseRecordRepository dispense_record_repository; /* 发药记录仓库 */
+    char prescription_path[TEXT_FILE_REPOSITORY_PATH_CAPACITY]; /* 处方仓库路径，可选；空表示降级模式 */
 } PharmacyService;
 
 /**
@@ -40,6 +42,21 @@ Result PharmacyService_init(
     PharmacyService *service,
     const char *medicine_path,
     const char *dispense_record_path
+);
+
+/**
+ * @brief 设置处方仓库路径，启用严格的发药校验
+ *
+ * 启用后，发药操作会校验处方存在性、药品ID、数量与防双发。
+ * 若不调用此函数（典型为隔离测试），则降级为仅依赖发药记录扫描的防双发。
+ *
+ * @param service           指向药房服务结构体
+ * @param prescription_path 处方数据文件路径；NULL 或空字符串表示清除并切回降级模式
+ * @return Result           操作结果，success=1 表示设置成功
+ */
+Result PharmacyService_set_prescription_path(
+    PharmacyService *service,
+    const char *prescription_path
 );
 
 /**

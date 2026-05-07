@@ -86,7 +86,6 @@ typedef enum MenuAction {
     MENU_ACTION_INPATIENT_QUERY_RECORD = 503,      /**< 住院状态查询 */
     MENU_ACTION_INPATIENT_QUERY_BED = 504,         /**< 病区床位查询 */
     MENU_ACTION_INPATIENT_LIST_WARDS = 505,        /**< 查看病房信息 */
-    MENU_ACTION_INPATIENT_LIST_BEDS = 506,         /**< 查看床位状态 */
     MENU_ACTION_INPATIENT_TRANSFER_BED = 507,      /**< 床位调整/转床 */
     MENU_ACTION_INPATIENT_DISCHARGE_CHECK = 508,   /**< 出院前检查 */
     MENU_ACTION_INPATIENT_CREATE_ORDER = 509,      /**< 开具医嘱 */
@@ -100,8 +99,7 @@ typedef enum MenuAction {
     MENU_ACTION_PHARMACY_ADD_MEDICINE = 701,       /**< 添加药品 */
     MENU_ACTION_PHARMACY_RESTOCK = 702,            /**< 药品入库 */
     MENU_ACTION_PHARMACY_DISPENSE = 703,           /**< 药品出库/发药 */
-    MENU_ACTION_PHARMACY_QUERY_STOCK = 704,        /**< 库存盘点/查询库存 */
-    MENU_ACTION_PHARMACY_LOW_STOCK = 705           /**< 缺药提醒/库存不足提醒 */
+    MENU_ACTION_PHARMACY_QUERY_STOCK = 704        /**< 库存盘点/查询库存 */
 } MenuAction;
 
 /**
@@ -207,5 +205,22 @@ Result MenuController_interactive_main_select(
     FILE *input,
     MenuRole *out_role
 );
+
+/**
+ * @brief 设置当前会话状态标签（角色 + 用户名 + 时间），用于持久状态栏
+ *
+ * 由 MenuApplication 在登录成功时调用，传入形如 "医生 王大夫" 的标签。
+ * 传入 NULL 或空串表示清除（未登录）。MenuController 内部缓存，
+ * 在每次菜单重绘时显示。
+ *
+ * @param label 状态标签字符串（可为 NULL）
+ */
+void MenuController_set_status_label(const char *label);
+
+/**
+ * @brief 设置当前角色主题（用于状态栏配色）
+ * @param theme_id 角色主题（与 TuiRoleTheme 枚举值对应；传 0 表示默认）
+ */
+void MenuController_set_status_theme(int theme_id);
 
 #endif

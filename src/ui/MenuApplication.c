@@ -55,6 +55,54 @@ static const char *MenuApplication_audit_role_label(UserRole role) {
 }
 
 /**
+ * @brief 将用户角色枚举映射为中文展示标签（用于状态栏）
+ */
+static const char *MenuApplication_role_display_label(UserRole role) {
+    switch (role) {
+        case USER_ROLE_ADMIN:             return "\xe7\xae\xa1\xe7\x90\x86\xe5\x91\x98";       /* 管理员 */
+        case USER_ROLE_DOCTOR:            return "\xe5\x8c\xbb\xe7\x94\x9f";                  /* 医生 */
+        case USER_ROLE_PATIENT:           return "\xe6\x82\xa3\xe8\x80\x85";                  /* 患者 */
+        case USER_ROLE_INPATIENT_MANAGER: return "\xe4\xbd\x8f\xe9\x99\xa2\xe7\xae\xa1\xe7\x90\x86\xe5\x91\x98"; /* 住院管理员 */
+        case USER_ROLE_PHARMACY:          return "\xe8\x8d\xaf\xe6\x88\xbf";                  /* 药房 */
+        default:                          return "\xe7\x94\xa8\xe6\x88\xb7";                  /* 用户 */
+    }
+}
+
+/**
+ * @brief 将 UserRole 映射为对应的 TuiRoleTheme（用于状态栏配色）
+ */
+static int MenuApplication_role_to_tui_theme(UserRole role) {
+    switch (role) {
+        case USER_ROLE_ADMIN:             return (int)TUI_THEME_ADMIN;
+        case USER_ROLE_DOCTOR:            return (int)TUI_THEME_DOCTOR;
+        case USER_ROLE_PATIENT:           return (int)TUI_THEME_PATIENT;
+        case USER_ROLE_INPATIENT_MANAGER: return (int)TUI_THEME_INPATIENT;
+        case USER_ROLE_PHARMACY:          return (int)TUI_THEME_PHARMACY;
+        default:                          return (int)TUI_THEME_DEFAULT;
+    }
+}
+
+/**
+ * @brief 推送会话状态到 MenuController 的持久状态栏
+ *
+ * 拼接形如 "医生 user_id" 的标签（HH:MM 由 MenuController 在重绘时附加），
+ * 并同步当前角色主题。
+ */
+static void MenuApplication_publish_status(const User *user) {
+    char label[128];
+    if (user == 0 || user->user_id[0] == '\0') {
+        MenuController_set_status_label(0);
+        MenuController_set_status_theme((int)TUI_THEME_DEFAULT);
+        return;
+    }
+    snprintf(label, sizeof(label), "%s %s",
+             MenuApplication_role_display_label(user->role),
+             user->user_id);
+    MenuController_set_status_label(label);
+    MenuController_set_status_theme(MenuApplication_role_to_tui_theme(user->role));
+}
+
+/**
  * @brief 获取当前已认证用户ID；未登录时返回 NULL
  */
 static const char *MenuApplication_audit_actor_id(const MenuApplication *application) {
@@ -79,6 +127,40 @@ static const char *MenuApplication_audit_actor_role(const MenuApplication *appli
 #define TUI_CURSOR_UP_ONLY   "\033[%dA"     /* Move cursor up N lines */
 #define TUI_CLEAR_LINE       "\033[K"        /* Clear to end of line */
 #define TUI_CLEAR_LINE_NL    "\033[K\n"      /* Clear to end of line + newline */
+
+/* ═══════════════════════════════════════════════════════════════
+ *  Form time-default helpers (FIX 2)
+ *
+ *  对所有 label 包含 "时间" 的字段，以当前 "%Y-%m-%d %H:%M"
+ *  填入 default_value，避免用户每次手输；is_required 不变。
+ * ═══════════════════════════════════════════════════════════════ */
+
+static void form_field_set_now_default(FormField *field) {
+    time_t now = 0;
+    struct tm *lt = 0;
+    if (field == 0) {
+        return;
+    }
+    now = time(NULL);
+    lt = localtime(&now);
+    if (lt == 0) {
+        return;
+    }
+    strftime(field->default_value, sizeof(field->default_value), "%Y-%m-%d %H:%M", lt);
+}
+
+static void form_apply_time_defaults(FormField *fields, size_t count) {
+    size_t i = 0;
+    if (fields == 0) {
+        return;
+    }
+    for (i = 0; i < count; i++) {
+        /* "时间" UTF-8 = E6 97 B6 E9 97 B4 */
+        if (strstr(fields[i].label, "\xe6\x97\xb6\xe9\x97\xb4") != 0) {
+            form_field_set_now_default(&fields[i]);
+        }
+    }
+}
 
 /* ═══════════════════════════════════════════════════════════════
  *  Form Panel System - interactive multi-field form display
@@ -1389,6 +1471,16 @@ Result MenuApplication_init(MenuApplication *application, const MenuApplicationP
         return result;
     }
 
+    /* 启用药房严格校验：让 PharmacyService 直接持有处方路径，避免依赖
+     * "medicines.txt → prescriptions.txt"的隐式派生，使测试隔离场景也可工作。 */
+    result = PharmacyService_set_prescription_path(
+        &application->pharmacy_service,
+        paths->prescription_path
+    );
+    if (result.success == 0) {
+        return result;
+    }
+
     result = PrescriptionService_init(
         &application->prescription_service,
         paths->prescription_path
@@ -1484,10 +1576,14 @@ Result MenuApplication_login(
     application->has_authenticated_user = 1;
     application->last_activity = time(NULL);
 
+    /* FIX 1: 登录后向 MenuController 推送持久状态栏标签（角色 + 用户名） */
+    MenuApplication_publish_status(&user);
+
     if (user.role == USER_ROLE_PATIENT) {
         result = MenuApplication_bind_patient_session(application, user.patient_id);
         if (result.success == 0) {
             MenuApplication_clear_authenticated_user_state(application);
+            MenuApplication_publish_status(0);
             return result;
         }
     }
@@ -1521,6 +1617,8 @@ void MenuApplication_logout(MenuApplication *application) {
     }
     MenuApplication_clear_authenticated_user_state(application);
     MenuApplication_clear_patient_session_state(application);
+    /* FIX 1: 登出后清除持久状态栏 */
+    MenuApplication_publish_status(0);
 }
 
 Result MenuApplication_bind_patient_session(MenuApplication *application, const char *patient_id) {
@@ -1562,7 +1660,7 @@ void MenuApplication_reset_patient_session(MenuApplication *application) {
 
 Result MenuApplication_add_patient(
     MenuApplication *application,
-    const Patient *patient,
+    Patient *patient,
     char *buffer,
     size_t capacity
 ) {
@@ -1590,6 +1688,10 @@ Result MenuApplication_add_patient(
     if (result.success == 0) {
         return MenuApplication_write_failure(result.message, buffer, capacity);
     }
+
+    /* 把最终持久化的 patient_id 回写给调用方，避免依赖字符串解析 */
+    strncpy(patient->patient_id, stored_patient.patient_id, sizeof(patient->patient_id) - 1);
+    patient->patient_id[sizeof(patient->patient_id) - 1] = '\0';
 
     return MenuApplication_write_text(
         buffer,
@@ -2603,7 +2705,67 @@ Result MenuApplication_query_active_admission_by_patient(
     );
 
     if (result.success == 0) {
-        return MenuApplication_write_failure(result.message, buffer, capacity);
+        /* 将"无活跃住院"语义改为成功提示，避免渲染红色错误前缀。
+         * 同时统计该患者历史住院次数，给出更友好的中文反馈。 */
+        if (result.message != 0 &&
+            strcmp(result.message, "active admission not found") == 0) {
+            LinkedList admissions;
+            const LinkedListNode *current = 0;
+            int history_count = 0;
+            Result load_result;
+            Result write_result;
+
+            LinkedList_init(&admissions);
+            load_result = AdmissionRepository_load_all(
+                &application->inpatient_service.admission_repository,
+                &admissions
+            );
+            if (load_result.success != 0 && patient_id != 0) {
+                current = admissions.head;
+                while (current != 0) {
+                    const Admission *a = (const Admission *)current->data;
+                    if (a != 0 && strcmp(a->patient_id, patient_id) == 0) {
+                        history_count++;
+                    }
+                    current = current->next;
+                }
+            }
+            AdmissionRepository_clear_loaded_list(&admissions);
+
+            if (history_count > 0) {
+                write_result = MenuApplication_write_text(
+                    buffer,
+                    capacity,
+                    "该患者目前无在院记录（历史住院 %d 次）",
+                    history_count
+                );
+            } else {
+                write_result = MenuApplication_write_text(
+                    buffer,
+                    capacity,
+                    "该患者目前无在院记录"
+                );
+            }
+            if (write_result.success == 0) {
+                return write_result;
+            }
+            return Result_make_success("no active admission");
+        }
+
+        /* 其他失败原因（参数缺失、IO 错误等）翻译成中文再展示 */
+        if (result.message != 0 &&
+            strcmp(result.message, "active admission query arguments missing") == 0) {
+            return MenuApplication_write_failure("查询参数缺失（患者编号为空）", buffer, capacity);
+        }
+        if (result.message != 0 &&
+            strcmp(result.message, "inpatient service arguments missing") == 0) {
+            return MenuApplication_write_failure("住院服务参数缺失", buffer, capacity);
+        }
+        return MenuApplication_write_failure(
+            result.message != 0 ? result.message : "查询住院记录失败",
+            buffer,
+            capacity
+        );
     }
 
     return MenuApplication_write_text(
@@ -2849,9 +3011,10 @@ Result MenuApplication_create_prescription(
     return MenuApplication_write_text(
         buffer,
         capacity,
-        "处方创建成功: 处方ID=%s | 就诊ID=%s | 药品ID=%s | 数量=%d | 用法=%s",
+        "处方创建成功: 处方ID=%s | 就诊ID=%s | 医生ID=%s | 药品ID=%s | 数量=%d | 用法=%s",
         stored_prescription.prescription_id,
         stored_prescription.visit_id,
+        stored_prescription.doctor_id,
         stored_prescription.medicine_id,
         stored_prescription.quantity,
         stored_prescription.usage
@@ -2903,8 +3066,9 @@ Result MenuApplication_query_prescriptions_by_visit(
             buffer,
             capacity,
             &used,
-            "\n%s | 药品=%s | 数量=%d | 用法=%s",
+            "\n%s | 医生=%s | 药品=%s | 数量=%d | 用法=%s",
             p->prescription_id,
+            p->doctor_id,
             p->medicine_id,
             p->quantity,
             p->usage
@@ -4860,6 +5024,8 @@ Result MenuApplication_prompt_patient_form(
     panel.field_count = idx;
 
 validation_retry:
+    /* FIX 2: 自动填充 "时间" 字段的当前时间默认值 */
+    form_apply_time_defaults(panel.fields, (size_t)panel.field_count);
     result = MenuApplication_form_dispatch(context, &panel);
     if (result.success == 0) {
         return result;
@@ -4992,6 +5158,8 @@ Result MenuApplication_prompt_medicine_form(
 
     panel.field_count = idx;
 
+    /* FIX 2: 自动填充 "时间" 字段的当前时间默认值 */
+    form_apply_time_defaults(panel.fields, (size_t)panel.field_count);
     result = MenuApplication_form_dispatch(context, &panel);
     if (result.success == 0) {
         return result;
@@ -5067,6 +5235,8 @@ Result MenuApplication_prompt_department_form(
 
     panel.field_count = idx;
 
+    /* FIX 2: 自动填充 "时间" 字段的当前时间默认值 */
+    form_apply_time_defaults(panel.fields, (size_t)panel.field_count);
     result = MenuApplication_form_dispatch(context, &panel);
     if (result.success == 0) {
         return result;
@@ -5134,6 +5304,8 @@ Result MenuApplication_prompt_doctor_form(
 
     panel.field_count = idx;
 
+    /* FIX 2: 自动填充 "时间" 字段的当前时间默认值 */
+    form_apply_time_defaults(panel.fields, (size_t)panel.field_count);
     result = MenuApplication_form_dispatch(context, &panel);
     if (result.success == 0) {
         return result;
@@ -8486,7 +8658,6 @@ Result MenuApplication_execute_action(
 
         case MENU_ACTION_INPATIENT_QUERY_BED:
         case MENU_ACTION_INPATIENT_LIST_WARDS:
-        case MENU_ACTION_INPATIENT_LIST_BEDS:
         case MENU_ACTION_INPATIENT_ADMIT:
         case MENU_ACTION_INPATIENT_DISCHARGE:
         case MENU_ACTION_INPATIENT_QUERY_RECORD:
@@ -8504,7 +8675,6 @@ Result MenuApplication_execute_action(
         case MENU_ACTION_PHARMACY_RESTOCK:
         case MENU_ACTION_PHARMACY_DISPENSE:
         case MENU_ACTION_PHARMACY_QUERY_STOCK:
-        case MENU_ACTION_PHARMACY_LOW_STOCK:
             return MenuAction_handle_pharmacy(application, action, input, output);
 
         default:
