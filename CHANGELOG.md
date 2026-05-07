@@ -4,6 +4,32 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## [7.4.0] - 2026-05-07
+
+### Added
+
+- **患者登录支持 PAT 编号兜底** — `AuthService_authenticate` 在 user_id 直查未命中且输入符合 `PAT####` 格式时调用 `UserRepository_find_by_patient_id` 反查（仅匹配 patient role），用户名 / 患者编号任一项均可登录；锁定计数共享同一 key
+- **登录账号体系补全** — `data/users.txt` 与 `data/demo_seed/users.txt` 各新增 24 条账号：DOC0002–DOC0020 共 19 名医生 + 5 名示例患者（`pat0002/0005/0009/0014/0019`），密码哈希复用既有医生/患者账号
+- **处方实体新增 `doctor_id` 字段** — `prescriptions.txt` schema 由 5 列升级为 6 列（`prescription_id|visit_id|doctor_id|medicine_id|quantity|usage`）；`PrescriptionRepository` 解析层向后兼容 5 列旧格式；36 条历史处方通过 `visits.doctor_id` 全部回填成功
+- **数据完整性回归测试基线** — `tests/test_demo_data_integrity.c` 新增 6 条外键 / 角色覆盖断言（医生账号覆盖、user.linked_id 引用真实实体、prescription.doctor_id 与 visit_id、nursing/inpatient_orders 的 admission_id 外键）
+- **运维文档** — `docs/RELEASE_GUIDE.md`（发版与 CI 操作指南）、`docs/PROJECT_FLOWCHART.md`（项目流程图）、`docs/superpowers/plans/2026-04-08-opencode-tui-redesign.md`（TUI 设计计划）
+
+### Changed
+
+- **删除 3 个菜单项**：`住院管理 / 查看床位状态`、`药房 / 缺药提醒/库存不足提醒`、`医生 / 处方管理 / 查看处方`；服务层底层函数（`PharmacyService_find_low_stock_medicines` 等）保留以供 admin 报表复用
+- **患者注册入口居中** — `[1] 登录已有账号` / `[2] 注册新账号` 改用 `tui_print_margin` 按 16 列块宽度居中，跟随终端宽度自适应
+- **住院状态查询 UX** — 患者无在院记录时不再返回英文错误 `active admission not found`，改为绿色成功提示 `该患者目前无在院记录（历史住院 N 次）`
+- **inpatient_orders demo_seed 中文化** — 与 runtime 文件 byte-equal 同步为中文医嘱权威版本
+
+### Fixed
+
+- **患者注册编号字段乱码** — 移除 `main.c::handle_patient_registration` 中脆弱的 `strstr(": ")` 解析逻辑，改由 `MenuApplication_add_patient` 直接将生成的 `patient_id` 回写到调用方 `Patient` 结构（`include/ui/MenuApplication.h` 去掉 `const Patient *` 的 const）
+
+### Internal
+
+- HIS_VERSION 7.3.3 → 7.4.0（`include/common/UpdateChecker.h:16`）
+- `test_menu_controller.c` 两位数解析测试断言更新为新菜单序号下的 `MENU_ACTION_INPATIENT_EXECUTE_ORDER`
+
 ## [7.3.3] - 2026-05-07
 
 ### Changed
