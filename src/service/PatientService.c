@@ -55,12 +55,40 @@ static Result PatientService_validate_required_text(const char *text, const char
 /**
  * @brief 校验联系方式的合法性
  *
- * 联系方式不做任何检查，允许任意输入。
+ * 联系方式允许数字、短横线、空格、加号和括号，总长度6-30字符，
+ * 其中数字部分至少6位。支持国际格式(+86)和区号格式((010))。
  *
  * @param contact  联系方式字符串
  * @return Result  校验结果
  */
 static Result PatientService_validate_contact(const char *contact) {
+    const char *p = contact;
+    int digit_count = 0;
+    size_t length = 0;
+
+    if (contact == 0 || StringUtils_is_blank(contact)) {
+        return Result_make_failure("patient contact missing");
+    }
+
+    length = strlen(contact);
+    if (length < 6 || length > 30) {
+        return Result_make_failure("patient contact length invalid (6-30)");
+    }
+
+    while (*p != '\0') {
+        char ch = *p;
+        if (ch >= '0' && ch <= '9') {
+            digit_count++;
+        } else if (ch != '-' && ch != ' ' && ch != '+' && ch != '(' && ch != ')') {
+            return Result_make_failure("patient contact contains invalid character");
+        }
+        p++;
+    }
+
+    if (digit_count < 6) {
+        return Result_make_failure("patient contact must have at least 6 digits");
+    }
+
     return Result_make_success("patient contact valid");
 }
 

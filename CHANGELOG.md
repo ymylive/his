@@ -4,6 +4,21 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## [7.3.3] - 2026-05-07
+
+### Changed
+
+- **合入队友 cowork/修改后7.3.1 改动**（基于 v7.3.1 三方合并到 v7.3.2 main，无冲突）
+  - `AuthService` 登录错误提示中文化（账号未输入 / 密码未输入 / 账号错误）
+  - `MedicalRecordService` 新增对外接口；`PatientService` 流程精简
+  - `MenuController` / `MenuApplication` / `MenuActionAdmin` / `MenuActionDoctor` 菜单流程调整
+  - `InputHelper` 输入校验加强；`main` 启动序列调整
+  - `data/*.txt` 同步队友夹具，新增 `round_records.txt`、`inpatient_orders.txt` 等
+
+### Fixed
+
+- **保留 `PatientService_validate_contact` 联系方式校验** — 队友的"任意输入"放宽与 `test_patient_service` 验证用例（如 `13AB` 应被拒绝）冲突，回归测试发现后还原为原校验逻辑（数字/+/-/空格/括号、6-30 字符、≥6 位数字）。
+
 ## [7.3.2] - 2026-05-06
 
 ### Changed
